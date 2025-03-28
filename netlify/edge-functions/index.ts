@@ -28,3 +28,7 @@ app.get('/user/:name', (c) => {
 })
 
 export default handle(app)
+
+export const config = {
+  path: '/*'
+}

@@ -1,5 +1,5 @@
 import { HTMLResponse } from "https://ghuc.cc/worker-tools/html";
-import { notFound, ok } from "https://ghuc.cc/worker-tools/response-creators";
+import { notFound, ok, internalServerError } from "https://ghuc.cc/worker-tools/response-creators";
 
 import { home } from "../layouts/hn.ts";
 
@@ -10,14 +10,14 @@ export async function top(pageNumber) {
   if (backendResponse.status >= 500) {
     return notFound('No such page')
   }
+  let body = await backendResponse.text()
   try {
-    const results = await backendResponse.json();
+    let results = JSON.parse(body);
     if (!results || !results.length) {
       return notFound('No such page')
     }
-    const body = home(results, pageNumber);
-    return new HTMLResponse(body, ok());
+    return new HTMLResponse(home(results, pageNumber), ok());
   } catch (error) {
-    return notFound('No such page')
+    return internalServerError(`Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(body)}`)
   }
 }
