@@ -13,7 +13,7 @@ export async function top(pageNumber) {
   let body = await backendResponse.text()
   try {
     let results = JSON.parse(body);
-    if (!results || !results.length) {
+    if (!results) {
       return notFound('No such page')
     }
     return new HTMLResponse(home(results, pageNumber), ok());

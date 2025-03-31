@@ -14,7 +14,7 @@ export async function user(name) {
   let body = await backendResponse.text()
   try {
     let results = JSON.parse(body);
-    if (!results || !results.length) {
+    if (!results) {
       return notFound('No such page')
     }
     return new HTMLResponse(profile(results), ok());
