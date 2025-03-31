@@ -8,12 +8,16 @@ export async function item(id) {
     `https://api.hnpwa.com/v0/item/${id}.json`
   );
   if (backendResponse.status >= 500) {
-    return internalServerError('https://api.hnpwa.com is currently not responding')
+    return notFound('No such page')
   }
-  const results = await backendResponse.json();
-  if (!results) {
-    return notFound('No such item')
+  let body = await backendResponse.text()
+  try {
+    let results = JSON.parse(body);
+    if (!results || !results.length) {
+      return notFound('No such page')
+    }
+    return new HTMLResponse(article(results), ok());
+  } catch (error) {
+    return internalServerError(`Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(body)}`)
   }
-  const body = article(results);
-  return new HTMLResponse(body, ok());
 }
