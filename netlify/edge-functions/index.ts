@@ -29,7 +29,6 @@ app.get('/user/:name', (c) => {
 })
 
 export default handle(app)
-
 export const config: Config = {
   method: ['GET'],
   path: '/*'
