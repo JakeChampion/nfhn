@@ -2,7 +2,7 @@ import { html, unsafeHTML } from "https://ghuc.cc/worker-tools/html";
 
 export const user = (content) => html`
 <!DOCTYPE html>
-<html lang="en" >
+<html lang="en">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
