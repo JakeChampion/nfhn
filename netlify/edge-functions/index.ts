@@ -10,7 +10,6 @@ import { top } from './handlers/top.ts'
 import { user } from './handlers/user.ts'
 
 const app = new Hono()
-
 app.use('*', logger())
 app.get('/', redirectToTop)
 app.get('/top', redirectToTop)
