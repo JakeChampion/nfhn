@@ -96,7 +96,7 @@ export const article = (content) => html`
       }
     </style>
     <title>
-      HN: ${content.title}
+      NFHN: ${content.title}
     </title>
   </head>
   <body>
