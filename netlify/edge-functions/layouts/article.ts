@@ -24,7 +24,6 @@ const comment = (content) => html`
     >
   </summary>
   <div>${unsafeHTML(content.content)}</div>
-
   <ul>
     ${content.comments.map((content) => html`<li>${comment(content)}</li>`)}
   </ul>
