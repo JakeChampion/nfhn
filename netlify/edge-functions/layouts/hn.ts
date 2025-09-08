@@ -70,7 +70,7 @@ export const home = (content, pageNumber) => html`
       }
     </style>
     <title>
-      HN: Page ${pageNumber}
+      NFHN: Page ${pageNumber}
     </title>
   </head>
   <body>
