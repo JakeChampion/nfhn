@@ -67,7 +67,7 @@ export const user = (content) => html`
       }
     </style>
     <title>
-      HN: ${content.title}
+      NFHN: ${content.title}
     </title>
   </head>
   <body>
