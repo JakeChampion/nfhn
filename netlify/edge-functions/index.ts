@@ -29,7 +29,10 @@ app.get('/user/:name', (c) => {
 })
 
 app.get('/env', (c) => {
-  return Response.JSON(Deno.env.toObject())
+  try {
+    return Response.JSON(Deno.env.toObject())
+  } catch (err) {
+    return new Response(err.message + '\n' + err.stack, {status:500})
 })
 
 export default handle(app)
