@@ -33,6 +33,7 @@ app.get('/env', (c) => {
     return Response.json(Deno.env.toObject())
   } catch (er) {
     return new Response(er.message + '\n' + er.stack, {status:500})
+  }
 })
 
 export default handle(app)
