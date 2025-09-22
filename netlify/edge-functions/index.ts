@@ -28,6 +28,10 @@ app.get('/user/:name', (c) => {
   return user(name)
 })
 
+app.get('/env', (c) => {
+  return Response.JSON(Deno.env.toObject())
+})
+
 export default handle(app)
 export const config: Config = {
   method: ['GET'],
