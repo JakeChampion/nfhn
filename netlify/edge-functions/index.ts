@@ -30,7 +30,7 @@ app.get('/user/:name', (c) => {
 
 app.get('/env', (c) => {
   try {
-    return Response.JSON(Deno.env.toObject())
+    return Response.json(Deno.env.toObject())
   } catch (err) {
     return new Response(err.message + '\n' + err.stack, {status:500})
 })
