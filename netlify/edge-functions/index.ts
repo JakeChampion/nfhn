@@ -7,7 +7,7 @@ export default function() {
   } catch (er) {
     return new Response(er.message + '\n' + er.stack, {status:500})
   }
-})
+}
 
 export const config: Config = {
   method: ['GET'],
