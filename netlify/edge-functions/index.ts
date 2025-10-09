@@ -1,5 +1,5 @@
 // important to import this before anything else so that global exists before any other code runs
-import "./global.ts"
+import "./hack/global.ts"
 
 import type { Config } from "@netlify/edge-functions"
 
