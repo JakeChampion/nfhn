@@ -28,14 +28,6 @@ app.get('/user/:name', (c) => {
   return user(name)
 })
 
-app.get('/env', (c) => {
-  try {
-    return Response.json(Deno.env.toObject())
-  } catch (er) {
-    return new Response(er.message + '\n' + er.stack, {status:500})
-  }
-})
-
 export default handle(app)
 export const config: Config = {
   method: ['GET'],
