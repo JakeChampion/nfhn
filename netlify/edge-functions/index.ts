@@ -16,6 +16,50 @@ app.get('/top', redirectToTop)
 app.get('/top/', redirectToTop)
 app.get('/icon.svg', icon)
 app.get('/top/:pageNumber{[1]?[0-9]|20}', (c) => {
+  // const TIMER_LABEL = 'edge-log-duration'
+const COUNT_LABEL = 'edge-log-count'
+
+console.clear()
+
+console.log('Hello world!');
+console.error('Something went wrong!');
+
+// console.time(TIMER_LABEL)
+console.count(COUNT_LABEL)
+
+console.assert(Infinity == Math.random(), 'Edge functions expect HTTPS URLs')
+console.log(`log log log`)
+console.info('info info info')
+console.debug('debug debug debug')
+console.warn('warn warn warn')
+console.error('error error error')
+
+console.group('grouped log')
+
+console.groupCollapsed('Something')
+console.table(["apples", "oranges", "bananas"]);
+console.groupEnd()
+
+console.groupCollapsed('Stuff')
+console.table(["carrots", "peas", "lettuce"]);
+console.groupEnd()
+
+console.dir({ a: 1, b: 2, c: 3, d: { e: 5, f: 6 } }, { depth: null })
+
+console.dirxml({
+  g: 1,
+  h: 2,
+  i: 3,
+  j: { k: 5, l: 6 },
+})
+console.trace('Trace marker for request diagnostics')
+
+console.groupEnd()
+
+// console.timeLog(TIMER_LABEL, 'Finished console instrumentation')
+// console.timeStamp(`response-ready`)
+// console.timeEnd(TIMER_LABEL)
+console.countReset(COUNT_LABEL)
   const pageNumber = Number.parseInt(c.req.param('pageNumber'), 10)
   return top(pageNumber)
 })
