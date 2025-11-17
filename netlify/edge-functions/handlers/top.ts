@@ -7,7 +7,7 @@ export async function top(pageNumber) {
   const backendResponse = await fetch(
     `https://api.hnpwa.com/v0/news/${pageNumber}.json`
   );
-  if (backendResponse.status >= 500) {
+  if (backendResponse.status >= 300) {
     return notFound('No such page')
   }
   let body = await backendResponse.text()
