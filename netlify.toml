@@ -1,3 +1,4 @@
-# [[edge_functions]]
-#   function = "index"
-#   path = "/*"
+[[plugins]]
+  package = "@netlify/plugin-csp-nonce"
+  [plugins.inputs]
+    reportOnly = false
