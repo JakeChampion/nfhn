@@ -5,9 +5,14 @@ import { handle } from 'https://deno.land/x/hono/adapter/netlify/mod.ts'
 import { logger } from "https://deno.land/x/hono@v4.3.11/middleware/logger/index.ts"
 import { icon } from './handlers/icon.ts'
 import { item } from './handlers/item.ts'
-import { redirectToTop } from './handlers/redirectToTop.ts'
 import { top } from './handlers/top.ts'
 import { user } from './handlers/user.ts'
+
+import { permanentRedirect } from "https://ghuc.cc/worker-tools/response-creators";
+
+export function redirectToTop() {
+  return permanentRedirect("/top/1");
+}
 
 const app = new Hono()
 app.use('*', logger())
@@ -16,6 +21,7 @@ app.get('/top', redirectToTop)
 app.get('/top/', redirectToTop)
 app.get('/icon.svg', icon)
 app.get('/top/:pageNumber{[1]?[0-9]|20}', (c) => {
+
   const pageNumber = Number.parseInt(c.req.param('pageNumber'), 10)
   return top(pageNumber)
 })
