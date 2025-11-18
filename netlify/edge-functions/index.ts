@@ -39,9 +39,9 @@ export const config: Config = {
 import type { Context } from 'https://edge.netlify.com'
 
 export default async (request: Request, context: Context) =>{
-  for (let i = 0; i < 5; i++) {
-    console.log("Hello, %s.\nYou've\t\tcalled me\t\t%d\t\ttimes.", "Bob", i + 1);
-  }
+  // for (let i = 0; i < 5; i++) {
+  //   console.log("Hello, %s.\nYou've\t\tcalled me\t\t%d\t\ttimes.", "Bob", i + 1);
+  // }
   // const TIMER_LABEL = 'edge-log-duration'
   // const COUNT_LABEL = 'edge-log-count'
   // console.clear()
