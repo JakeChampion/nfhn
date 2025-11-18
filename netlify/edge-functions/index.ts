@@ -45,7 +45,7 @@ export default async (request: Request, context: Context) =>{
   // const TIMER_LABEL = 'edge-log-duration'
   // const COUNT_LABEL = 'edge-log-count'
   // console.clear()
-  // console.log('Hello\n\n\n\n\nworld!');
+  console.log('Hello\n\n\n\n\nworld!');
   // console.error('Something\nwent\t\n\rwrong!');
   // console.time(TIMER_LABEL)
   // console.count(COUNT_LABEL)
