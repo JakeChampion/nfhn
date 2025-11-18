@@ -24,13 +24,13 @@ app.get('/top/:pageNumber{[1]?[0-9]|20}', (c) => {
    const TIMER_LABEL = 'edge-log-duration'
   const COUNT_LABEL = 'edge-log-count'
   console.clear()
-  console.log('Hello world!');
-  console.error('Something went wrong!');
+  console.log('Hello\n\n\n\n\nworld!');
+  console.error('Something\nwent\t\n\rwrong!');
   console.time(TIMER_LABEL)
   console.count(COUNT_LABEL)
   console.assert(Infinity == Math.random(), 'Edge functions expect HTTPS URLs')
-  console.log(`log log log`)
-  console.info('info info info')
+  console.log(`log log\n\t\tlog`)
+  console.info('info\t\t\tinfo\ninfo')
   console.debug('debug debug debug')
   console.warn('warn warn warn')
   console.error('error error error')
@@ -54,6 +54,8 @@ app.get('/top/:pageNumber{[1]?[0-9]|20}', (c) => {
   console.timeStamp(`response-ready`)
   console.timeEnd(TIMER_LABEL)
   console.countReset(COUNT_LABEL)
+
+  throw new Error('wow an error was thrown');
 
   const pageNumber = Number.parseInt(c.req.param('pageNumber'), 10)
   return top(pageNumber)
