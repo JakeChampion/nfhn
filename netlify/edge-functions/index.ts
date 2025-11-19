@@ -47,36 +47,36 @@ export default async (request: Request, context: Context) =>{
   console.clear()
   console.log('Hello\n\n\n\n\nworld!');
   console.error('Something\nwent\t\n\rwrong!');
-  // console.time(TIMER_LABEL)
-  // console.count(COUNT_LABEL)
-  // console.assert(Infinity == Math.random(), 'Edge functions expect HTTPS URLs')
-  // console.log(`log log\n\t\tlog`)
-  // console.info('info\t\t\tinfo\ninfo')
-  // console.debug('debug debug debug')
-  // console.warn('warn warn warn')
-  // console.error('error error error')
-  // console.group('grouped log')
-  // console.groupCollapsed('Something')
-  // console.table(["apples", "oranges", "bananas"]);
-  // console.groupEnd()
-  // console.groupCollapsed('Stuff')
-  // console.table(["carrots", "peas", "lettuce"]);
-  // console.groupEnd()
-  // console.dir({ a: 1, b: 2, c: 3, d: { e: 5, f: 6 } }, { depth: null })
-  // console.dirxml({
-  //   g: 1,
-  //   h: 2,
-  //   i: 3,
-  //   j: { k: 5, l: 6 },
-  // })
-  // console.trace('Trace marker for request diagnostics')
-  // console.groupEnd()
-  // console.timeLog(TIMER_LABEL, 'Finished console instrumentation')
-  // console.timeStamp(`response-ready`)
-  // console.timeEnd(TIMER_LABEL)
-  // console.countReset(COUNT_LABEL)
+  console.time(TIMER_LABEL)
+  console.count(COUNT_LABEL)
+  console.assert(Infinity == Math.random(), 'Edge functions expect HTTPS URLs')
+  console.log(`log log\n\t\tlog`)
+  console.info('info\t\t\tinfo\ninfo')
+  console.debug('debug debug debug')
+  console.warn('warn warn warn')
+  console.error('error error error')
+  console.group('grouped log')
+  console.groupCollapsed('Something')
+  console.table(["apples", "oranges", "bananas"]);
+  console.groupEnd()
+  console.groupCollapsed('Stuff')
+  console.table(["carrots", "peas", "lettuce"]);
+  console.groupEnd()
+  console.dir({ a: 1, b: 2, c: 3, d: { e: 5, f: 6 } }, { depth: null })
+  console.dirxml({
+    g: 1,
+    h: 2,
+    i: 3,
+    j: { k: 5, l: 6 },
+  })
+  console.trace('Trace marker for request diagnostics')
+  console.groupEnd()
+  console.timeLog(TIMER_LABEL, 'Finished console instrumentation')
+  console.timeStamp(`response-ready`)
+  console.timeEnd(TIMER_LABEL)
+  console.countReset(COUNT_LABEL)
 
-  // throw new Error('wow an error was thrown');
+  throw new Error('wow an error was thrown');
 
   return Response.json({ hello: 'world', location: context.geo.city })
 }
