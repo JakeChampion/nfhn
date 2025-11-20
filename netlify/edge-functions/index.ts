@@ -76,7 +76,7 @@ export default async (request: Request, context: Context) =>{
   console.timeEnd(TIMER_LABEL)
   console.countReset(COUNT_LABEL)
 
-  throw new Error('wow an error was thrown');
+  // throw new Error('wow an error was thrown');
 
   return Response.json({ hello: 'world', location: context.geo.city })
 }
