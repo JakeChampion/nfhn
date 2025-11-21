@@ -1,4 +1,4 @@
-[[plugins]]
-  package = "@netlify/plugin-csp-nonce"
-  [plugins.inputs]
-    reportOnly = false
+# [[plugins]]
+#   package = "@netlify/plugin-csp-nonce"
+#   [plugins.inputs]
+#     reportOnly = false
