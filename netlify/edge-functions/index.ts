@@ -78,5 +78,5 @@ export default async (request: Request, context: Context) =>{
 
   // throw new Error('wow an error was thrown');
 
-  return Response.json({ hello: 'world', location: context.geo.city })
+  return Response.json(Object.keys(globalThis))
 }
