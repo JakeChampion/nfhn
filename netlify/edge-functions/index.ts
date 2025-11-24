@@ -76,5 +76,5 @@ export default async (request: Request, context: Context) =>{
   // console.timeEnd(TIMER_LABEL)
   // console.countReset(COUNT_LABEL)
 
-  return Response.json(Object.keys(globalThis))
+  return Response.json(Object.keys(global))
 }
