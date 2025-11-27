@@ -17,6 +17,7 @@ app.get('/top', redirectToTop)
 app.get('/top/', redirectToTop)
 app.get('/icon.svg', icon)
 app.get('/top/:pageNumber{[1]?[0-9]|20}', (c) => {
+  console.log('typeof Deno', typeof Deno)
   const pageNumber = Number.parseInt(c.req.param('pageNumber'), 10)
   return top(pageNumber)
 })
