@@ -29,6 +29,9 @@ app.get('/user/:name', (c) => {
   const name = c.req.param('name')
   return user(name)
 })
+app.get('/error', (c) => {
+  throw new Error('uh oh')
+})
 
 export default handle(app)
 export const config: Config = {
