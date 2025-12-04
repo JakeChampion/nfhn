@@ -33,9 +33,13 @@ app.get('/error', (c) => {
   throw new Error('uh oh')
 })
 
-throw new Error('boom')
+// export default handle(app)
 
-export default handle(app)
+export default async () => {
+  return new Response("Hello World", {
+    headers: { "content-type": "text/plain" },
+  });
+};
 export const config: Config = {
   method: ['GET'],
   path: '/*'
