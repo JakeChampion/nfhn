@@ -36,12 +36,14 @@ import type { Config } from "@netlify/edge-functions"
 // export default handle(app)
 
 export default async () => {
-  throw new Error('meow')
   return new Response("Hello World", {
     headers: { "content-type": "text/plain" },
   });
 };
 export const config: Config = {
   method: ['GET'],
-  path: '/*'
+  path: '/*',
+  header: {
+    'cat': '(?i)(meow)'
+  }
 }
