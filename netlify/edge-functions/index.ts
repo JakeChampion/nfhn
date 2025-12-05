@@ -36,9 +36,7 @@ import type { Config } from "@netlify/edge-functions"
 // export default handle(app)
 
 export default async () => {
-  return new Response("Hello World", {
-    headers: { "content-type": "text/plain" },
-  });
+  return new Response("Hello World");
 };
 export const config: Config = {
   method: ['GET'],
