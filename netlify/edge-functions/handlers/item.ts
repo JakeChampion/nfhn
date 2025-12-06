@@ -1,12 +1,17 @@
 import { article } from "../layouts/article.ts";
 
-export async function item(id: number, set: any) {
+interface SetContext {
+  status?: number;
+  headers: Record<string, string>;
+}
+
+export async function item(id: number, set: SetContext) {
   const backendResponse = await fetch(
     `https://api.hnpwa.com/v0/item/${id}.json`
   );
   if (backendResponse.status >= 500) {
-    set.status = 404;
-    return 'No such page';
+    set.status = 502;
+    return 'Backend service error';
   }
   let body = await backendResponse.text()
   try {

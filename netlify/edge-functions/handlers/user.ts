@@ -1,13 +1,18 @@
 import { user as profile } from "../layouts/user.ts";
 
-export async function user(name: string, set: any) {
+interface SetContext {
+  status?: number;
+  headers: Record<string, string>;
+}
+
+export async function user(name: string, set: SetContext) {
   const backendResponse = await fetch(
     `https://api.hnpwa.com/v0/user/${name}.json`
   );
 
   if (backendResponse.status >= 500) {
-    set.status = 404;
-    return 'No such page';
+    set.status = 502;
+    return 'Backend service error';
   }
   let body = await backendResponse.text()
   try {

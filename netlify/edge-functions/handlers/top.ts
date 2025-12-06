@@ -1,10 +1,19 @@
 import { home } from "../layouts/hn.ts";
 
-export async function top(pageNumber: number, set: any) {
+interface SetContext {
+  status?: number;
+  headers: Record<string, string>;
+}
+
+export async function top(pageNumber: number, set: SetContext) {
   const backendResponse = await fetch(
     `https://api.hnpwa.com/v0/news/${pageNumber}.json`
   );
   if (backendResponse.status >= 300) {
+    if (backendResponse.status >= 500) {
+      set.status = 502;
+      return 'Backend service error';
+    }
     set.status = 404;
     return 'No such page';
   }

@@ -19,7 +19,11 @@ const contents = `
 </svg>
 `
 
-export function icon(set: any) {
+interface SetContext {
+  headers: Record<string, string>;
+}
+
+export function icon(set: SetContext) {
   set.headers['content-type'] = 'image/svg+xml';
   return contents;
 }
