@@ -20,6 +20,6 @@
   "homepage": "https://github.com/JakeChampion/nfhn#readme",
   "dependencies": {
     "@netlify/edge-functions": "^2.11.1",
-    "@netlify/plugin-csp-nonce": "1.5.2"
+    "elysia": "^1.1.23"
   }
 }
