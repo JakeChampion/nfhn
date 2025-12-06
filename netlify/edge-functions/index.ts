@@ -1,5 +1,5 @@
 import type { Config } from "@netlify/edge-functions"
-import { Elysia } from 'npm:elysia@latest'
+import { Elysia } from 'elysia'
 import { icon } from './handlers/icon.ts'
 import { item } from './handlers/item.ts'
 import { top } from './handlers/top.ts'
