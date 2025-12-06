@@ -19,12 +19,7 @@ const contents = `
 </svg>
 `
 
-export async function icon() {
-  return new Response(
-    contents,
-    {
-      headers: {
-        'content-type': 'image/svg+xml'
-      }
-    });
+export function icon(set: any) {
+  set.headers['content-type'] = 'image/svg+xml';
+  return contents;
 }

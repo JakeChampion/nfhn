@@ -4,39 +4,48 @@ import { icon } from './handlers/icon.ts'
 import { item } from './handlers/item.ts'
 import { top } from './handlers/top.ts'
 import { user } from './handlers/user.ts'
-import { permanentRedirect } from "https://ghuc.cc/worker-tools/response-creators";
-
-export function redirectToTop() {
-  return permanentRedirect("/top/1");
-}
 
 const app = new Elysia()
   .onRequest((ctx) => {
     console.log(`${ctx.request.method} ${new URL(ctx.request.url).pathname}`)
   })
-  .get('/', redirectToTop)
-  .get('/top', redirectToTop)
-  .get('/top/', redirectToTop)
-  .get('/icon.svg', icon)
-  .get('/top/:pageNumber', ({ params }) => {
+  .get('/', ({ set }) => {
+    set.status = 301;
+    set.headers['location'] = '/top/1';
+    return null;
+  })
+  .get('/top', ({ set }) => {
+    set.status = 301;
+    set.headers['location'] = '/top/1';
+    return null;
+  })
+  .get('/top/', ({ set }) => {
+    set.status = 301;
+    set.headers['location'] = '/top/1';
+    return null;
+  })
+  .get('/icon.svg', ({ set }) => icon(set))
+  .get('/top/:pageNumber', ({ params, set }) => {
     console.log('typeof Deno', typeof Deno)
     const pageNumber = Number.parseInt(params.pageNumber, 10)
     // Validate pageNumber is a valid number and between 1-20
     if (isNaN(pageNumber) || pageNumber < 1 || pageNumber > 20) {
-      return new Response('Not Found', { status: 404 })
+      set.status = 404;
+      return 'Not Found';
     }
-    return top(pageNumber)
+    return top(pageNumber, set)
   })
-  .get('/item/:id', ({ params }) => {
+  .get('/item/:id', ({ params, set }) => {
     const id = Number.parseInt(params.id, 10)
     // Validate id is a valid number
     if (isNaN(id)) {
-      return new Response('Not Found', { status: 404 })
+      set.status = 404;
+      return 'Not Found';
     }
-    return item(id)
+    return item(id, set)
   })
-  .get('/user/:name', ({ params }) => {
-    return user(params.name)
+  .get('/user/:name', ({ params, set }) => {
+    return user(params.name, set)
   })
   .get('/error', () => {
     throw new Error('uh oh')
