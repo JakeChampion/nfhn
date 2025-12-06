@@ -9,20 +9,26 @@ const app = new Elysia()
   .onRequest((ctx) => {
     console.log(`${ctx.request.method} ${new URL(ctx.request.url).pathname}`)
   })
+  .onError(({ code, error, set }) => {
+    console.error('Error:', code, error.message);
+    if (code === 'NOT_FOUND') {
+      set.status = 404;
+      return 'Not Found';
+    }
+    set.status = 500;
+    return 'Internal Server Error';
+  })
   .get('/', ({ set }) => {
+    set.redirect = '/top/1';
     set.status = 301;
-    set.headers['location'] = '/top/1';
-    return null;
   })
   .get('/top', ({ set }) => {
+    set.redirect = '/top/1';
     set.status = 301;
-    set.headers['location'] = '/top/1';
-    return null;
   })
   .get('/top/', ({ set }) => {
+    set.redirect = '/top/1';
     set.status = 301;
-    set.headers['location'] = '/top/1';
-    return null;
   })
   .get('/icon.svg', ({ set }) => icon(set))
   .get('/top/:pageNumber', ({ params, set }) => {
