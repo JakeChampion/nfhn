@@ -5,6 +5,12 @@ import { item } from './handlers/item.ts'
 import { top } from './handlers/top.ts'
 import { user } from './handlers/user.ts'
 
+// Helper function for redirecting to top page
+function redirectToTop({ set }: { set: any }) {
+  set.redirect = '/top/1';
+  set.status = 301;
+}
+
 const app = new Elysia()
   .onRequest((ctx) => {
     console.log(`${ctx.request.method} ${new URL(ctx.request.url).pathname}`)
@@ -18,18 +24,9 @@ const app = new Elysia()
     set.status = 500;
     return 'Internal Server Error';
   })
-  .get('/', ({ set }) => {
-    set.redirect = '/top/1';
-    set.status = 301;
-  })
-  .get('/top', ({ set }) => {
-    set.redirect = '/top/1';
-    set.status = 301;
-  })
-  .get('/top/', ({ set }) => {
-    set.redirect = '/top/1';
-    set.status = 301;
-  })
+  .get('/', redirectToTop)
+  .get('/top', redirectToTop)
+  .get('/top/', redirectToTop)
   .get('/icon.svg', ({ set }) => icon(set))
   .get('/top/:pageNumber', ({ params, set }) => {
     console.log('typeof Deno', typeof Deno)
