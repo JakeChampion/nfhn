@@ -14,16 +14,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
       - name: Setup Deno
         uses: denoland/setup-deno@v1
         with:
           deno-version: v1.x
 
-      - name: Verify Deno installation
-        run: deno --version
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify installations
+        run: |
+          node --version
+          npm --version
+          deno --version
 
       - name: Run tests
-        run: deno test --allow-net --allow-env netlify/edge-functions/
+        run: npm test
 
       - name: Test coverage (optional)
         run: deno test --allow-net --allow-env --coverage=coverage netlify/edge-functions/
