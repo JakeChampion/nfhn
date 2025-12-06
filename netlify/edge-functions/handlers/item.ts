@@ -1,23 +1,25 @@
-import { HTMLResponse } from "https://ghuc.cc/worker-tools/html";
-import { internalServerError, ok, notFound } from "https://ghuc.cc/worker-tools/response-creators";
-
 import { article } from "../layouts/article.ts";
+import type { SetContext } from "../types.ts";
 
-export async function item(id) {
+export async function item(id: number, set: SetContext) {
   const backendResponse = await fetch(
     `https://api.hnpwa.com/v0/item/${id}.json`
   );
   if (backendResponse.status >= 500) {
-    return notFound('No such page')
+    set.status = 502;
+    return 'Backend service error';
   }
   let body = await backendResponse.text()
   try {
     let results = JSON.parse(body);
     if (!results) {
-      return notFound('No such page')
+      set.status = 404;
+      return 'No such page';
     }
-    return new HTMLResponse(article(results), ok());
+    set.headers['content-type'] = 'text/html; charset=utf-8';
+    return article(results);
   } catch (error) {
-    return internalServerError(`Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(body)}`)
+    set.status = 500;
+    return `Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(body)}`;
   }
 }

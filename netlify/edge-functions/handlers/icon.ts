@@ -19,12 +19,9 @@ const contents = `
 </svg>
 `
 
-export async function icon() {
-  return new Response(
-    contents,
-    {
-      headers: {
-        'content-type': 'image/svg+xml'
-      }
-    });
+import type { SetContext } from "../types.ts";
+
+export function icon(set: SetContext) {
+  set.headers['content-type'] = 'image/svg+xml';
+  return contents;
 }
