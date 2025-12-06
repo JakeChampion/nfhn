@@ -1,9 +1,5 @@
 import { home } from "../layouts/hn.ts";
-
-interface SetContext {
-  status?: number;
-  headers: Record<string, string>;
-}
+import type { SetContext } from "../types.ts";
 
 export async function top(pageNumber: number, set: SetContext) {
   const backendResponse = await fetch(

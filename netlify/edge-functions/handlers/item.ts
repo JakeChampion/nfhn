@@ -1,9 +1,5 @@
 import { article } from "../layouts/article.ts";
-
-interface SetContext {
-  status?: number;
-  headers: Record<string, string>;
-}
+import type { SetContext } from "../types.ts";
 
 export async function item(id: number, set: SetContext) {
   const backendResponse = await fetch(

@@ -1,9 +1,5 @@
 import { user as profile } from "../layouts/user.ts";
-
-interface SetContext {
-  status?: number;
-  headers: Record<string, string>;
-}
+import type { SetContext } from "../types.ts";
 
 export async function user(name: string, set: SetContext) {
   const backendResponse = await fetch(

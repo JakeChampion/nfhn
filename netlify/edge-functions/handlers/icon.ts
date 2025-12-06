@@ -19,9 +19,7 @@ const contents = `
 </svg>
 `
 
-interface SetContext {
-  headers: Record<string, string>;
-}
+import type { SetContext } from "../types.ts";
 
 export function icon(set: SetContext) {
   set.headers['content-type'] = 'image/svg+xml';
