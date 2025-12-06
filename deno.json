@@ -1,0 +1,12 @@
+{
+  "tasks": {
+    "test": "deno test --allow-net --allow-env netlify/edge-functions/"
+  },
+  "compilerOptions": {
+    "lib": ["deno.ns", "dom", "dom.iterable"]
+  },
+  "imports": {
+    "@netlify/edge-functions": "https://edge.netlify.com/v1/index.ts",
+    "elysia": "npm:elysia@^1.1.23"
+  }
+}
