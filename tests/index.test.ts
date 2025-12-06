@@ -5,10 +5,10 @@ import {
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { Elysia } from "elysia";
 import type { Config } from "@netlify/edge-functions";
-import { icon } from "./handlers/icon.ts";
-import { item } from "./handlers/item.ts";
-import { top } from "./handlers/top.ts";
-import { user } from "./handlers/user.ts";
+import { icon } from "../netlify/edge-functions/handlers/icon.ts";
+import { item } from "../netlify/edge-functions/handlers/item.ts";
+import { top } from "../netlify/edge-functions/handlers/top.ts";
+import { user } from "../netlify/edge-functions/handlers/user.ts";
 
 // Helper function for redirecting to top page
 function redirectToTop({ set }: { set: any }) {

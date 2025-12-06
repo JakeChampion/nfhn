@@ -4,8 +4,8 @@
   "description": "You can view the deployed version at <https://nfhn.netlify.app/>",
   "main": "index.js",
   "scripts": {
-    "test": "deno test --allow-net --allow-env netlify/edge-functions/",
-    "test:watch": "deno test --allow-net --allow-env --watch netlify/edge-functions/"
+    "test": "deno test --allow-net --allow-env tests/",
+    "test:watch": "deno test --allow-net --allow-env --watch tests/"
   },
   "repository": {
     "type": "git",

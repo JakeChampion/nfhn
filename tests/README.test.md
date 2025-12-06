@@ -23,19 +23,19 @@ brew install deno
 ```bash
 npm test
 # or
-deno test --allow-net --allow-env netlify/edge-functions/
+deno test --allow-net --allow-env tests/
 ```
 
 ### Run tests in watch mode
 ```bash
 npm run test:watch
 # or
-deno test --allow-net --allow-env --watch netlify/edge-functions/
+deno test --allow-net --allow-env --watch tests/
 ```
 
 ### Run specific test file
 ```bash
-deno test --allow-net --allow-env netlify/edge-functions/index.test.ts
+deno test --allow-net --allow-env tests/index.test.ts
 ```
 
 ## Test Coverage

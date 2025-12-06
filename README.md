@@ -22,13 +22,13 @@ curl -fsSL https://deno.land/install.sh | sh
 npm test
 
 # Or run directly with Deno
-deno test --allow-net --allow-env netlify/edge-functions/
+deno test --allow-net --allow-env tests/
 
 # Run in watch mode
 npm run test:watch
 ```
 
-See [netlify/edge-functions/README.test.md](netlify/edge-functions/README.test.md) for detailed test documentation.
+See [tests/README.test.md](tests/README.test.md) for detailed test documentation.
 
 ### Continuous Integration
 
