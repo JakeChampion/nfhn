@@ -22,6 +22,6 @@ const contents = `
 import type { SetContext } from "../types.ts";
 
 export function icon(set: SetContext) {
-  set.headers['content-type'] = 'image/svg+xml';
+  set.headers['content-type'] = 'image/svg+xml; charset=utf-8';
   return contents;
 }
