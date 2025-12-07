@@ -4,12 +4,26 @@ import { contents } from "./handlers/icon.ts";
 
 type Primitive = string | number | boolean | null | undefined;
 
+// === Raw HTML handling ===
+
+const RAW_HTML_SYMBOL = Symbol("RawHTML");
+
 // Explicit marker for “don’t escape this”
 export interface RawHTML {
+  readonly [RAW_HTML_SYMBOL]: true;
   readonly __raw: string;
 }
 
-export const raw = (html: string): RawHTML => ({ __raw: html });
+export const raw = (html: string): RawHTML => ({
+  [RAW_HTML_SYMBOL]: true,
+  __raw: html,
+});
+
+// Alias with a scarier name for clarity
+export const unsafeHTML = (htmlString: string): RawHTML => raw(htmlString);
+export const dangerouslySetInnerHTML = unsafeHTML;
+
+// === HTML streaming types ===
 
 export interface HTML extends AsyncIterable<string> {}
 
@@ -22,6 +36,8 @@ export type HTMLValue =
   | AsyncIterable<HTMLValue>
   | (() => HTMLValue | Promise<HTMLValue>);
 
+// === Escaping & helpers ===
+
 export const escape = (value: unknown): string => {
   if (value == null || value === false) return "";
   const str = String(value);
@@ -33,14 +49,17 @@ export const escape = (value: unknown): string => {
     .replace(/'/g, "&#39;");
 };
 
-const isAsyncIterable = (v: any): v is AsyncIterable<any> =>
-  v && typeof v[Symbol.asyncIterator] === "function";
+const isRawHTML = (v: unknown): v is RawHTML =>
+  !!v && typeof v === "object" && (v as any)[RAW_HTML_SYMBOL] === true;
 
-const isIterable = (v: any): v is Iterable<any> =>
-  v && typeof v[Symbol.iterator] === "function";
+const isAsyncIterable = (v: unknown): v is AsyncIterable<unknown> =>
+  !!v && typeof (v as any)[Symbol.asyncIterator] === "function";
 
-const isHTML = (v: any): v is HTML =>
-  v && typeof v[Symbol.asyncIterator] === "function" && !("__raw" in v);
+const isIterable = (v: unknown): v is Iterable<unknown> =>
+  !!v && typeof (v as any)[Symbol.iterator] === "function";
+
+const isHTML = (v: unknown): v is HTML =>
+  isAsyncIterable(v) && !isRawHTML(v);
 
 async function* flattenValue(
   value: HTMLValue,
@@ -59,8 +78,8 @@ async function* flattenValue(
     return;
   }
 
-  if ((value as RawHTML).__raw !== undefined) {
-    yield (value as RawHTML).__raw;
+  if (isRawHTML(value)) {
+    yield value.__raw;
     return;
   }
 
@@ -72,8 +91,8 @@ async function* flattenValue(
   }
 
   if (isAsyncIterable(value)) {
-    for await (const v of value) {
-      yield* flattenValue(v as HTMLValue);
+    for await (const v of value as AsyncIterable<HTMLValue>) {
+      yield* flattenValue(v);
     }
     return;
   }
@@ -85,9 +104,11 @@ async function* flattenValue(
     return;
   }
 
+  // Primitive or string
   yield escape(value);
 }
 
+// Template tag -> HTML (AsyncIterable<string>)
 export function html(
   strings: TemplateStringsArray,
   ...values: HTMLValue[]
@@ -102,8 +123,14 @@ export function html(
   })();
 }
 
-export const unsafeHTML = (htmlString: string): RawHTML => raw(htmlString);
+// Useful for tests / debugging
+export const htmlToString = async (fragment: HTML): Promise<string> => {
+  let out = "";
+  for await (const chunk of fragment) out += chunk;
+  return out;
+};
 
+// HTML -> ReadableStream bridge
 export function htmlToStream(
   fragment: HTML,
   encoder: TextEncoder = new TextEncoder(),
@@ -112,16 +139,20 @@ export function htmlToStream(
 
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
-      const { value, done } = await iterator.next();
-      if (done) {
-        controller.close();
-        return;
+      try {
+        const { value, done } = await iterator.next();
+        if (done) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(encoder.encode(value));
+      } catch (e) {
+        controller.error(e);
       }
-      controller.enqueue(encoder.encode(value));
     },
 
     async cancel() {
-      if (iterator.return) {
+      if (typeof iterator.return === "function") {
         try {
           await iterator.return();
         } catch {
@@ -148,7 +179,29 @@ export class HTMLResponse extends Response {
   }
 }
 
-export const home = (content: any, pageNumber: number) => html`
+// === Domain types ===
+
+export interface Item {
+  id: number;
+  title: string;
+  points: number | null;
+  user: string | null;
+  time: number;
+  time_ago: string;
+  content: string;
+  deleted?: boolean;
+  dead?: boolean;
+  type: string;
+  url?: string;
+  domain?: string;
+  comments: Item[];
+  level: number;
+  comments_count: number;
+}
+
+// === Templates ===
+
+export const home = (content: Item[], pageNumber: number): HTML => html`
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -166,10 +219,13 @@ export const home = (content: any, pageNumber: number) => html`
         padding: 0 1em;
         box-sizing: border-box;
       }
+      main {
+        display: block;
+      }
       ol {
         list-style-type: none;
         counter-reset: section;
-        counter-set: section ${pageNumber === 1 ? 0 : (pageNumber-1)*30};
+        counter-set: section ${pageNumber === 1 ? 0 : (pageNumber - 1) * 30};
         padding: 0;
       }
       li {
@@ -217,44 +273,40 @@ export const home = (content: any, pageNumber: number) => html`
         line-height: 1.2
       }
     </style>
-    <title>
-      NFHN: Page ${pageNumber}
-    </title>
+    <title>NFHN: Page ${pageNumber}</title>
   </head>
   <body>
-    <ol>
-        ${content.map((data: any) => {
-            return html`
-            <li>
-              <a class="title" href="${data.url}">${data.title}</a>
-              <a class="comments" href="/item/${data.id}">view ${data.comments_count > 0 ? data.comments_count +' comments' : 'discussion'}</a>
-            </li>`
-        })}
-    </ol>
-    <a href="/top/${pageNumber+1}" style="text-align: center;">More</a>
+    <main>
+      <ol>
+        ${content.map((data: Item) => html`
+          <li>
+            <a class="title" href="${data.url}">${data.title}</a>
+            <a class="comments" href="/item/${data.id}">
+              view ${data.comments_count > 0 ? data.comments_count + " comments" : "discussion"}
+            </a>
+          </li>
+        `)}
+      </ol>
+      <a href="/top/${pageNumber + 1}" style="text-align: center;">More</a>
+    </main>
   </body>
-</html>`
+</html>
+`;
 
-export interface Item {
-  id: number;
-  title: string;
-  points: number | null;
-  user: string | null;
-  time: number;
-  time_ago: string;
-  content: string;
-  deleted?: boolean;
-  dead?: boolean;
-  type: string;
-  url?: string;
-  domain?: string;
-  comments: Item[];
-  level: number;
-  comments_count: number;
-}
+// Streaming-friendly comments
 
-const comment = (item: Item): HTML => html`
-  <details open id=${item.id}>
+const commentsList = (comments: Item[], level: number): HTML =>
+  (async function* (): AsyncGenerator<string> {
+    for (const child of comments) {
+      yield "<li>";
+      // Defer creation of the child HTML until iteration
+      yield* comment(child, level + 1);
+      yield "</li>";
+    }
+  })();
+
+const comment = (item: Item, level = 0): HTML => html`
+  <details ${level === 0 ? "open" : ""} id="${item.id}">
     <summary>
       <span>
         <a href="/user/${item.user}">${item.user}</a> -
@@ -263,7 +315,7 @@ const comment = (item: Item): HTML => html`
     </summary>
     <div>${unsafeHTML(item.content)}</div>
     <ul>
-      ${item.comments.map((child) => html`<li>${comment(child)}</li>`)}
+      ${commentsList(item.comments, level)}
     </ul>
   </details>
 `;
@@ -290,6 +342,9 @@ export const article = (item: Item): HTML => html`
         font-size: 18px;
         color: #444;
         padding: 0 10px;
+      }
+      main {
+        display: block;
       }
       details {
         background-color: whitesmoke;
@@ -328,7 +383,6 @@ export const article = (item: Item): HTML => html`
       article {
         padding-left: 1em;
       }
-
       small {
         display: block;
         padding-top: 0.5em;
@@ -345,22 +399,34 @@ export const article = (item: Item): HTML => html`
       <a href="/">Home</a>
     </nav>
     <hr />
-    <article>
-      <a href="${item.url}">
-        <h1>${item.title}</h1>
-        <small>${item.domain}</small>
-      </a>
-      <p>
-        ${item.points} points by
-        <a href="/user/${item.user}">${item.user}</a> ${item.time_ago}
-      </p>
-      <hr />
-      ${unsafeHTML(item.content)}
-      ${item.comments.map(comment)}
-    </article>
+    <main>
+      <article>
+        <a href="${item.url}">
+          <h1>${item.title}</h1>
+          <small>${item.domain}</small>
+        </a>
+        <p>
+          ${item.points} points by
+          <a href="/user/${item.user}">${item.user}</a> ${item.time_ago}
+        </p>
+        <hr />
+        ${unsafeHTML(item.content)}
+        ${commentsList(item.comments, 0)}
+      </article>
+    </main>
   </body>
 </html>
 `;
+
+// === Elysia app ===
+
+const redirectToTop1 = () =>
+  new Response(null, {
+    status: 301,
+    headers: {
+      Location: "/top/1",
+    },
+  });
 
 export const app = new Elysia()
   .onError(({ code, error, set }) => {
@@ -373,30 +439,9 @@ export const app = new Elysia()
     set.status = 500;
     return "Internal Server Error";
   })
-  .get("/", () => {
-    return new Response(null, {
-      status: 301,
-      headers: {
-        Location: "/top/1",
-      },
-    });
-  })
-  .get("/top", () => {
-    return new Response(null, {
-      status: 301,
-      headers: {
-        Location: "/top/1",
-      },
-    });
-  })
-  .get("/top/", () => {
-    return new Response(null, {
-      status: 301,
-      headers: {
-        Location: "/top/1",
-      },
-    });
-  })
+  .get("/", redirectToTop1)
+  .get("/top", redirectToTop1)
+  .get("/top/", redirectToTop1)
   .get("/icon.svg", () => {
     return new Response(contents, {
       status: 200,
@@ -411,12 +456,21 @@ export const app = new Elysia()
       set.status = 404;
       return "Not Found";
     }
+
     let backendResponse: Response;
     try {
-      backendResponse = await fetch(`https://api.hnpwa.com/v0/news/${pageNumber}.json`);
-    } catch {
+      backendResponse = await fetch(
+        `https://api.hnpwa.com/v0/news/${pageNumber}.json`,
+      );
+    } catch (e) {
+      console.error("Upstream fetch error (news):", e);
       set.status = 502;
       return "Backend service error";
+    }
+
+    if (!backendResponse.ok) {
+      set.status = backendResponse.status === 404 ? 404 : 502;
+      return `Backend service error (${backendResponse.status})`;
     }
 
     const body = await backendResponse.text();
@@ -427,7 +481,8 @@ export const app = new Elysia()
         return "No such page";
       }
       return new HTMLResponse(home(results, pageNumber));
-    } catch {
+    } catch (e) {
+      console.error("JSON parse error (news):", e);
       set.status = 500;
       return `Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(
         body,
@@ -443,10 +498,18 @@ export const app = new Elysia()
 
     let backendResponse: Response;
     try {
-      backendResponse = await fetch(`https://api.hnpwa.com/v0/item/${id}.json`);
-    } catch {
+      backendResponse = await fetch(
+        `https://api.hnpwa.com/v0/item/${id}.json`,
+      );
+    } catch (e) {
+      console.error("Upstream fetch error (item):", e);
       set.status = 502;
       return "Backend service error";
+    }
+
+    if (!backendResponse.ok) {
+      set.status = backendResponse.status === 404 ? 404 : 502;
+      return `Backend service error (${backendResponse.status})`;
     }
 
     const body = await backendResponse.text();
@@ -457,7 +520,8 @@ export const app = new Elysia()
         return "No such page";
       }
       return new HTMLResponse(article(result));
-    } catch {
+    } catch (e) {
+      console.error("JSON parse error (item):", e);
       set.status = 500;
       return `Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(
         body,
