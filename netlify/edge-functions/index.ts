@@ -2,7 +2,12 @@ import type { Config } from "@netlify/edge-functions";
 import { Elysia } from "elysia";
 import { contents } from "./handlers/icon.ts";
 import { home } from "./layouts/hn.ts";
-import { html, unsafeHTML, type HTML } from "https://ghuc.cc/worker-tools/html";
+import {
+  html,
+  unsafeHTML,
+  type HTML,
+  HTMLResponse,
+} from "https://ghuc.cc/worker-tools/html";
 
 export interface Item {
   id: number;
@@ -137,10 +142,10 @@ export const app = new Elysia()
     console.error("Error:", code, errorMessage);
     if (code === "NOT_FOUND") {
       set.status = 404;
-      return error
+      return "Not Found";
     }
     set.status = 500;
-    return error
+    return "Internal Server Error";
   })
   // Redirects
   .get("/", () => {
@@ -177,15 +182,14 @@ export const app = new Elysia()
     });
   })
   // Top stories
-  .get("/top/:pageNumber", async ({ params, set, setHeaders }) => {
+  .get("/top/:pageNumber", async ({ params, set }) => {
     const pageNumber = Number.parseInt(params.pageNumber, 10);
 
-    //if (!Number.isFinite(pageNumber) || pageNumber < 1 || pageNumber > 20) {
-      //set.status = 404;
-      //return "Not Found";
-    //}
-
-    console.log({pageNumber})
+    // Validate page is numeric and within 1–20
+    if (!Number.isFinite(pageNumber) || pageNumber < 1 || pageNumber > 20) {
+      set.status = 404;
+      return "Not Found";
+    }
 
     let backendResponse: Response;
     try {
@@ -213,12 +217,8 @@ export const app = new Elysia()
         set.status = 404;
         return "No such page";
       }
-      set.headers["content-type"] = "text/html";
-      return new Response(home(results, pageNumber), {
-        headers: {
-          "content-type": "text/html; charset=utf-8",
-        }
-      });
+      // HTMLResponse will set an appropriate text/html content-type
+      return new HTMLResponse(home(results, pageNumber));
     } catch {
       set.status = 500;
       return `Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(
@@ -260,11 +260,7 @@ export const app = new Elysia()
         set.status = 404;
         return "No such page";
       }
-      return new Response(article(result), {
-        headers: {
-          "content-type": "text/html; charset=utf-8",
-        },
-      });
+      return new HTMLResponse(article(result));
     } catch {
       set.status = 500;
       return `Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(
