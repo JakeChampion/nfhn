@@ -3,6 +3,7 @@ import { Elysia } from 'elysia'
 import { contents } from './handlers/icon.ts'
 import { top } from './handlers/top.ts'
 import { user } from './handlers/user.ts'
+import { article } from "./layouts/article.ts";
 
 export const app = new Elysia()
   .onError(({ code, error, set }) => {
