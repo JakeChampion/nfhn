@@ -329,6 +329,10 @@ export const article = (item: Item): HTML => html`
         color: #444;
         padding: 0 10px;
       }
+      ul {
+        list-style: none;
+        padding-left: 0;
+      }
       main {
         display: block;
       }
