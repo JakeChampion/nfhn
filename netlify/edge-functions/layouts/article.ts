@@ -17,7 +17,7 @@ import { html, unsafeHTML } from "https://ghuc.cc/worker-tools/html";
 //     level: number;
 //     comments_count: number;
 //   }
-const comment = (content) => html`
+const comment = (content: any) => html`
 <details open id=${content.id}>
   <summary>
     <span><a href="/user/${content.user}">${content.user}</a> - <a href="#${content.id}">${content.time_ago}</a></span
@@ -25,11 +25,11 @@ const comment = (content) => html`
   </summary>
   <div>${unsafeHTML(content.content)}</div>
   <ul>
-    ${content.comments.map((content) => html`<li>${comment(content)}</li>`)}
+    ${content.comments.map((content: any) => html`<li>${comment(content)}</li>`)}
   </ul>
 </details>`;
 
-export const article = (content) => html`
+export const article = (content: any) => html`
 <!DOCTYPE html>
 <html lang="en" >
   <head>

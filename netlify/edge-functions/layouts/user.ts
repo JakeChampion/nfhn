@@ -1,6 +1,6 @@
 import { html, unsafeHTML } from "https://ghuc.cc/worker-tools/html";
 
-export const user = (content) => html`
+export const user = (content: any) => html`
 <!DOCTYPE html>
 <html lang="en">
   <head>
