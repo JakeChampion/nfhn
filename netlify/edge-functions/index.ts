@@ -137,10 +137,10 @@ export const app = new Elysia()
     console.error("Error:", code, errorMessage);
     if (code === "NOT_FOUND") {
       set.status = 404;
-      return "Not Found";
+      return error
     }
     set.status = 500;
-    return "Internal Server Error";
+    return error
   })
   // Redirects
   .get("/", () => {
