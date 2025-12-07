@@ -281,6 +281,7 @@ export const home = (content: Item[], pageNumber: number): HTML => html`
 </html>
 `;
 
+// Streaming-friendly comments with no root <ul> and no user links
 const commentsList = (comments: Item[], level: number): HTML =>
   (async function* (): AsyncGenerator<string> {
     const isNested = level >= 1;
@@ -307,14 +308,73 @@ const comment = (item: Item, level = 0): HTML => html`
       </span>
     </summary>
     <div>${unsafeHTML(item.content)}</div>
-
     ${item.comments.length
       ? commentsList(item.comments, level + 1)
       : ""}
   </details>
 `;
 
-export const article = (item: Item): HTML => html`
+// Tiny client-side helper to swap suspense placeholders with templates
+const suspenseClientScript = raw(`
+<script>
+  (function () {
+    function applyTemplate(tpl) {
+      var targetId = tpl.getAttribute("data-suspense-replace");
+      if (!targetId) return;
+      var target = document.getElementById(targetId);
+      if (!target) return;
+      var clone = tpl.content ? tpl.content.cloneNode(true) : null;
+      if (!clone) return;
+      target.replaceWith(clone);
+      tpl.remove();
+    }
+
+    function scan(root) {
+      var tpls = root.querySelectorAll("template[data-suspense-replace]");
+      for (var i = 0; i < tpls.length; i++) {
+        applyTemplate(tpls[i]);
+      }
+    }
+
+    function setupObserver() {
+      var observer = new MutationObserver(function (mutations) {
+        for (var i = 0; i < mutations.length; i++) {
+          var m = mutations[i];
+          for (var j = 0; j < m.addedNodes.length; j++) {
+            var node = m.addedNodes[j];
+            if (node.nodeType !== 1) continue;
+            if (node.matches && node.matches("template[data-suspense-replace]")) {
+              applyTemplate(node);
+            } else if (node.querySelectorAll) {
+              scan(node);
+            }
+          }
+        }
+      });
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true
+      });
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", function () {
+        scan(document);
+        setupObserver();
+      });
+    } else {
+      scan(document);
+      setupObserver();
+    }
+  })();
+</script>
+`);
+
+// Shell-first streaming page wrapper for article
+const shellPage = (title: string, body: HTML): HTML =>
+  (async function* (): AsyncGenerator<string> {
+    // Head + layout flush early
+    yield* html`
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -336,10 +396,6 @@ export const article = (item: Item): HTML => html`
         font-size: 18px;
         color: #444;
         padding: 0 10px;
-      }
-      ul {
-        list-style: none;
-        padding-left: 0;
       }
       main {
         display: block;
@@ -390,9 +446,51 @@ export const article = (item: Item): HTML => html`
         margin: 0;
       }
     </style>
-    <title>NFHN: ${item.title}</title>
+    <title>${title}</title>
+    ${suspenseClientScript}
   </head>
   <body>
+    `;
+
+    // Body streams independently (including comments)
+    yield* body;
+
+    // Tail
+    yield* html`
+  </body>
+</html>
+    `;
+  })();
+
+// Suspense-style helper for comments slot
+const suspense = (
+  id: string,
+  placeholder: HTML,
+  loader: () => HTMLValue | Promise<HTMLValue>,
+): HTML =>
+  (async function* (): AsyncGenerator<string> {
+    const escapedId = escape(id);
+
+    // 1. Placeholder container (renders immediately)
+    yield `<div id="${escapedId}" data-suspense-placeholder="true">`;
+    for await (const chunk of placeholder) {
+      yield chunk;
+    }
+    yield `</div>`;
+
+    // 2. Resolve real content
+    const resolved = await loader();
+
+    // 3. Send a template that will replace the placeholder on the client
+    yield `<template data-suspense-replace="${escapedId}">`;
+    for await (const chunk of flattenValue(resolved as HTMLValue)) {
+      yield chunk;
+    }
+    yield `</template>`;
+  })();
+
+export const article = (item: Item): HTML =>
+  shellPage(`NFHN: ${item.title}`, html`
     <nav>
       <a href="/">Home</a>
     </nav>
@@ -409,12 +507,14 @@ export const article = (item: Item): HTML => html`
         </p>
         <hr />
         ${unsafeHTML(item.content)}
-        ${commentsList(item.comments, 0)}
+        ${suspense(
+          `comments-root-${item.id}`,
+          html`<p>Loading comments…</p>`,
+          () => commentsList(item.comments, 0),
+        )}
       </article>
     </main>
-  </body>
-</html>
-`;
+  `);
 
 const redirectToTop1 = () =>
   new Response(null, {
