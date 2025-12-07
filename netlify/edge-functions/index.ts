@@ -16,7 +16,8 @@ const app = new Elysia()
     console.log(`${ctx.request.method} ${new URL(ctx.request.url).pathname}`)
   })
   .onError(({ code, error, set }) => {
-    console.error('Error:', code, error.message);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Error:', code, errorMessage);
     if (code === 'NOT_FOUND') {
       set.status = 404;
       return 'Not Found';

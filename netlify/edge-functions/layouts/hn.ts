@@ -1,6 +1,6 @@
 import { html } from "https://ghuc.cc/worker-tools/html";
 
-export const home = (content, pageNumber) => html`
+export const home = (content: any, pageNumber: number) => html`
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -75,7 +75,7 @@ export const home = (content, pageNumber) => html`
   </head>
   <body>
     <ol>
-        ${content.map(data => {
+        ${content.map((data: any) => {
             return html`
             <li>
               <a class="title" href="${data.url}">${data.title}</a>
