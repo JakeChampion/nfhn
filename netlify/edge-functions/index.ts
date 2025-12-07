@@ -5,6 +5,8 @@ import { top } from './handlers/top.ts'
 import { user } from './handlers/user.ts'
 import { article } from "./layouts/article.ts";
 
+import { home } from "./layouts/hn.ts";
+
 export const app = new Elysia()
   .onError(({ code, error, set }) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
