@@ -62,7 +62,7 @@ export const app = new Elysia()
   } catch (error) {
     set.status = 500;
     return `Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(body)}`;
-  })
+  }})
   .get('/item/:id', ({ params, set }) => {
     const id = Number.parseInt(params.id, 10)
     // Validate id is a valid number
@@ -89,7 +89,7 @@ export const app = new Elysia()
   } catch (error) {
     set.status = 500;
     return `Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(body)}`;
-  })
+  }})
   .get('/error', () => {
     throw new Error('uh oh')
   })
