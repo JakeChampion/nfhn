@@ -5,16 +5,7 @@ import { item } from './handlers/item.ts'
 import { top } from './handlers/top.ts'
 import { user } from './handlers/user.ts'
 
-// Helper function for redirecting to top page
-function redirectToTop({ set }: { set: any }) {
-  set.redirect = '/top/1';
-  return;
-}
-
 const app = new Elysia()
-  .onRequest((ctx) => {
-    console.log(`${ctx.request.method} ${new URL(ctx.request.url).pathname}`)
-  })
   .onError(({ code, error, set }) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('Error:', code, errorMessage);
