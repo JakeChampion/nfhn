@@ -295,7 +295,7 @@ const comment = (item: Item, level = 0): HTML => html`
   <details ${level === 0 ? "open" : ""} id="${item.id}">
     <summary>
       <span>
-        <a href="/user/${item.user}">${item.user}</a> -
+        ${item.user} -
         <a href="#${item.id}">${item.time_ago}</a>
       </span>
     </summary>
@@ -397,7 +397,7 @@ export const article = (item: Item): HTML => html`
         </a>
         <p>
           ${item.points} points by
-          <a href="/user/${item.user}">${item.user}</a> ${item.time_ago}
+          ${item.user} ${item.time_ago}
         </p>
         <hr />
         ${unsafeHTML(item.content)}
