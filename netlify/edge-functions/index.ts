@@ -206,6 +206,10 @@ export const home = (content: Item[], pageNumber: number): HTML => html`
       main {
         display: block;
       }
+      ul {
+        list-style: none;
+        padding-left: 0;
+      }
       ol {
         list-style-type: none;
         counter-reset: section;
