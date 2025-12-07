@@ -5,7 +5,7 @@ import {
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { Elysia } from "elysia";
 import type { Config } from "@netlify/edge-functions";
-import app from "../netlify/edge-functions/index.ts";
+import { app } from "../netlify/edge-functions/index.ts";
 
 // Redirect routes tests
 Deno.test("GET / - should redirect to /top/1", async () => {
