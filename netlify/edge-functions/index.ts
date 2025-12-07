@@ -180,10 +180,10 @@ export const app = new Elysia()
   .get("/top/:pageNumber", async ({ params, set }) => {
     const pageNumber = Number.parseInt(params.pageNumber, 10);
 
-    if (!Number.isFinite(pageNumber) || pageNumber < 1 || pageNumber > 20) {
-      set.status = 404;
-      return "Not Found";
-    }
+    //if (!Number.isFinite(pageNumber) || pageNumber < 1 || pageNumber > 20) {
+      //set.status = 404;
+      //return "Not Found";
+    //}
 
     let backendResponse: Response;
     try {
