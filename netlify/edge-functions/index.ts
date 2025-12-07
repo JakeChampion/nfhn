@@ -2,11 +2,11 @@ import type { Config } from "@netlify/edge-functions";
 import { Elysia } from "elysia";
 import { contents } from "./handlers/icon.ts";
 //import {
-  html,
-  unsafeHTML,
-  type HTML,
-  HTMLResponse,
-} from "https://ghuc.cc/worker-tools/html";
+//  html,
+//  unsafeHTML,
+//  type HTML,
+//  HTMLResponse,
+//} from //"https://ghuc.cc/worker-tools/html";
 
 // netlify/edge-functions/html.ts
 
