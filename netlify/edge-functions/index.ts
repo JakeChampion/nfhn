@@ -291,6 +291,23 @@ const commentsList = (comments: Item[], level: number): HTML =>
     }
   })();
 
+const commentsList = (comments: Item[], level: number): HTML =>
+  (async function* (): AsyncGenerator<string> {
+    const isNested = level >= 1;
+
+    // Only nested comments get a <ul>
+    if (isNested) yield "<ul>";
+
+    for (const child of comments) {
+      // Only nested comments get <li>
+      if (isNested) yield "<li>";
+      yield* comment(child, level);
+      if (isNested) yield "</li>";
+    }
+
+    if (isNested) yield "</ul>";
+  })();
+
 const comment = (item: Item, level = 0): HTML => html`
   <details ${level === 0 ? "open" : ""} id="${item.id}">
     <summary>
@@ -300,9 +317,10 @@ const comment = (item: Item, level = 0): HTML => html`
       </span>
     </summary>
     <div>${unsafeHTML(item.content)}</div>
-    <ul>
-      ${commentsList(item.comments, level)}
-    </ul>
+
+    ${item.comments.length
+      ? commentsList(item.comments, level + 1)
+      : ""}
   </details>
 `;
 
