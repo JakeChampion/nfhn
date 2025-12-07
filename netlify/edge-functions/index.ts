@@ -283,16 +283,6 @@ export const home = (content: Item[], pageNumber: number): HTML => html`
 
 const commentsList = (comments: Item[], level: number): HTML =>
   (async function* (): AsyncGenerator<string> {
-    for (const child of comments) {
-      yield "<li>";
-      // Defer creation of the child HTML until iteration
-      yield* comment(child, level + 1);
-      yield "</li>";
-    }
-  })();
-
-const commentsList = (comments: Item[], level: number): HTML =>
-  (async function* (): AsyncGenerator<string> {
     const isNested = level >= 1;
 
     // Only nested comments get a <ul>
