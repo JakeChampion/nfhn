@@ -4,11 +4,8 @@ import { contents } from "./handlers/icon.ts";
 
 type Primitive = string | number | boolean | null | undefined;
 
-// === Raw HTML handling ===
-
 const RAW_HTML_SYMBOL = Symbol("RawHTML");
 
-// Explicit marker for “don’t escape this”
 export interface RawHTML {
   readonly [RAW_HTML_SYMBOL]: true;
   readonly __raw: string;
@@ -19,11 +16,8 @@ export const raw = (html: string): RawHTML => ({
   __raw: html,
 });
 
-// Alias with a scarier name for clarity
 export const unsafeHTML = (htmlString: string): RawHTML => raw(htmlString);
 export const dangerouslySetInnerHTML = unsafeHTML;
-
-// === HTML streaming types ===
 
 export interface HTML extends AsyncIterable<string> {}
 
@@ -35,8 +29,6 @@ export type HTMLValue =
   | Iterable<HTMLValue>
   | AsyncIterable<HTMLValue>
   | (() => HTMLValue | Promise<HTMLValue>);
-
-// === Escaping & helpers ===
 
 export const escape = (value: unknown): string => {
   if (value == null || value === false) return "";
@@ -104,11 +96,9 @@ async function* flattenValue(
     return;
   }
 
-  // Primitive or string
   yield escape(value);
 }
 
-// Template tag -> HTML (AsyncIterable<string>)
 export function html(
   strings: TemplateStringsArray,
   ...values: HTMLValue[]
@@ -123,14 +113,12 @@ export function html(
   })();
 }
 
-// Useful for tests / debugging
 export const htmlToString = async (fragment: HTML): Promise<string> => {
   let out = "";
   for await (const chunk of fragment) out += chunk;
   return out;
 };
 
-// HTML -> ReadableStream bridge
 export function htmlToStream(
   fragment: HTML,
   encoder: TextEncoder = new TextEncoder(),
@@ -179,8 +167,6 @@ export class HTMLResponse extends Response {
   }
 }
 
-// === Domain types ===
-
 export interface Item {
   id: number;
   title: string;
@@ -198,8 +184,6 @@ export interface Item {
   level: number;
   comments_count: number;
 }
-
-// === Templates ===
 
 export const home = (content: Item[], pageNumber: number): HTML => html`
 <!DOCTYPE html>
@@ -292,8 +276,6 @@ export const home = (content: Item[], pageNumber: number): HTML => html`
   </body>
 </html>
 `;
-
-// Streaming-friendly comments
 
 const commentsList = (comments: Item[], level: number): HTML =>
   (async function* (): AsyncGenerator<string> {
@@ -417,8 +399,6 @@ export const article = (item: Item): HTML => html`
   </body>
 </html>
 `;
-
-// === Elysia app ===
 
 const redirectToTop1 = () =>
   new Response(null, {
