@@ -2,7 +2,7 @@ import type { Config } from "@netlify/edge-functions"
 import { Elysia } from 'elysia'
 import { contents } from './handlers/icon.ts'
 import { top } from './handlers/top.ts'
-import { user } from './handlers/user.ts'
+//import { user } from './handlers/user.ts'
 import { article } from "./layouts/article.ts";
 
 import { home } from "./layouts/hn.ts";
@@ -89,9 +89,6 @@ export const app = new Elysia()
   } catch (error) {
     set.status = 500;
     return `Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(body)}`;
-  })
-  .get('/user/:name', ({ params, set }) => {
-    return user(params.name, set)
   })
   .get('/error', () => {
     throw new Error('uh oh')
