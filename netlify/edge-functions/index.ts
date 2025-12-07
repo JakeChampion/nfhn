@@ -92,7 +92,7 @@ export const app = new Elysia()
     redirect("/top/1");
   })
   .get("/icon.svg", ({ set }) => {
-    set.headers["content-type"] = "image/svg+xml; charset=utf-8";
+    set.headers["content-type"] = "image/svg+xml";
     return contents;
   })
   .get("/top/:pageNumber", async ({ params, set }) => {
