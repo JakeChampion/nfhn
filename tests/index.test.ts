@@ -13,7 +13,6 @@ import { user } from "../netlify/edge-functions/handlers/user.ts";
 // Helper function for redirecting to top page
 function redirectToTop({ set }: { set: any }) {
   set.redirect = "/top/1";
-  set.status = 301;
 }
 
 // Create the app instance for testing

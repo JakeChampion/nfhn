@@ -8,7 +8,6 @@ import { user } from './handlers/user.ts'
 // Helper function for redirecting to top page
 function redirectToTop({ set }: { set: any }) {
   set.redirect = '/top/1';
-  set.status = 301;
 }
 
 const app = new Elysia()
