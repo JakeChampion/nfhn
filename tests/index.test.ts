@@ -30,7 +30,7 @@ Deno.test("GET /top/ - should redirect to /top/1", async () => {
 Deno.test("GET /icon.svg - should return SVG with correct content-type", async () => {
   const response = await app.handle(new Request("http://localhost/icon.svg"));
   assertEquals(response.status, 200);
-  assertEquals(response.headers.get("content-type"), "image/svg+xml");
+  assertEquals(response.headers.get("content-type"), ""image/svg+xml; charset=utf-8");
   const body = await response.text();
   assert(body.includes("<svg"), "Response should contain SVG");
 });
