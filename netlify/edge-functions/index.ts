@@ -44,19 +44,18 @@ const isHTML = (v: any): v is HTML =>
 
 async function* flattenValue(
   value: HTMLValue,
-  escape: EscapeFn,
 ): AsyncIterable<string> {
   if (value == null || value === false) return;
 
   if (typeof value === "function") {
     const result = value();
-    yield* flattenValue(await result, escape);
+    yield* flattenValue(await result);
     return;
   }
 
   if (value instanceof Promise) {
     const result = await value;
-    yield* flattenValue(result as HTMLValue, escape);
+    yield* flattenValue(result as HTMLValue);
     return;
   }
 
@@ -74,14 +73,14 @@ async function* flattenValue(
 
   if (isAsyncIterable(value)) {
     for await (const v of value) {
-      yield* flattenValue(v as HTMLValue, escape);
+      yield* flattenValue(v as HTMLValue);
     }
     return;
   }
 
   if (isIterable(value) && typeof value !== "string") {
     for (const v of value as Iterable<HTMLValue>) {
-      yield* flattenValue(v, escape);
+      yield* flattenValue(v);
     }
     return;
   }
@@ -94,15 +93,11 @@ export function html(
   ...values: HTMLValue[]
 ): HTML {
   return (async function* (): AsyncGenerator<string> {
-    const escape = defaultEscape;
-
     for (let i = 0; i < strings.length; i++) {
       yield strings[i];
-
       if (i >= values.length) continue;
-
       const value = values[i];
-      yield* flattenValue(value, escape);
+      yield* flattenValue(value);
     }
   })();
 }
