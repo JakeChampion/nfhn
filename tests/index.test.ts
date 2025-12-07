@@ -31,9 +31,15 @@ const app = new Elysia()
     set.status = 500;
     return "Internal Server Error";
   })
-  .get("/", redirectToTop)
-  .get("/top", redirectToTop)
-  .get("/top/", redirectToTop)
+  .get("/", ({ set }) => {
+    set.redirect = "/top/1";
+  })
+  .get("/top", ({ set }) => {
+    set.redirect = "/top/1";
+  })
+  .get("/top/", ({ set }) => {
+    set.redirect = "/top/1";
+  })
   .get("/icon.svg", ({ set }) => icon(set))
   .get("/top/:pageNumber", ({ params, set }) => {
     const pageNumber = Number.parseInt(params.pageNumber, 10);
