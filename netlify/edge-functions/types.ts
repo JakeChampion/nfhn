@@ -3,6 +3,6 @@
 // used in handler functions. It covers the properties we actually use.
 export interface SetContext {
   status?: number | string;
-  headers: Record<string, string>;
+  headers: Record<string, string | number>;
   redirect?: string;
 }
