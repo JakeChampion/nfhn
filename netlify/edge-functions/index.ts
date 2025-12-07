@@ -29,7 +29,7 @@ export const app = new Elysia()
     set.headers['content-type'] = 'image/svg+xml; charset=utf-8';
     return contents;
   })
-  .get('/top/:pageNumber', ({ params, set }) => {
+  .get('/top/:pageNumber', async ({ params, set }) => {
     const pageNumber = Number.parseInt(params.pageNumber, 10)
     // Validate pageNumber is a valid number and between 1-20
     if (isNaN(pageNumber) || pageNumber < 1 || pageNumber > 20) {
@@ -61,7 +61,7 @@ export const app = new Elysia()
     set.status = 500;
     return `Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(body)}`;
   }})
-  .get('/item/:id', ({ params, set }) => {
+  .get('/item/:id', async ({ params, set }) => {
     const id = Number.parseInt(params.id, 10)
     // Validate id is a valid number
     if (isNaN(id)) {
