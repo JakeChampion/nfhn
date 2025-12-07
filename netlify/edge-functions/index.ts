@@ -1,12 +1,194 @@
 import type { Config } from "@netlify/edge-functions";
 import { Elysia } from "elysia";
 import { contents } from "./handlers/icon.ts";
-import {
+//import {
   html,
   unsafeHTML,
   type HTML,
   HTMLResponse,
 } from "https://ghuc.cc/worker-tools/html";
+
+// netlify/edge-functions/html.ts
+
+// Primitive values allowed directly
+type Primitive = string | number | boolean | null | undefined;
+
+// Explicit marker for “don’t escape this”
+export interface RawHTML {
+  readonly __raw: string;
+}
+
+export const raw = (html: string): RawHTML => ({ __raw: html });
+
+// Streaming HTML fragment: async generator of string chunks
+export interface HTML extends AsyncIterable<string> {}
+
+// Full universe of allowed values inside ${...}
+export type HTMLValue =
+  | Primitive
+  | RawHTML
+  | HTML
+  | Promise<HTMLValue>
+  | Iterable<HTMLValue>
+  | AsyncIterable<HTMLValue>
+  | (() => HTMLValue | Promise<HTMLValue>);
+
+// Escape function – you can swap this if you want custom escaping
+export type EscapeFn = (value: unknown) => string;
+
+export const defaultEscape: EscapeFn = (value: unknown): string => {
+  if (value == null || value === false) return "";
+  const str = String(value);
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+};
+
+const isAsyncIterable = (v: any): v is AsyncIterable<any> =>
+  v && typeof v[Symbol.asyncIterator] === "function";
+
+const isIterable = (v: any): v is Iterable<any> =>
+  v && typeof v[Symbol.iterator] === "function";
+
+const isHTML = (v: any): v is HTML =>
+  v && typeof v[Symbol.asyncIterator] === "function" && !("__raw" in v);
+
+// Core: recursively flatten any HTMLValue into escaped chunks
+async function* flattenValue(
+  value: HTMLValue,
+  escape: EscapeFn,
+): AsyncIterable<string> {
+  if (value == null || value === false) return;
+
+  // Lazy function: call once, then process
+  if (typeof value === "function") {
+    const result = value();
+    yield* flattenValue(await result, escape);
+    return;
+  }
+
+  // Promise: await then recurse
+  if (value instanceof Promise) {
+    const result = await value;
+    yield* flattenValue(result as HTMLValue, escape);
+    return;
+  }
+
+  // Raw HTML: emit as-is
+  if ((value as RawHTML).__raw !== undefined) {
+    yield (value as RawHTML).__raw;
+    return;
+  }
+
+  // Another HTML fragment
+  if (isHTML(value)) {
+    for await (const chunk of value) {
+      yield chunk;
+    }
+    return;
+  }
+
+  // Async iterable
+  if (isAsyncIterable(value)) {
+    for await (const v of value) {
+      yield* flattenValue(v as HTMLValue, escape);
+    }
+    return;
+  }
+
+  // Sync iterable (Array, Set, etc.), but not string
+  if (isIterable(value) && typeof value !== "string") {
+    for (const v of value as Iterable<HTMLValue>) {
+      yield* flattenValue(v, escape);
+    }
+    return;
+  }
+
+  // Plain primitive
+  yield escape(value);
+}
+
+// Tagged template: returns a streaming HTML fragment
+export function html(
+  strings: TemplateStringsArray,
+  ...values: HTMLValue[]
+): HTML {
+  return (async function* (): AsyncGenerator<string> {
+    const escape = defaultEscape;
+
+    for (let i = 0; i < strings.length; i++) {
+      // Static bit
+      yield strings[i];
+
+      if (i >= values.length) continue;
+
+      // Dynamic bit
+      const value = values[i];
+      yield* flattenValue(value, escape);
+    }
+  })();
+}
+
+// Escape hatch (like unsafeHTML)
+export const unsafeHTML = (htmlString: string): RawHTML => raw(htmlString);
+
+// Convert HTML fragment into a ReadableStream<Uint8Array>
+export function htmlToStream(
+  fragment: HTML,
+  encoder: TextEncoder = new TextEncoder(),
+): ReadableStream<Uint8Array> {
+  const iterator = fragment[Symbol.asyncIterator]();
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { value, done } = await iterator.next();
+      if (done) {
+        controller.close();
+        return;
+      }
+      controller.enqueue(encoder.encode(value));
+    },
+
+    async cancel() {
+      if (iterator.return) {
+        try {
+          await iterator.return();
+        } catch {
+          // ignore
+        }
+      }
+    },
+  });
+}
+
+// Streaming HTML Response
+export class HTMLResponse extends Response {
+  constructor(body: HTML | string, init?: ResponseInit) {
+    const headers = new Headers(init?.headers || undefined);
+    if (!headers.has("content-type")) {
+      headers.set("content-type", "text/html; charset=utf-8");
+    }
+
+    if (typeof body === "string") {
+      super(body, { ...init, headers });
+    } else {
+      const stream = htmlToStream(body);
+      super(stream as any, { ...init, headers });
+    }
+  }
+}
+
+// Optional helper for tests / emails
+export async function renderToString(fragment: HTML): Promise<string> {
+  let out = "";
+  for await (const chunk of fragment) {
+    out += chunk;
+  }
+  return out;
+}
 
 export const home = (content: any, pageNumber: number) => html`
 <!DOCTYPE html>
