@@ -5,66 +5,7 @@ import {
 } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { Elysia } from "elysia";
 import type { Config } from "@netlify/edge-functions";
-import { icon } from "../netlify/edge-functions/handlers/icon.ts";
-import { item } from "../netlify/edge-functions/handlers/item.ts";
-import { top } from "../netlify/edge-functions/handlers/top.ts";
-import { user } from "../netlify/edge-functions/handlers/user.ts";
-
-// Helper function for redirecting to top page
-function redirectToTop({ set }: { set: any }) {
-  set.redirect = "/top/1";
-  return;
-}
-
-// Create the app instance for testing
-const app = new Elysia()
-  .onRequest((ctx) => {
-    console.log(`${ctx.request.method} ${new URL(ctx.request.url).pathname}`);
-  })
-  .onError(({ code, error, set }) => {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("Error:", code, errorMessage);
-    if (code === "NOT_FOUND") {
-      set.status = 404;
-      return "Not Found";
-    }
-    set.status = 500;
-    return "Internal Server Error";
-  })
-  .get("/", ({ set }) => {
-    set.redirect = "/top/1";
-  })
-  .get("/top", ({ set }) => {
-    set.redirect = "/top/1";
-  })
-  .get("/top/", ({ set }) => {
-    set.redirect = "/top/1";
-  })
-  .get("/icon.svg", ({ set }) => icon(set))
-  .get("/top/:pageNumber", ({ params, set }) => {
-    const pageNumber = Number.parseInt(params.pageNumber, 10);
-    // Validate pageNumber is a valid number and between 1-20
-    if (isNaN(pageNumber) || pageNumber < 1 || pageNumber > 20) {
-      set.status = 404;
-      return "Not Found";
-    }
-    return top(pageNumber, set);
-  })
-  .get("/item/:id", ({ params, set }) => {
-    const id = Number.parseInt(params.id, 10);
-    // Validate id is a valid number
-    if (isNaN(id)) {
-      set.status = 404;
-      return "Not Found";
-    }
-    return item(id, set);
-  })
-  .get("/user/:name", ({ params, set }) => {
-    return user(params.name, set);
-  })
-  .get("/error", () => {
-    throw new Error("uh oh");
-  });
+import { app } from "../netlify/edge-functions/index.ts";
 
 // Redirect routes tests
 Deno.test("GET / - should redirect to /top/1", async () => {
