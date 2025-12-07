@@ -16,18 +16,17 @@ const app = new Elysia()
     set.status = 500;
     return 'Internal Server Error';
   })
-  .get('/', ({ set }) => {
-    set.redirect = '/top/1';
+  .get('/', ({ redirect }) => {
+    redirect('/top/1');
   })
-  .get('/top', ({ set }) => {
-    set.redirect = '/top/1';
+  .get('/top', ({ redirect }) => {
+    redirect('/top/1')
   })
-  .get('/top/', ({ set }) => {
-    set.redirect = '/top/1';
+  .get('/top/', ({ redirect }) => {
+    redirect('/top/1')
   })
   .get('/icon.svg', ({ set }) => icon(set))
   .get('/top/:pageNumber', ({ params, set }) => {
-    console.log('typeof Deno', typeof Deno)
     const pageNumber = Number.parseInt(params.pageNumber, 10)
     // Validate pageNumber is a valid number and between 1-20
     if (isNaN(pageNumber) || pageNumber < 1 || pageNumber > 20) {
