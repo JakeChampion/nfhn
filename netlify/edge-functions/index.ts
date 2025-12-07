@@ -1,16 +1,7 @@
 import type { Config } from "@netlify/edge-functions";
 import { Elysia } from "elysia";
 import { contents } from "./handlers/icon.ts";
-//import {
-//  html,
-//  unsafeHTML,
-//  type HTML,
-//  HTMLResponse,
-//} from //"https://ghuc.cc/worker-tools/html";
 
-// netlify/edge-functions/html.ts
-
-// Primitive values allowed directly
 type Primitive = string | number | boolean | null | undefined;
 
 // Explicit marker for “don’t escape this”
@@ -20,10 +11,8 @@ export interface RawHTML {
 
 export const raw = (html: string): RawHTML => ({ __raw: html });
 
-// Streaming HTML fragment: async generator of string chunks
 export interface HTML extends AsyncIterable<string> {}
 
-// Full universe of allowed values inside ${...}
 export type HTMLValue =
   | Primitive
   | RawHTML
@@ -33,10 +22,7 @@ export type HTMLValue =
   | AsyncIterable<HTMLValue>
   | (() => HTMLValue | Promise<HTMLValue>);
 
-// Escape function – you can swap this if you want custom escaping
-export type EscapeFn = (value: unknown) => string;
-
-export const defaultEscape: EscapeFn = (value: unknown): string => {
+export const escape = (value: unknown): string => {
   if (value == null || value === false) return "";
   const str = String(value);
   return str
@@ -56,34 +42,29 @@ const isIterable = (v: any): v is Iterable<any> =>
 const isHTML = (v: any): v is HTML =>
   v && typeof v[Symbol.asyncIterator] === "function" && !("__raw" in v);
 
-// Core: recursively flatten any HTMLValue into escaped chunks
 async function* flattenValue(
   value: HTMLValue,
   escape: EscapeFn,
 ): AsyncIterable<string> {
   if (value == null || value === false) return;
 
-  // Lazy function: call once, then process
   if (typeof value === "function") {
     const result = value();
     yield* flattenValue(await result, escape);
     return;
   }
 
-  // Promise: await then recurse
   if (value instanceof Promise) {
     const result = await value;
     yield* flattenValue(result as HTMLValue, escape);
     return;
   }
 
-  // Raw HTML: emit as-is
   if ((value as RawHTML).__raw !== undefined) {
     yield (value as RawHTML).__raw;
     return;
   }
 
-  // Another HTML fragment
   if (isHTML(value)) {
     for await (const chunk of value) {
       yield chunk;
@@ -91,7 +72,6 @@ async function* flattenValue(
     return;
   }
 
-  // Async iterable
   if (isAsyncIterable(value)) {
     for await (const v of value) {
       yield* flattenValue(v as HTMLValue, escape);
@@ -99,7 +79,6 @@ async function* flattenValue(
     return;
   }
 
-  // Sync iterable (Array, Set, etc.), but not string
   if (isIterable(value) && typeof value !== "string") {
     for (const v of value as Iterable<HTMLValue>) {
       yield* flattenValue(v, escape);
@@ -107,11 +86,9 @@ async function* flattenValue(
     return;
   }
 
-  // Plain primitive
   yield escape(value);
 }
 
-// Tagged template: returns a streaming HTML fragment
 export function html(
   strings: TemplateStringsArray,
   ...values: HTMLValue[]
@@ -120,22 +97,18 @@ export function html(
     const escape = defaultEscape;
 
     for (let i = 0; i < strings.length; i++) {
-      // Static bit
       yield strings[i];
 
       if (i >= values.length) continue;
 
-      // Dynamic bit
       const value = values[i];
       yield* flattenValue(value, escape);
     }
   })();
 }
 
-// Escape hatch (like unsafeHTML)
 export const unsafeHTML = (htmlString: string): RawHTML => raw(htmlString);
 
-// Convert HTML fragment into a ReadableStream<Uint8Array>
 export function htmlToStream(
   fragment: HTML,
   encoder: TextEncoder = new TextEncoder(),
@@ -164,7 +137,6 @@ export function htmlToStream(
   });
 }
 
-// Streaming HTML Response
 export class HTMLResponse extends Response {
   constructor(body: HTML | string, init?: ResponseInit) {
     const headers = new Headers(init?.headers || undefined);
@@ -179,15 +151,6 @@ export class HTMLResponse extends Response {
       super(stream as any, { ...init, headers });
     }
   }
-}
-
-// Optional helper for tests / emails
-export async function renderToString(fragment: HTML): Promise<string> {
-  let out = "";
-  for await (const chunk of fragment) {
-    out += chunk;
-  }
-  return out;
 }
 
 export const home = (content: any, pageNumber: number) => html`
@@ -415,7 +378,6 @@ export const app = new Elysia()
     set.status = 500;
     return "Internal Server Error";
   })
-  // Redirects
   .get("/", () => {
     return new Response(null, {
       status: 301,
@@ -440,7 +402,6 @@ export const app = new Elysia()
       },
     });
   })
-  // Icon
   .get("/icon.svg", () => {
     return new Response(contents, {
       status: 200,
@@ -449,33 +410,18 @@ export const app = new Elysia()
       },
     });
   })
-  // Top stories
   .get("/top/:pageNumber", async ({ params, set }) => {
     const pageNumber = Number.parseInt(params.pageNumber, 10);
-
-    // Validate page is numeric and within 1–20
     if (!Number.isFinite(pageNumber) || pageNumber < 1 || pageNumber > 20) {
       set.status = 404;
       return "Not Found";
     }
-
     let backendResponse: Response;
     try {
-      backendResponse = await fetch(
-        `https://api.hnpwa.com/v0/news/${pageNumber}.json`,
-      );
+      backendResponse = await fetch(`https://api.hnpwa.com/v0/news/${pageNumber}.json`);
     } catch {
       set.status = 502;
       return "Backend service error";
-    }
-
-    if (backendResponse.status >= 300) {
-      if (backendResponse.status >= 500) {
-        set.status = 502;
-        return "Backend service error";
-      }
-      set.status = 404;
-      return "No such page";
     }
 
     const body = await backendResponse.text();
@@ -485,7 +431,6 @@ export const app = new Elysia()
         set.status = 404;
         return "No such page";
       }
-      // HTMLResponse will set an appropriate text/html content-type
       return new HTMLResponse(home(results, pageNumber));
     } catch {
       set.status = 500;
@@ -494,7 +439,6 @@ export const app = new Elysia()
       )}`;
     }
   })
-  // Item page
   .get("/item/:id", async ({ params, set }) => {
     const id = Number.parseInt(params.id, 10);
     if (!Number.isFinite(id)) {
@@ -504,21 +448,10 @@ export const app = new Elysia()
 
     let backendResponse: Response;
     try {
-      backendResponse = await fetch(
-        `https://api.hnpwa.com/v0/item/${id}.json`,
-      );
+      backendResponse = await fetch(`https://api.hnpwa.com/v0/item/${id}.json`);
     } catch {
       set.status = 502;
       return "Backend service error";
-    }
-
-    if (backendResponse.status >= 300) {
-      if (backendResponse.status >= 500) {
-        set.status = 502;
-        return "Backend service error";
-      }
-      set.status = 404;
-      return "No such page";
     }
 
     const body = await backendResponse.text();
@@ -535,10 +468,6 @@ export const app = new Elysia()
         body,
       )}`;
     }
-  })
-  // Intentional error route
-  .get("/error", () => {
-    throw new Error("uh oh");
   });
 
 export default (request: Request) => app.handle(request);
