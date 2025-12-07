@@ -216,7 +216,7 @@ export const app = new Elysia()
       set.headers["content-type"] = "text/html";
       return new Response(home(results, pageNumber), {
         headers: {
-          "content-type": "text/html"
+          "content-type": "text/html; charset=utf-8",
         }
       });
     } catch {
@@ -260,8 +260,11 @@ export const app = new Elysia()
         set.status = 404;
         return "No such page";
       }
-      set.headers["content-type"] = "text/html; charset=utf-8";
-      return article(result);
+      return new Response(article(result), {
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+        },
+      });
     } catch {
       set.status = 500;
       return `Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(
