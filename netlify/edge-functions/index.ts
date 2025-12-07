@@ -1,8 +1,6 @@
 import type { Config } from "@netlify/edge-functions"
 import { Elysia } from 'elysia'
 import { contents } from './handlers/icon.ts'
-import { top } from './handlers/top.ts'
-//import { user } from './handlers/user.ts'
 import { article } from "./layouts/article.ts";
 
 import { home } from "./layouts/hn.ts";
