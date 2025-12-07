@@ -5,7 +5,7 @@ import { item } from './handlers/item.ts'
 import { top } from './handlers/top.ts'
 import { user } from './handlers/user.ts'
 
-const app = new Elysia()
+export const app = new Elysia()
   .onError(({ code, error, set }) => {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('Error:', code, errorMessage);
