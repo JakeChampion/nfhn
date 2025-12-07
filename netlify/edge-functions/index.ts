@@ -1,7 +1,6 @@
 import type { Config } from "@netlify/edge-functions"
 import { Elysia } from 'elysia'
 import { contents } from './handlers/icon.ts'
-import { item } from './handlers/item.ts'
 import { top } from './handlers/top.ts'
 import { user } from './handlers/user.ts'
 
@@ -45,7 +44,25 @@ export const app = new Elysia()
       set.status = 404;
       return 'Not Found';
     }
-    return item(id, set)
+  const backendResponse = await fetch(
+    `https://api.hnpwa.com/v0/item/${id}.json`
+  );
+  if (backendResponse.status >= 500) {
+    set.status = 502;
+    return 'Backend service error';
+  }
+  let body = await backendResponse.text()
+  try {
+    let results = JSON.parse(body);
+    if (!results) {
+      set.status = 404;
+      return 'No such page';
+    }
+    set.headers['content-type'] = 'text/html; charset=utf-8';
+    return article(results);
+  } catch (error) {
+    set.status = 500;
+    return `Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(body)}`;
   })
   .get('/user/:name', ({ params, set }) => {
     return user(params.name, set)
