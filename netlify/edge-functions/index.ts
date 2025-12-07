@@ -2,7 +2,7 @@ import type { Config } from "@netlify/edge-functions";
 import { Elysia } from "elysia";
 import { contents } from "./handlers/icon.ts";
 import { home } from "./layouts/hn.ts";
-import { html, unsafeHTML } from "https://ghuc.cc/worker-tools/html";
+import { html, unsafeHTML,type HTML } from "https://ghuc.cc/worker-tools/html";
 
 export interface Item {
   id: number;
@@ -22,7 +22,7 @@ export interface Item {
   comments_count: number;
 }
 
-const comment = (item: Item) => html`
+const comment = (item: Item): HTML => html`
   <details open id=${item.id}>
     <summary>
       <span>
@@ -37,7 +37,7 @@ const comment = (item: Item) => html`
   </details>
 `;
 
-export const article = (item: Item) => html`
+export const article = (item: Item): HTML => html`
 <!DOCTYPE html>
 <html lang="en">
   <head>
