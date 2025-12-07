@@ -1,6 +1,6 @@
 import type { Config } from "@netlify/edge-functions"
 import { Elysia } from 'elysia'
-import { icon } from './handlers/icon.ts'
+import { contents } from './handlers/icon.ts'
 import { item } from './handlers/item.ts'
 import { top } from './handlers/top.ts'
 import { user } from './handlers/user.ts'
@@ -25,7 +25,10 @@ export const app = new Elysia()
   .get('/top/', ({ redirect }) => {
     redirect('/top/1')
   })
-  .get('/icon.svg', ({ set }) => icon(set))
+  .get('/icon.svg', ({ set }) => {
+    set.headers['content-type'] = 'image/svg+xml; charset=utf-8';
+    return contents;
+  })
   .get('/top/:pageNumber', ({ params, set }) => {
     const pageNumber = Number.parseInt(params.pageNumber, 10)
     // Validate pageNumber is a valid number and between 1-20
