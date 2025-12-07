@@ -2,7 +2,7 @@ import type { Config } from "@netlify/edge-functions";
 import { Elysia } from "elysia";
 import { contents } from "./handlers/icon.ts";
 import { home } from "./layouts/hn.ts";
-import { html, unsafeHTML,type HTML } from "https://ghuc.cc/worker-tools/html";
+import { html, unsafeHTML, type HTML } from "https://ghuc.cc/worker-tools/html";
 
 export interface Item {
   id: number;
@@ -32,7 +32,7 @@ const comment = (item: Item): HTML => html`
     </summary>
     <div>${unsafeHTML(item.content)}</div>
     <ul>
-      ${item.comments.map(child => html`<li>${comment(child)}</li>`)}
+      ${item.comments.map((child) => html`<li>${comment(child)}</li>`)}
     </ul>
   </details>
 `;
@@ -45,7 +45,67 @@ export const article = (item: Item): HTML => html`
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <style type="text/css">
-      /* your existing CSS unchanged */
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+          "Segoe UI Symbol";
+        background-color: whitesmoke;
+        margin: 40px auto;
+        max-width: 80ch;
+        line-height: 1.6;
+        font-size: 18px;
+        color: #444;
+        padding: 0 10px;
+      }
+      details {
+        background-color: whitesmoke;
+        margin: 40px auto;
+        max-width: 650px;
+        line-height: 1.6;
+        font-size: 18px;
+        color: #444;
+      }
+      summary {
+        font-weight: bold;
+        margin: -.5em -.5em 0;
+        padding: .5em;
+      }
+      details[open] summary {
+        border-bottom: 1px solid #aaa;
+      }
+      pre {
+        white-space: pre-wrap;
+      }
+      ul {
+        padding-left: 1em;
+        list-style: none;
+      }
+      h1,
+      h2,
+      h3 {
+        line-height: 1.2;
+        font-size: x-large;
+        margin: 0;
+      }
+      hr {
+        border: 0.5em solid rgba(0, 0, 0, 0.1);
+        margin: 2em 0;
+      }
+      article {
+        padding-left: 1em;
+      }
+
+      small {
+        display: block;
+        padding-top: 0.5em;
+      }
+      p {
+        padding-block: 0.5em;
+        margin: 0;
+      }
     </style>
     <title>NFHN: ${item.title}</title>
   </head>
@@ -82,19 +142,41 @@ export const app = new Elysia()
     set.status = 500;
     return "Internal Server Error";
   })
-  .get("/", ({ redirect }) => {
-    redirect("/top/1");
+  // Redirects
+  .get("/", () => {
+    return new Response(null, {
+      status: 301,
+      headers: {
+        Location: "/top/1",
+      },
+    });
   })
-  .get("/top", ({ redirect }) => {
-    redirect("/top/1");
+  .get("/top", () => {
+    return new Response(null, {
+      status: 301,
+      headers: {
+        Location: "/top/1",
+      },
+    });
   })
-  .get("/top/", ({ redirect }) => {
-    redirect("/top/1");
+  .get("/top/", () => {
+    return new Response(null, {
+      status: 301,
+      headers: {
+        Location: "/top/1",
+      },
+    });
   })
-  .get("/icon.svg", ({ set }) => {
-    set.headers["content-type"] = "image/svg+xml";
-    return contents;
+  // Icon
+  .get("/icon.svg", () => {
+    return new Response(contents, {
+      status: 200,
+      headers: {
+        "content-type": "image/svg+xml; charset=utf-8",
+      },
+    });
   })
+  // Top stories
   .get("/top/:pageNumber", async ({ params, set }) => {
     const pageNumber = Number.parseInt(params.pageNumber, 10);
 
@@ -106,7 +188,7 @@ export const app = new Elysia()
     let backendResponse: Response;
     try {
       backendResponse = await fetch(
-        `https://api.hnpwa.com/v0/news/${pageNumber}.json`
+        `https://api.hnpwa.com/v0/news/${pageNumber}.json`,
       );
     } catch {
       set.status = 502;
@@ -134,10 +216,11 @@ export const app = new Elysia()
     } catch {
       set.status = 500;
       return `Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(
-        body
+        body,
       )}`;
     }
   })
+  // Item page
   .get("/item/:id", async ({ params, set }) => {
     const id = Number.parseInt(params.id, 10);
     if (!Number.isFinite(id)) {
@@ -148,7 +231,7 @@ export const app = new Elysia()
     let backendResponse: Response;
     try {
       backendResponse = await fetch(
-        `https://api.hnpwa.com/v0/item/${id}.json`
+        `https://api.hnpwa.com/v0/item/${id}.json`,
       );
     } catch {
       set.status = 502;
@@ -176,10 +259,11 @@ export const app = new Elysia()
     } catch {
       set.status = 500;
       return `Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(
-        body
+        body,
       )}`;
     }
   })
+  // Intentional error route
   .get("/error", () => {
     throw new Error("uh oh");
   });
