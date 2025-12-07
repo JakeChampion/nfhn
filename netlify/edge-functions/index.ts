@@ -177,13 +177,15 @@ export const app = new Elysia()
     });
   })
   // Top stories
-  .get("/top/:pageNumber", async ({ params, set }) => {
+  .get("/top/:pageNumber", async ({ params, set, setHeaders }) => {
     const pageNumber = Number.parseInt(params.pageNumber, 10);
 
     //if (!Number.isFinite(pageNumber) || pageNumber < 1 || pageNumber > 20) {
       //set.status = 404;
       //return "Not Found";
     //}
+
+    console.log({pageNumber})
 
     let backendResponse: Response;
     try {
@@ -211,8 +213,12 @@ export const app = new Elysia()
         set.status = 404;
         return "No such page";
       }
-      set.headers["content-type"] = "text/html; charset=utf-8";
-      return home(results, pageNumber);
+      set.headers["content-type"] = "text/html";
+      return new Response(home(results, pageNumber), {
+        headers: {
+          "content-type": "text/html"
+        }
+      });
     } catch {
       set.status = 500;
       return `Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(

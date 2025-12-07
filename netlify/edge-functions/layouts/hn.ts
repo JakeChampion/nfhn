@@ -1,6 +1,4 @@
-import { html } from "https://ghuc.cc/worker-tools/html";
-
-export const home = (content: any, pageNumber: number) => html`
+export const home = (content: any, pageNumber: number) => `
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -76,12 +74,12 @@ export const home = (content: any, pageNumber: number) => html`
   <body>
     <ol>
         ${content.map((data: any) => {
-            return html`
+            return `
             <li>
               <a class="title" href="${data.url}">${data.title}</a>
               <a class="comments" href="/item/${data.id}">view ${data.comments_count > 0 ? data.comments_count +' comments' : 'discussion'}</a>
             </li>`
-        })}
+        }).join('')}
     </ol>
     <a href="/top/${pageNumber+1}" style="text-align: center;">More</a>
   </body>
