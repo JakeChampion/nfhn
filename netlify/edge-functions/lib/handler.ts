@@ -1,5 +1,5 @@
 // handler.ts
-import { contents } from "./handlers/icon.ts";
+import { contents } from "../handlers/icon.ts";
 import { HTMLResponse } from "./html.ts";
 import { home, article } from "./render.ts";
 import {
