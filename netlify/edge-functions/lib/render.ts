@@ -6,9 +6,17 @@ import {
   raw,
   unsafeHTML,
   escape,
-  flattenValue,
 } from "./html.ts";
-import type { Item } from "./hn.ts";
+import {
+  type Item,
+  type HNAPIItem,
+  fetchItem,
+  formatTimeAgo,
+} from "./hn.ts";
+
+// Limits to keep edge execution bounded
+const MAX_COMMENT_DEPTH = 10;
+const MAX_COMMENTS_TOTAL = 300;
 
 export const home = (content: Item[], pageNumber: number): HTML => html`
 <!DOCTYPE html>
@@ -108,91 +116,7 @@ export const home = (content: Item[], pageNumber: number): HTML => html`
 </html>
 `;
 
-const commentsList = (comments: Item[], level: number): HTML =>
-  (async function* (): AsyncGenerator<string> {
-    const isNested = level >= 1;
-
-    if (isNested) yield "<ul>";
-
-    for (const child of comments) {
-      if (isNested) yield "<li>";
-      yield* comment(child, level);
-      if (isNested) yield "</li>";
-    }
-
-    if (isNested) yield "</ul>";
-  })();
-
-const comment = (item: Item, level = 0): HTML => html`
-  <details ${level === 0 ? "open" : ""} id="${item.id}">
-    <summary>
-      <span>
-        ${item.user ?? "[deleted]"} -
-        <a href="#${item.id}">${item.time_ago}</a>
-      </span>
-    </summary>
-    <div>${unsafeHTML(item.content || "")}</div>
-    ${item.comments.length
-      ? commentsList(item.comments, level + 1)
-      : ""}
-  </details>
-`;
-
-const suspenseClientScript = raw(`
-<script>
-  (function () {
-    function applyTemplate(tpl) {
-      var targetId = tpl.getAttribute("data-suspense-replace");
-      if (!targetId) return;
-      var target = document.getElementById(targetId);
-      if (!target) return;
-      var clone = tpl.content ? tpl.content.cloneNode(true) : null;
-      if (!clone) return;
-      target.replaceWith(clone);
-      tpl.remove();
-    }
-
-    function scan(root) {
-      var tpls = root.querySelectorAll("template[data-suspense-replace]");
-      for (var i = 0; i < tpls.length; i++) {
-        applyTemplate(tpls[i]);
-      }
-    }
-
-    function setupObserver() {
-      var observer = new MutationObserver(function (mutations) {
-        for (var i = 0; i < mutations.length; i++) {
-          var m = mutations[i];
-          for (var j = 0; j < m.addedNodes.length; j++) {
-            var node = m.addedNodes[j];
-            if (node.nodeType !== 1) continue;
-            if (node.matches && node.matches("template[data-suspense-replace]")) {
-              applyTemplate(node);
-            } else if (node.querySelectorAll) {
-              scan(node);
-            }
-          }
-        }
-      });
-      observer.observe(document.documentElement, {
-        childList: true,
-        subtree: true
-      });
-    }
-
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", function () {
-        scan(document);
-        setupObserver();
-      });
-    } else {
-      scan(document);
-      setupObserver();
-    }
-  })();
-</script>
-`);
-
+// Shell page for article
 const shellPage = (title: string, body: HTML): HTML =>
   (async function* (): AsyncGenerator<string> {
     yield* html`
@@ -268,7 +192,6 @@ const shellPage = (title: string, body: HTML): HTML =>
       }
     </style>
     <title>${title}</title>
-    ${suspenseClientScript}
   </head>
   <body>
     `;
@@ -281,30 +204,86 @@ const shellPage = (title: string, body: HTML): HTML =>
     `;
   })();
 
-const suspense = (
-  id: string,
-  placeholder: HTML,
-  loader: () => HTMLValue | Promise<HTMLValue>,
-): HTML =>
+// Streaming comments section
+const commentsSection = (rootIds: number[] | undefined): HTML =>
   (async function* (): AsyncGenerator<string> {
-    const escapedId = escape(id);
+    if (!rootIds || rootIds.length === 0) {
+      yield "<p>No comments yet.</p>";
+      return;
+    }
 
-    yield `<div id="${escapedId}" data-suspense-placeholder="true">`;
-    for await (const chunk of placeholder) {
+    yield '<section aria-label="Comments">';
+
+    const state = { remaining: MAX_COMMENTS_TOTAL };
+    for await (const chunk of streamComments(rootIds, 0, state)) {
       yield chunk;
     }
-    yield `</div>`;
 
-    const resolved = await loader();
-
-    yield `<template data-suspense-replace="${escapedId}">`;
-    for await (const chunk of flattenValue(resolved as HTMLValue)) {
-      yield chunk;
-    }
-    yield `</template>`;
+    yield "</section>";
   })();
 
-export const article = (item: Item): HTML =>
+// Core streaming comment renderer: fetch & render on the fly
+async function* streamComments(
+  ids: number[],
+  level: number,
+  state: { remaining: number },
+): AsyncGenerator<string> {
+  if (!ids.length || state.remaining <= 0 || level >= MAX_COMMENT_DEPTH) {
+    return;
+  }
+
+  const isNested = level >= 1;
+  if (isNested) yield "<ul>";
+
+  for (const id of ids) {
+    if (state.remaining <= 0) break;
+
+    const rawComment = await fetchItem(id);
+    if (!rawComment) continue;
+    if (rawComment.deleted || rawComment.dead) continue;
+    if (rawComment.type !== "comment") continue;
+
+    state.remaining -= 1;
+
+    const time_ago = formatTimeAgo(rawComment.time ?? 0);
+    const user = rawComment.by ?? "[deleted]";
+    const content = rawComment.text ?? "";
+
+    if (isNested) yield "<li>";
+
+    // Render a single comment block
+    yield `<details ${level === 0 ? "open" : ""} id="${rawComment.id}">`;
+    yield `<summary><span>${escape(user)} - <a href="#${
+      rawComment.id
+    }">${escape(time_ago)}</a></span></summary>`;
+    // HN comment text is already HTML (e.g. <p>...</p>), so don't escape
+    yield `<div>${content}</div>`;
+
+    // Children streamed recursively
+    if (
+      rawComment.kids &&
+      rawComment.kids.length &&
+      state.remaining > 0 &&
+      level + 1 < MAX_COMMENT_DEPTH
+    ) {
+      for await (const chunk of streamComments(
+        rawComment.kids,
+        level + 1,
+        state,
+      )) {
+        yield chunk;
+      }
+    }
+
+    yield "</details>";
+
+    if (isNested) yield "</li>";
+  }
+
+  if (isNested) yield "</ul>";
+}
+
+export const article = (item: Item, rootCommentIds: number[]): HTML =>
   shellPage(`NFHN: ${item.title}`, html`
     <nav>
       <a href="/">Home</a>
@@ -322,11 +301,7 @@ export const article = (item: Item): HTML =>
         </p>
         <hr />
         ${unsafeHTML(item.content || "")}
-        ${suspense(
-          `comments-root-${item.id}`,
-          html`<p>Loading comments…</p>`,
-          () => commentsList(item.comments, 0),
-        )}
+        ${commentsSection(rootCommentIds)}
       </article>
     </main>
   `);
