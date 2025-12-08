@@ -53,6 +53,42 @@ async function handleItem(id: number): Promise<Response> {
   }
 }
 
+const ASSET_CACHE_NAME = "nfhn-assets";
+
+async function handleIcon(request: Request): Promise<Response> {
+  const cache = await caches.open(ASSET_CACHE_NAME);
+
+  const cached = await cache.match(request);
+  if (cached) {
+    return cached;
+  }
+
+  // Build the response once
+  const baseHeaders = {
+    "content-type": "image/svg+xml; charset=utf-8",
+    // long-ish TTL, tweak as you like
+    "Cache-Control": "public, max-age=86400, immutable",
+  };
+
+  const response = new Response(contents, {
+    status: 200,
+    headers: baseHeaders,
+  });
+
+  // Put a clone into the programmable cache
+  const cacheable = new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: new Headers(baseHeaders),
+  });
+
+  cache.put(request, cacheable).catch((err) => {
+    console.error("Failed to cache icon.svg:", err);
+  });
+
+  return response;
+}
+
 export default async function handler(
   request: Request,
 ): Promise<Response> {
@@ -65,12 +101,7 @@ export default async function handler(
     }
 
     if (path === "/icon.svg") {
-      return new Response(contents, {
-        status: 200,
-        headers: {
-          "content-type": "image/svg+xml; charset=utf-8",
-        },
-      });
+      return handleIcon(request);
     }
 
     const topMatch = path.match(/^\/top\/(\d+)$/);
