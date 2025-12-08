@@ -10,8 +10,6 @@ import {
 } from "./html.ts";
 import type { Item } from "./hn.ts";
 
-export { HTML }; // re-export type if you need it elsewhere
-
 export const home = (content: Item[], pageNumber: number): HTML => html`
 <!DOCTYPE html>
 <html lang="en">
