@@ -1,5 +1,4 @@
 import type { Config } from "@netlify/edge-functions";
-import { Elysia } from "elysia";
 import { contents } from "./handlers/icon.ts";
 
 type Primitive = string | number | boolean | null | undefined;
@@ -171,7 +170,6 @@ export class HTMLResponse extends Response {
 
 const HN_API_BASE = "https://hacker-news.firebaseio.com/v0";
 
-// Shape of raw items from the official HN API
 interface HNAPIItem {
   id: number;
   by?: string;
@@ -185,10 +183,9 @@ interface HNAPIItem {
   kids?: number[];
   deleted?: boolean;
   dead?: boolean;
-  domain?: string; // not actually present, but we keep for compatibility
+  domain?: string;
 }
 
-// Internal shape used throughout the app (kept from original code)
 export interface Item {
   id: number;
   title: string;
@@ -207,7 +204,6 @@ export interface Item {
   comments_count: number;
 }
 
-// Generic helper to fetch JSON from HN Firebase API
 async function fetchHNJSON<T>(path: string): Promise<T | null> {
   const url = `${HN_API_BASE}${path}`;
   const res = await fetch(url);
@@ -224,7 +220,6 @@ async function fetchHNJSON<T>(path: string): Promise<T | null> {
   }
 }
 
-// Extract domain from a URL
 function extractDomain(url?: string): string | undefined {
   if (!url) return undefined;
   try {
@@ -235,7 +230,6 @@ function extractDomain(url?: string): string | undefined {
   }
 }
 
-// Format "time_ago" similar-ish to HNPWA
 function formatTimeAgo(unixSeconds: number | undefined): string {
   if (!unixSeconds) return "";
   const then = unixSeconds * 1000;
@@ -259,7 +253,6 @@ function formatTimeAgo(unixSeconds: number | undefined): string {
   return `${years} year${years === 1 ? "" : "s"} ago`;
 }
 
-// Transform a story item into our internal Item type (for list page)
 function mapStoryToItem(raw: HNAPIItem, level = 0, comments: Item[] = []): Item {
   const time = raw.time ?? 0;
   return {
@@ -277,15 +270,14 @@ function mapStoryToItem(raw: HNAPIItem, level = 0, comments: Item[] = []): Item 
     domain: extractDomain(raw.url),
     comments,
     level,
-    comments_count: typeof raw.descendants === "number" ? raw.descendants : comments.length,
+    comments_count:
+      typeof raw.descendants === "number" ? raw.descendants : comments.length,
   };
 }
 
-// Limits for comments so edge functions stay sane
 const MAX_COMMENT_DEPTH = 10;
 const MAX_COMMENTS_TOTAL = 300;
 
-// Fetch a comment tree given child IDs
 async function fetchCommentsTree(
   ids: number[] | undefined,
   level: number,
@@ -339,15 +331,10 @@ async function fetchCommentsTree(
   return items;
 }
 
-// Fetch a story with its (bounded) comment tree
 async function fetchStoryWithComments(id: number): Promise<Item | null> {
   const raw = await fetchHNJSON<HNAPIItem>(`/item/${id}.json`);
   if (!raw) return null;
   if (raw.deleted || raw.dead) return null;
-  if (raw.type !== "story" && raw.type !== "ask" && raw.type !== "job") {
-    // still allow, but we treat non-story as unsupported
-    // could be "poll" etc.; you can relax this if you like
-  }
 
   const state = { remaining: MAX_COMMENTS_TOTAL };
   const comments = await fetchCommentsTree(raw.kids, 0, state);
@@ -355,7 +342,6 @@ async function fetchStoryWithComments(id: number): Promise<Item | null> {
   return mapStoryToItem(raw, 0, comments);
 }
 
-// Fetch a page of top stories
 async function fetchTopStoriesPage(
   pageNumber: number,
   pageSize = 30,
@@ -483,16 +469,13 @@ export const home = (content: Item[], pageNumber: number): HTML => html`
 </html>
 `;
 
-// Streaming-friendly comments with no root <ul> and no user links
 const commentsList = (comments: Item[], level: number): HTML =>
   (async function* (): AsyncGenerator<string> {
     const isNested = level >= 1;
 
-    // Only nested comments get a <ul>
     if (isNested) yield "<ul>";
 
     for (const child of comments) {
-      // Only nested comments get <li>
       if (isNested) yield "<li>";
       yield* comment(child, level);
       if (isNested) yield "</li>";
@@ -516,7 +499,6 @@ const comment = (item: Item, level = 0): HTML => html`
   </details>
 `;
 
-// Tiny client-side helper to swap suspense placeholders with templates
 const suspenseClientScript = raw(`
 <script>
   (function () {
@@ -572,10 +554,8 @@ const suspenseClientScript = raw(`
 </script>
 `);
 
-// Shell-first streaming page wrapper for article
 const shellPage = (title: string, body: HTML): HTML =>
   (async function* (): AsyncGenerator<string> {
-    // Head + layout flush early
     yield* html`
 <!DOCTYPE html>
 <html lang="en">
@@ -654,17 +634,14 @@ const shellPage = (title: string, body: HTML): HTML =>
   <body>
     `;
 
-    // Body streams independently (including comments)
     yield* body;
 
-    // Tail
     yield* html`
   </body>
 </html>
     `;
   })();
 
-// Suspense-style helper for comments slot
 const suspense = (
   id: string,
   placeholder: HTML,
@@ -673,17 +650,14 @@ const suspense = (
   (async function* (): AsyncGenerator<string> {
     const escapedId = escape(id);
 
-    // 1. Placeholder container (renders immediately)
     yield `<div id="${escapedId}" data-suspense-placeholder="true">`;
     for await (const chunk of placeholder) {
       yield chunk;
     }
     yield `</div>`;
 
-    // 2. Resolve real content
     const resolved = await loader();
 
-    // 3. Send a template that will replace the placeholder on the client
     yield `<template data-suspense-replace="${escapedId}">`;
     for await (const chunk of flattenValue(resolved as HTMLValue)) {
       yield chunk;
@@ -719,81 +693,86 @@ export const article = (item: Item): HTML =>
   `);
 
 // ---------------------------------------------------------------------------
-// Routing
+// Routing (no Elysia)
 // ---------------------------------------------------------------------------
 
-const redirectToTop1 = () =>
+const redirectToTop1 = (): Response =>
   new Response(null, {
     status: 301,
-    headers: {
-      Location: "/top/1",
-    },
+    headers: { Location: "/top/1" },
   });
 
-export const app = new Elysia()
-  .onError(({ code, error, set }) => {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("Error:", code, errorMessage);
-    if (code === "NOT_FOUND") {
-      set.status = 404;
-      return "Not Found";
+async function handleTop(pageNumber: number): Promise<Response> {
+  if (!Number.isFinite(pageNumber) || pageNumber < 1) {
+    return new Response("Not Found", { status: 404 });
+  }
+
+  try {
+    const results = await fetchTopStoriesPage(pageNumber);
+    if (!results.length) {
+      return new Response("No such page", { status: 404 });
     }
-    set.status = 500;
-    return "Internal Server Error";
-  })
-  .get("/", redirectToTop1)
-  .get("/top", redirectToTop1)
-  .get("/top/", redirectToTop1)
-  .get("/icon.svg", () => {
-    return new Response(contents, {
-      status: 200,
-      headers: {
-        "content-type": "image/svg+xml; charset=utf-8",
-      },
-    });
-  })
-  .get("/top/:pageNumber", async ({ params, set }) => {
-    const pageNumber = Number.parseInt(params.pageNumber, 10);
-    if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-      set.status = 404;
-      return "Not Found";
+    return new HTMLResponse(home(results, pageNumber));
+  } catch (e) {
+    console.error("Top stories fetch error:", e);
+    return new Response("Hacker News API error", { status: 502 });
+  }
+}
+
+async function handleItem(id: number): Promise<Response> {
+  if (!Number.isFinite(id)) {
+    return new Response("Not Found", { status: 404 });
+  }
+
+  try {
+    const item = await fetchStoryWithComments(id);
+    if (!item) {
+      return new Response("No such page", { status: 404 });
+    }
+    return new HTMLResponse(article(item));
+  } catch (e) {
+    console.error("Item fetch error:", e);
+    return new Response("Hacker News API error", { status: 502 });
+  }
+}
+
+export default async (request: Request): Promise<Response> => {
+  const url = new URL(request.url);
+  const path = url.pathname;
+
+  try {
+    if (path === "/" || path === "/top" || path === "/top/") {
+      return redirectToTop1();
     }
 
-    try {
-      const results = await fetchTopStoriesPage(pageNumber);
-      if (!results.length) {
-        set.status = 404;
-        return "No such page";
-      }
-      return new HTMLResponse(home(results, pageNumber));
-    } catch (e) {
-      console.error("Top stories fetch error:", e);
-      set.status = 502;
-      return "Hacker News API error";
-    }
-  })
-  .get("/item/:id", async ({ params, set }) => {
-    const id = Number.parseInt(params.id, 10);
-    if (!Number.isFinite(id)) {
-      set.status = 404;
-      return "Not Found";
+    if (path === "/icon.svg") {
+      return new Response(contents, {
+        status: 200,
+        headers: {
+          "content-type": "image/svg+xml; charset=utf-8",
+        },
+      });
     }
 
-    try {
-      const item = await fetchStoryWithComments(id);
-      if (!item) {
-        set.status = 404;
-        return "No such page";
-      }
-      return new HTMLResponse(article(item));
-    } catch (e) {
-      console.error("Item fetch error:", e);
-      set.status = 502;
-      return "Hacker News API error";
+    const topMatch = path.match(/^\/top\/(\d+)$/);
+    if (topMatch) {
+      const pageNumber = Number.parseInt(topMatch[1], 10);
+      return await handleTop(pageNumber);
     }
-  });
 
-export default (request: Request) => app.handle(request);
+    const itemMatch = path.match(/^\/item\/(\d+)$/);
+    if (itemMatch) {
+      const id = Number.parseInt(itemMatch[1], 10);
+      return await handleItem(id);
+    }
+
+    return new Response("Not Found", { status: 404 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Unhandled error in edge function:", message);
+    return new Response("Internal Server Error", { status: 500 });
+  }
+};
 
 export const config: Config = {
   method: ["GET"],
