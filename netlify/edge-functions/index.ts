@@ -570,13 +570,13 @@ export const app = new Elysia()
     }
 
     const body = await backendResponse.text();
+    let results;
     try {
-      const results: Item[] = JSON.parse(body);
+      results: Item[] = JSON.parse(body);
       if (!results) {
         set.status = 404;
         return "No such page";
       }
-      return new HTMLResponse(home(results, pageNumber));
     } catch (e) {
       console.error("JSON parse error (news):", e);
       set.status = 500;
@@ -584,6 +584,7 @@ export const app = new Elysia()
         body,
       )}`;
     }
+    return new HTMLResponse(home(results, pageNumber));
   })
   .get("/item/:id", async ({ params, set }) => {
     const id = Number.parseInt(params.id, 10);
