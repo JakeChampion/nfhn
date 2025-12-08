@@ -101,7 +101,7 @@ export default async function handler(
     }
 
     if (path === "/icon.svg") {
-      return handleIcon(request);
+      return await handleIcon(request);
     }
 
     const topMatch = path.match(/^\/top\/(\d+)$/);
