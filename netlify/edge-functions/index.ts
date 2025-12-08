@@ -570,9 +570,9 @@ export const app = new Elysia()
     }
 
     const body = await backendResponse.text();
-    let results;
+    let results: Item[];
     try {
-      results: Item[] = JSON.parse(body);
+      results = JSON.parse(body);
       if (!results) {
         set.status = 404;
         return "No such page";
