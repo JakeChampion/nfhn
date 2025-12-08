@@ -212,8 +212,6 @@ const commentsSection = (rootIds: number[] | undefined): HTML =>
       return;
     }
 
-    // Quick placeholder, then we start streaming comments
-    yield "<p>Loading comments…</p>";
     yield '<section aria-label="Comments">';
 
     const state = { remaining: MAX_COMMENTS_TOTAL };
