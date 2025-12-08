@@ -1,6 +1,6 @@
 // render.ts
 import {
-  HTML,
+  type HTML,
   HTMLValue,
   html,
   raw,
