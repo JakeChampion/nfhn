@@ -580,7 +580,7 @@ export const app = new Elysia()
     } catch (e) {
       console.error("JSON parse error (news):", e);
       set.status = 500;
-      return `Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(
+      return `Hacker News API did not return valid JSON.\n\nStatus: ${backendResponse.status}\n\nResponse Body: ${JSON.stringify(
         body,
       )}`;
     }
