@@ -8,8 +8,8 @@ import {
   escape,
 } from "./html.ts";
 import {
-  Item,
-  HNAPIItem,
+  type Item,
+  type HNAPIItem,
   fetchItem,
   formatTimeAgo,
 } from "./hn.ts";
