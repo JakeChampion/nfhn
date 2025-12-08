@@ -53,9 +53,7 @@ const isIterable = (v: unknown): v is Iterable<unknown> =>
 const isHTML = (v: unknown): v is HTML =>
   isAsyncIterable(v) && !isRawHTML(v);
 
-async function* flattenValue(
-  value: HTMLValue,
-): AsyncIterable<string> {
+async function* flattenValue(value: HTMLValue): AsyncIterable<string> {
   if (value == null || value === false) return;
 
   if (typeof value === "function") {
@@ -101,7 +99,7 @@ async function* flattenValue(
 
 export function html(
   strings: TemplateStringsArray,
-  ...values: HTMLValue[]
+  ...values: HTMLValue[],
 ): HTML {
   return (async function* (): AsyncGenerator<string> {
     for (let i = 0; i < strings.length; i++) {
@@ -167,6 +165,30 @@ export class HTMLResponse extends Response {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Hacker News Firebase API integration
+// ---------------------------------------------------------------------------
+
+const HN_API_BASE = "https://hacker-news.firebaseio.com/v0";
+
+// Shape of raw items from the official HN API
+interface HNAPIItem {
+  id: number;
+  by?: string;
+  time?: number;
+  type: string;
+  title?: string;
+  url?: string;
+  text?: string;
+  score?: number;
+  descendants?: number;
+  kids?: number[];
+  deleted?: boolean;
+  dead?: boolean;
+  domain?: string; // not actually present, but we keep for compatibility
+}
+
+// Internal shape used throughout the app (kept from original code)
 export interface Item {
   id: number;
   title: string;
@@ -184,6 +206,184 @@ export interface Item {
   level: number;
   comments_count: number;
 }
+
+// Generic helper to fetch JSON from HN Firebase API
+async function fetchHNJSON<T>(path: string): Promise<T | null> {
+  const url = `${HN_API_BASE}${path}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    console.error("HN API error:", res.status, url);
+    return null;
+  }
+  try {
+    const data = (await res.json()) as T;
+    return data;
+  } catch (e) {
+    console.error("HN API JSON parse error:", e);
+    return null;
+  }
+}
+
+// Extract domain from a URL
+function extractDomain(url?: string): string | undefined {
+  if (!url) return undefined;
+  try {
+    const u = new URL(url);
+    return u.hostname.replace(/^www\./, "");
+  } catch {
+    return undefined;
+  }
+}
+
+// Format "time_ago" similar-ish to HNPWA
+function formatTimeAgo(unixSeconds: number | undefined): string {
+  if (!unixSeconds) return "";
+  const then = unixSeconds * 1000;
+  const now = Date.now();
+  const diff = Math.max(0, now - then);
+
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const years = Math.floor(days / 365);
+
+  if (seconds < 60) return "just now";
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
+  if (days < 365) {
+    const months = Math.floor(days / 30);
+    return `${months} month${months === 1 ? "" : "s"} ago`;
+  }
+  return `${years} year${years === 1 ? "" : "s"} ago`;
+}
+
+// Transform a story item into our internal Item type (for list page)
+function mapStoryToItem(raw: HNAPIItem, level = 0, comments: Item[] = []): Item {
+  const time = raw.time ?? 0;
+  return {
+    id: raw.id,
+    title: raw.title ?? "",
+    points: typeof raw.score === "number" ? raw.score : null,
+    user: raw.by ?? null,
+    time,
+    time_ago: formatTimeAgo(time),
+    content: raw.text ?? "",
+    deleted: raw.deleted,
+    dead: raw.dead,
+    type: raw.type,
+    url: raw.url,
+    domain: extractDomain(raw.url),
+    comments,
+    level,
+    comments_count: typeof raw.descendants === "number" ? raw.descendants : comments.length,
+  };
+}
+
+// Limits for comments so edge functions stay sane
+const MAX_COMMENT_DEPTH = 10;
+const MAX_COMMENTS_TOTAL = 300;
+
+// Fetch a comment tree given child IDs
+async function fetchCommentsTree(
+  ids: number[] | undefined,
+  level: number,
+  state: { remaining: number },
+): Promise<Item[]> {
+  if (!ids || !ids.length || state.remaining <= 0 || level >= MAX_COMMENT_DEPTH) {
+    return [];
+  }
+
+  const limitedIds = ids.slice(0, state.remaining);
+  const results = await Promise.all(
+    limitedIds.map((id) => fetchHNJSON<HNAPIItem>(`/item/${id}.json`)),
+  );
+
+  const items: Item[] = [];
+
+  for (const raw of results) {
+    if (!raw) continue;
+    if (raw.deleted || raw.dead) continue;
+    if (raw.type !== "comment") continue;
+
+    if (state.remaining <= 0) break;
+    state.remaining -= 1;
+
+    const children = await fetchCommentsTree(raw.kids, level + 1, state);
+
+    const time = raw.time ?? 0;
+    const item: Item = {
+      id: raw.id,
+      title: "",
+      points: null,
+      user: raw.by ?? null,
+      time,
+      time_ago: formatTimeAgo(time),
+      content: raw.text ?? "",
+      deleted: raw.deleted,
+      dead: raw.dead,
+      type: raw.type,
+      url: undefined,
+      domain: undefined,
+      comments: children,
+      level,
+      comments_count: children.length,
+    };
+
+    items.push(item);
+
+    if (state.remaining <= 0) break;
+  }
+
+  return items;
+}
+
+// Fetch a story with its (bounded) comment tree
+async function fetchStoryWithComments(id: number): Promise<Item | null> {
+  const raw = await fetchHNJSON<HNAPIItem>(`/item/${id}.json`);
+  if (!raw) return null;
+  if (raw.deleted || raw.dead) return null;
+  if (raw.type !== "story" && raw.type !== "ask" && raw.type !== "job") {
+    // still allow, but we treat non-story as unsupported
+    // could be "poll" etc.; you can relax this if you like
+  }
+
+  const state = { remaining: MAX_COMMENTS_TOTAL };
+  const comments = await fetchCommentsTree(raw.kids, 0, state);
+
+  return mapStoryToItem(raw, 0, comments);
+}
+
+// Fetch a page of top stories
+async function fetchTopStoriesPage(
+  pageNumber: number,
+  pageSize = 30,
+): Promise<Item[]> {
+  const ids = await fetchHNJSON<number[]>("/topstories.json");
+  if (!ids || !ids.length) {
+    return [];
+  }
+
+  const start = (pageNumber - 1) * pageSize;
+  const end = start + pageSize;
+  const slice = ids.slice(start, end);
+  if (!slice.length) {
+    return [];
+  }
+
+  const stories = await Promise.all(
+    slice.map((id) => fetchHNJSON<HNAPIItem>(`/item/${id}.json`)),
+  );
+
+  return stories
+    .filter((s): s is HNAPIItem => !!s && !s.deleted && !s.dead && s.type === "story")
+    .map((s) => mapStoryToItem(s, 0, []));
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
 
 export const home = (content: Item[], pageNumber: number): HTML => html`
 <!DOCTYPE html>
@@ -268,7 +468,9 @@ export const home = (content: Item[], pageNumber: number): HTML => html`
       <ol>
         ${content.map((data: Item) => html`
           <li>
-            <a class="title" href="${data.url}">${data.title}</a>
+            <a class="title" href="${data.url ?? `/item/${data.id}`}">
+              ${data.title}
+            </a>
             <a class="comments" href="/item/${data.id}">
               view ${data.comments_count > 0 ? data.comments_count + " comments" : "discussion"}
             </a>
@@ -303,11 +505,11 @@ const comment = (item: Item, level = 0): HTML => html`
   <details ${level === 0 ? "open" : ""} id="${item.id}">
     <summary>
       <span>
-        ${item.user} -
+        ${item.user ?? "[deleted]"} -
         <a href="#${item.id}">${item.time_ago}</a>
       </span>
     </summary>
-    <div>${unsafeHTML(item.content)}</div>
+    <div>${unsafeHTML(item.content || "")}</div>
     ${item.comments.length
       ? commentsList(item.comments, level + 1)
       : ""}
@@ -497,16 +699,16 @@ export const article = (item: Item): HTML =>
     <hr />
     <main>
       <article>
-        <a href="${item.url}">
+        <a href="${item.url ?? "#"}">
           <h1>${item.title}</h1>
-          <small>${item.domain}</small>
+          <small>${item.domain ?? ""}</small>
         </a>
         <p>
-          ${item.points} points by
-          ${item.user} ${item.time_ago}
+          ${item.points ?? 0} points by
+          ${item.user ?? "[deleted]"} ${item.time_ago}
         </p>
         <hr />
-        ${unsafeHTML(item.content)}
+        ${unsafeHTML(item.content || "")}
         ${suspense(
           `comments-root-${item.id}`,
           html`<p>Loading comments…</p>`,
@@ -515,6 +717,10 @@ export const article = (item: Item): HTML =>
       </article>
     </main>
   `);
+
+// ---------------------------------------------------------------------------
+// Routing
+// ---------------------------------------------------------------------------
 
 const redirectToTop1 = () =>
   new Response(null, {
@@ -548,87 +754,15 @@ export const app = new Elysia()
   })
   .get("/top/:pageNumber", async ({ params, set }) => {
     const pageNumber = Number.parseInt(params.pageNumber, 10);
-    if (!Number.isFinite(pageNumber) || pageNumber < 1 || pageNumber > 20) {
+    if (!Number.isFinite(pageNumber) || pageNumber < 1) {
       set.status = 404;
       return "Not Found";
     }
 
-    let backendResponse: Response;
     try {
-      backendResponse = await fetch(
-        `https://api.hnpwa.com/v0/news/${pageNumber}.json`,
-      );
-    } catch (e) {
-      console.error("Upstream fetch error (news):", e);
-      set.status = 502;
-      return "Backend service error";
-    }
-
-    if (!backendResponse.ok) {
-      set.status = backendResponse.status === 404 ? 404 : 502;
-      return `Backend service error (${backendResponse.status})`;
-    }
-
-    const body = await backendResponse.text();
-    let results: Item[];
-    try {
-      results = JSON.parse(body);
-      if (!results) {
+      const results = await fetchTopStoriesPage(pageNumber);
+      if (!results.length) {
         set.status = 404;
         return "No such page";
       }
-    } catch (e) {
-      console.error("JSON parse error (news):", e);
-      set.status = 500;
-      return `Hacker News API did not return valid JSON.\n\nStatus: ${backendResponse.status}\n\nResponse Body: ${JSON.stringify(
-        body,
-      )}`;
-    }
-    return new HTMLResponse(home(results, pageNumber));
-  })
-  .get("/item/:id", async ({ params, set }) => {
-    const id = Number.parseInt(params.id, 10);
-    if (!Number.isFinite(id)) {
-      set.status = 404;
-      return "Not Found";
-    }
-
-    let backendResponse: Response;
-    try {
-      backendResponse = await fetch(
-        `https://api.hnpwa.com/v0/item/${id}.json`,
-      );
-    } catch (e) {
-      console.error("Upstream fetch error (item):", e);
-      set.status = 502;
-      return "Backend service error";
-    }
-
-    if (!backendResponse.ok) {
-      set.status = backendResponse.status === 404 ? 404 : 502;
-      return `Backend service error (${backendResponse.status})`;
-    }
-
-    const body = await backendResponse.text();
-    try {
-      const result: Item = JSON.parse(body);
-      if (!result) {
-        set.status = 404;
-        return "No such page";
-      }
-      return new HTMLResponse(article(result));
-    } catch (e) {
-      console.error("JSON parse error (item):", e);
-      set.status = 500;
-      return `Hacker News API did not return valid JSON.\n\nResponse Body: ${JSON.stringify(
-        body,
-      )}`;
-    }
-  });
-
-export default (request: Request) => app.handle(request);
-
-export const config: Config = {
-  method: ["GET"],
-  path: "/*",
-};
+      return n
