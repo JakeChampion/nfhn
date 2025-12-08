@@ -52,6 +52,9 @@ const isIterable = (v: unknown): v is Iterable<unknown> =>
 const isHTML = (v: unknown): v is HTML =>
   isAsyncIterable(v) && !isRawHTML(v);
 
+// Reuse a single TextEncoder per edge instance
+const sharedEncoder = new TextEncoder();
+
 async function* flattenValue(value: HTMLValue): AsyncIterable<string> {
   if (value == null || value === false) return;
 
@@ -118,7 +121,7 @@ export const htmlToString = async (fragment: HTML): Promise<string> => {
 
 export function htmlToStream(
   fragment: HTML,
-  encoder: TextEncoder = new TextEncoder(),
+  encoder: TextEncoder = sharedEncoder,
 ): ReadableStream<Uint8Array> {
   const iterator = fragment[Symbol.asyncIterator]();
 
@@ -165,10 +168,15 @@ export class HTMLResponse extends Response {
 }
 
 // ---------------------------------------------------------------------------
-// Hacker News Firebase API integration
+// Hacker News Firebase API integration + Netlify Cache API
 // ---------------------------------------------------------------------------
 
 const HN_API_BASE = "https://hacker-news.firebaseio.com/v0";
+
+// Cache name & TTLS for Netlify Cache API
+const HN_CACHE_NAME = "nfhn-hn-api";
+const TOP_IDS_TTL_SECONDS = 30; // 30s
+const ITEM_TTL_SECONDS = 60; // 60s
 
 interface HNAPIItem {
   id: number;
@@ -204,18 +212,70 @@ export interface Item {
   comments_count: number;
 }
 
-async function fetchHNJSON<T>(path: string): Promise<T | null> {
+async function getCache() {
+  // Allowed to open in global scope; operations (match/put) happen during handler execution
+  return caches.open(HN_CACHE_NAME);
+}
+
+/**
+ * Fetch JSON from HN with Netlify programmable Cache API.
+ * - Uses URL as cache key.
+ * - Ensures a valid Cache-Control header so Netlify will store it.
+ * - Returns parsed JSON or null on error.
+ */
+async function fetchJSONWithNetlifyCache<T>(
+  path: string,
+  ttlSeconds: number,
+): Promise<T | null> {
   const url = `${HN_API_BASE}${path}`;
-  const res = await fetch(url);
+  const cache = await getCache();
+  const request = new Request(url);
+
+  // 1. Try the cache
+  const cached = await cache.match(request);
+  if (cached) {
+    try {
+      const text = await cached.text();
+      return JSON.parse(text) as T;
+    } catch (e) {
+      console.error("Cached JSON parse error:", path, e);
+      // Fall through to network
+    }
+  }
+
+  // 2. Network fallback
+  const res = await fetch(request);
   if (!res.ok) {
-    console.error("HN API error:", res.status, url);
+    console.error("HN API error:", res.status, path);
     return null;
   }
+
+  // Read once as text to both parse and cache
+  const bodyText = await res.text();
+
+  // 3. Store in Netlify cache if response is OK
   try {
-    const data = (await res.json()) as T;
-    return data;
+    const headers = new Headers(res.headers);
+    // Ensure a valid public cache directive per Netlify Cache API docs
+    headers.set("Cache-Control", `public, max-age=${ttlSeconds}`);
+    const cacheResponse = new Response(bodyText, {
+      status: res.status,
+      statusText: res.statusText,
+      headers,
+    });
+
+    cache.put(request, cacheResponse).catch((error) => {
+      console.error("Failed to put into Netlify cache:", path, error);
+    });
   } catch (e) {
-    console.error("HN API JSON parse error:", e);
+    console.error("Error preparing response for cache:", path, e);
+  }
+
+  // 4. Parse JSON for the current request
+  try {
+    return JSON.parse(bodyText) as T;
+  } catch (e) {
+    console.error("HN API JSON parse error:", path, e);
     return null;
   }
 }
@@ -230,11 +290,15 @@ function extractDomain(url?: string): string | undefined {
   }
 }
 
+function now(): number {
+  return Date.now();
+}
+
 function formatTimeAgo(unixSeconds: number | undefined): string {
   if (!unixSeconds) return "";
   const then = unixSeconds * 1000;
-  const now = Date.now();
-  const diff = Math.max(0, now - then);
+  const current = now();
+  const diff = Math.max(0, current - then);
 
   const seconds = Math.floor(diff / 1000);
   const minutes = Math.floor(seconds / 60);
@@ -253,7 +317,11 @@ function formatTimeAgo(unixSeconds: number | undefined): string {
   return `${years} year${years === 1 ? "" : "s"} ago`;
 }
 
-function mapStoryToItem(raw: HNAPIItem, level = 0, comments: Item[] = []): Item {
+function mapStoryToItem(
+  raw: HNAPIItem,
+  level = 0,
+  comments: Item[] = [],
+): Item {
   const time = raw.time ?? 0;
   return {
     id: raw.id,
@@ -275,8 +343,17 @@ function mapStoryToItem(raw: HNAPIItem, level = 0, comments: Item[] = []): Item 
   };
 }
 
+// Comment limits to keep edge execution bounded
 const MAX_COMMENT_DEPTH = 10;
 const MAX_COMMENTS_TOTAL = 300;
+
+async function fetchTopIds(): Promise<number[] | null> {
+  return fetchJSONWithNetlifyCache<number[]>("/topstories.json", TOP_IDS_TTL_SECONDS);
+}
+
+async function fetchItem(id: number): Promise<HNAPIItem | null> {
+  return fetchJSONWithNetlifyCache<HNAPIItem>(`/item/${id}.json`, ITEM_TTL_SECONDS);
+}
 
 async function fetchCommentsTree(
   ids: number[] | undefined,
@@ -288,9 +365,7 @@ async function fetchCommentsTree(
   }
 
   const limitedIds = ids.slice(0, state.remaining);
-  const results = await Promise.all(
-    limitedIds.map((id) => fetchHNJSON<HNAPIItem>(`/item/${id}.json`)),
-  );
+  const results = await Promise.all(limitedIds.map((id) => fetchItem(id)));
 
   const items: Item[] = [];
 
@@ -332,7 +407,7 @@ async function fetchCommentsTree(
 }
 
 async function fetchStoryWithComments(id: number): Promise<Item | null> {
-  const raw = await fetchHNJSON<HNAPIItem>(`/item/${id}.json`);
+  const raw = await fetchItem(id);
   if (!raw) return null;
   if (raw.deleted || raw.dead) return null;
 
@@ -346,7 +421,7 @@ async function fetchTopStoriesPage(
   pageNumber: number,
   pageSize = 30,
 ): Promise<Item[]> {
-  const ids = await fetchHNJSON<number[]>("/topstories.json");
+  const ids = await fetchTopIds();
   if (!ids || !ids.length) {
     return [];
   }
@@ -358,17 +433,18 @@ async function fetchTopStoriesPage(
     return [];
   }
 
-  const stories = await Promise.all(
-    slice.map((id) => fetchHNJSON<HNAPIItem>(`/item/${id}.json`)),
-  );
+  const stories = await Promise.all(slice.map((id) => fetchItem(id)));
 
   return stories
-    .filter((s): s is HNAPIItem => !!s && !s.deleted && !s.dead && s.type === "story")
+    .filter(
+      (s): s is HNAPIItem =>
+        !!s && !s.deleted && !s.dead && s.type === "story",
+    )
     .map((s) => mapStoryToItem(s, 0, []));
 }
 
 // ---------------------------------------------------------------------------
-// Rendering
+// Rendering (unchanged from your earlier version)
 // ---------------------------------------------------------------------------
 
 export const home = (content: Item[], pageNumber: number): HTML => html`
@@ -777,4 +853,7 @@ export default async (request: Request): Promise<Response> => {
 export const config: Config = {
   method: ["GET"],
   path: "/*",
+  // Optional: you can also opt into full edge response caching if you want,
+  // but this is *separate* from the programmable Cache API used above.
+  // cache: "manual",
 };
