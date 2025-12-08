@@ -1,8 +1,13 @@
 // handler.ts
-import { contents } from "../handlers/icon.ts";
+import { contents } from "./handlers/icon.ts";
 import { HTMLResponse } from "./html.ts";
 import { home, article } from "./render.ts";
-import { fetchTopStoriesPage, fetchStoryWithComments } from "./hn.ts";
+import {
+  fetchTopStoriesPage,
+  fetchItem,
+  mapStoryToItem,
+  HNAPIItem,
+} from "./hn.ts";
 
 const redirectToTop1 = (): Response =>
   new Response(null, {
@@ -33,11 +38,15 @@ async function handleItem(id: number): Promise<Response> {
   }
 
   try {
-    const item = await fetchStoryWithComments(id);
-    if (!item) {
+    const raw = await fetchItem(id);
+    if (!raw || raw.deleted || raw.dead) {
       return new Response("No such page", { status: 404 });
     }
-    return new HTMLResponse(article(item));
+
+    const story = mapStoryToItem(raw);
+    const rootCommentIds = raw.kids ?? [];
+
+    return new HTMLResponse(article(story, rootCommentIds));
   } catch (e) {
     console.error("Item fetch error:", e);
     return new Response("Hacker News API error", { status: 502 });
