@@ -1,5 +1,7 @@
+// hn.ts
 const HN_API_BASE = "https://hacker-news.firebaseio.com/v0";
 
+// Netlify programmable cache settings
 const HN_CACHE_NAME = "nfhn-hn-api";
 const TOP_IDS_TTL_SECONDS = 30; // 30s
 const ITEM_TTL_SECONDS = 60; // 60s
@@ -50,6 +52,7 @@ async function fetchJSONWithNetlifyCache<T>(
   const cache = await getCache();
   const request = new Request(url);
 
+  // 1. Cache first
   const cached = await cache.match(request);
   if (cached) {
     try {
@@ -60,6 +63,7 @@ async function fetchJSONWithNetlifyCache<T>(
     }
   }
 
+  // 2. Network
   const res = await fetch(request);
   if (!res.ok) {
     console.error("HN API error:", res.status, path);
@@ -68,6 +72,7 @@ async function fetchJSONWithNetlifyCache<T>(
 
   const bodyText = await res.text();
 
+  // 3. Put into Netlify cache
   try {
     const headers = new Headers(res.headers);
     headers.set("Cache-Control", `public, max-age=${ttlSeconds}`);
@@ -84,6 +89,7 @@ async function fetchJSONWithNetlifyCache<T>(
     console.error("Error preparing response for cache:", path, e);
   }
 
+  // 4. Parse JSON for this request
   try {
     return JSON.parse(bodyText) as T;
   } catch (e) {
@@ -106,7 +112,7 @@ function now(): number {
   return Date.now();
 }
 
-function formatTimeAgo(unixSeconds: number | undefined): string {
+export function formatTimeAgo(unixSeconds: number | undefined): string {
   if (!unixSeconds) return "";
   const then = unixSeconds * 1000;
   const current = now();
@@ -129,10 +135,9 @@ function formatTimeAgo(unixSeconds: number | undefined): string {
   return `${years} year${years === 1 ? "" : "s"} ago`;
 }
 
-function mapStoryToItem(
+export function mapStoryToItem(
   raw: HNAPIItem,
   level = 0,
-  comments: Item[] = [],
 ): Item {
   const time = raw.time ?? 0;
   return {
@@ -148,87 +153,22 @@ function mapStoryToItem(
     type: raw.type,
     url: raw.url,
     domain: extractDomain(raw.url),
-    comments,
+    comments: [], // comments are streamed separately now
     level,
     comments_count:
-      typeof raw.descendants === "number" ? raw.descendants : comments.length,
+      typeof raw.descendants === "number" ? raw.descendants : 0,
   };
 }
-
-const MAX_COMMENT_DEPTH = 10;
-const MAX_COMMENTS_TOTAL = 300;
 
 async function fetchTopIds(): Promise<number[] | null> {
   return fetchJSONWithNetlifyCache<number[]>("/topstories.json", TOP_IDS_TTL_SECONDS);
 }
 
-async function fetchItem(id: number): Promise<HNAPIItem | null> {
+export async function fetchItem(id: number): Promise<HNAPIItem | null> {
   return fetchJSONWithNetlifyCache<HNAPIItem>(
     `/item/${id}.json`,
     ITEM_TTL_SECONDS,
   );
-}
-
-async function fetchCommentsTree(
-  ids: number[] | undefined,
-  level: number,
-  state: { remaining: number },
-): Promise<Item[]> {
-  if (!ids || !ids.length || state.remaining <= 0 || level >= MAX_COMMENT_DEPTH) {
-    return [];
-  }
-
-  const limitedIds = ids.slice(0, state.remaining);
-  const results = await Promise.all(limitedIds.map((id) => fetchItem(id)));
-
-  const items: Item[] = [];
-
-  for (const raw of results) {
-    if (!raw) continue;
-    if (raw.deleted || raw.dead) continue;
-    if (raw.type !== "comment") continue;
-
-    if (state.remaining <= 0) break;
-    state.remaining -= 1;
-
-    const children = await fetchCommentsTree(raw.kids, level + 1, state);
-
-    const time = raw.time ?? 0;
-    const item: Item = {
-      id: raw.id,
-      title: "",
-      points: null,
-      user: raw.by ?? null,
-      time,
-      time_ago: formatTimeAgo(time),
-      content: raw.text ?? "",
-      deleted: raw.deleted,
-      dead: raw.dead,
-      type: raw.type,
-      url: undefined,
-      domain: undefined,
-      comments: children,
-      level,
-      comments_count: children.length,
-    };
-
-    items.push(item);
-
-    if (state.remaining <= 0) break;
-  }
-
-  return items;
-}
-
-export async function fetchStoryWithComments(id: number): Promise<Item | null> {
-  const raw = await fetchItem(id);
-  if (!raw) return null;
-  if (raw.deleted || raw.dead) return null;
-
-  const state = { remaining: MAX_COMMENTS_TOTAL };
-  const comments = await fetchCommentsTree(raw.kids, 0, state);
-
-  return mapStoryToItem(raw, 0, comments);
 }
 
 export async function fetchTopStoriesPage(
@@ -254,5 +194,5 @@ export async function fetchTopStoriesPage(
       (s): s is HNAPIItem =>
         !!s && !s.deleted && !s.dead && s.type === "story",
     )
-    .map((s) => mapStoryToItem(s, 0, []));
+    .map((s) => mapStoryToItem(s, 0));
 }
