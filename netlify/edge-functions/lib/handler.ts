@@ -105,17 +105,23 @@ async function handleTop(
   return withProgrammableCache(
     request,
     HTML_CACHE_NAME,
-    30, // TTL for top pages (seconds)
+    30,
     async () => {
       try {
         const results = await fetchTopStoriesPage(pageNumber);
 
         if (!results || results.length === 0) {
-          // <-- instead of "No such page", return explicit debug info
+          // Fetch from the API directly to check what's happening (bypass cache)
+          const url = `https://api.hnpwa.com/v0/news/${pageNumber}.json`;
+          const debugFetch = await fetch(url);
+          const debugText = await debugFetch.text();
+
           return new Response(
-            `No stories returned for page ${pageNumber} (length = 0).` +
-              `\nThis likely means fetchTopStoriesPage() returned an empty array.`,
-            { status: 500 },
+            `No stories returned for page ${pageNumber} (length = 0)\n\n` +
+              `Fetched: ${url}\n` +
+              `Status: ${debugFetch.status} ${debugFetch.statusText}\n\n` +
+              `Raw body:\n${debugText.slice(0, 1000)}...`,
+            { status: 502 },
           );
         }
 
