@@ -93,12 +93,21 @@ const applyConditionalRequest = (request: Request, response: Response): Response
   return new Response(null, { status: 304, headers });
 };
 
-const renderErrorPage = (
-  status: number,
-  title: string,
-  description: string,
-  requestId?: string,
-): Response => {
+type StatusPageOptions = {
+  status: number;
+  title: string;
+  description: string;
+  requestId?: string;
+  actionsHtml?: string;
+};
+
+const renderStatusPage = ({
+  status,
+  title,
+  description,
+  requestId,
+  actionsHtml = `<a href="/">Return to home</a> &middot; <a href="#" onclick="location.reload();return false;">Retry</a>`,
+}: StatusPageOptions): Response => {
   const now = new Date();
   const id = requestId ?? crypto.randomUUID();
 
@@ -119,8 +128,8 @@ const renderErrorPage = (
         line-height: 1.6;
         font-size: 18px;
         padding: 0 1em;
-        color: #333;
         text-align: center;
+        color: #333;
       }
       h1 { margin-bottom: 0.2em; }
       p { margin-top: 0; }
@@ -132,12 +141,12 @@ const renderErrorPage = (
       a:hover { border-bottom-color: rgba(0,0,0,0.5); }
     </style>
   </head>
-  <body>
-    <main aria-live="polite">
-      <h1>${escape(title)}</h1>
-      <p>${escape(description)}</p>
-      <p><a href="/">Return to home</a> &middot; <a href="#" onclick="location.reload();return false;">Retry</a></p>
-      <p style="font-size:0.9em; opacity:0.7;">Request ID: ${escape(id)}<br/>${
+      <body>
+        <main aria-live="polite">
+          <h1>${escape(title)}</h1>
+          <p>${escape(description)}</p>
+          <p>${actionsHtml}</p>
+          <p style="font-size:0.9em; opacity:0.7;">Request ID: ${escape(id)}<br/>${
       escape(
         now.toUTCString(),
       )
@@ -149,48 +158,23 @@ const renderErrorPage = (
   );
 };
 
-const renderOfflinePage = (requestId?: string): Response => {
-  const now = new Date();
-  const id = requestId ?? crypto.randomUUID();
-  const headers = applySecurityHeaders(new Headers());
-  return new HTMLResponse(
-    `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Offline | NFHN</title>
-    <style>
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        background: #f5f5f5;
-        color: #333;
-        max-width: 600px;
-        margin: 40px auto;
-        padding: 0 1em;
-        text-align: center;
-        line-height: 1.6;
-      }
-      a { color: inherit; text-decoration: none; border-bottom: 1px solid rgba(0,0,0,0.2); }
-      a:hover { border-bottom-color: rgba(0,0,0,0.5); }
-    </style>
-  </head>
-  <body>
-    <main aria-live="polite">
-      <h1>Offline</h1>
-      <p>We can't reach Hacker News right now. Please check your connection and try again.</p>
-      <p><a href="#" onclick="location.reload();return false;">Retry</a> · <a href="/">Go home</a></p>
-      <p style="font-size:0.9em; opacity:0.7;">Request ID: ${escape(id)}<br/>${
-      escape(
-        now.toUTCString(),
-      )
-    }</p>
-    </main>
-  </body>
-</html>`,
-    { status: 503, headers },
-  );
-};
+const renderErrorPage = (
+  status: number,
+  title: string,
+  description: string,
+  requestId?: string,
+): Response =>
+  renderStatusPage({ status, title, description, requestId });
+
+const renderOfflinePage = (requestId?: string): Response =>
+  renderStatusPage({
+    status: 503,
+    title: "Offline",
+    description: "We can't reach Hacker News right now. Please check your connection and try again.",
+    requestId,
+    actionsHtml:
+      `<a href="#" onclick="location.reload();return false;">Retry</a> · <a href="/">Go home</a>`,
+  });
 
 const cacheControlValue = (ttlSeconds: number, swrSeconds: number): string => {
   const parts = [`public`, `max-age=${ttlSeconds}`];
