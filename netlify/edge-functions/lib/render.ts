@@ -153,11 +153,9 @@ export const home = (
     ${canonicalUrl ? tpl`<link rel="canonical" href="${canonicalUrl}">` : ""}
     <meta name="description" content="Hacker News ${feed} page ${pageNumber}: latest ${feed} stories.">
     <link rel="icon" type="image/svg+xml" href="/icon.svg">
-    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap">
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap">
     <style type="text/css">
       body {
-        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        font-family: system-ui, sans-serif;
         background-color: whitesmoke;
         margin: 40px auto;
         max-width: 650px;
@@ -335,17 +333,12 @@ const shellPage = (
     ${canonicalUrl ? tpl`<link rel="canonical" href="${canonicalUrl}" />` : ""}
     ${description ? tpl`<meta name="description" content="${description}" />` : ""}
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    <link rel="preconnect" href="https://api.hnpwa.com" crossorigin />
-    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap" />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap" />
     <style type="text/css">
       * {
         box-sizing: border-box;
       }
       body {
-        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
-          "Segoe UI Symbol";
+        font-family: system-ui, sans-serif;
         background-color: whitesmoke;
         margin: 40px auto;
         max-width: 80ch;
