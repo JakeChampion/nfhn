@@ -54,7 +54,6 @@ const tpl = html;
 
 const turboScript = tpl`
 <script>
-(() => {
   const used = new Set();
 
   function supportsRel(rel) {
@@ -100,7 +99,6 @@ const turboScript = tpl`
   // Hover (desktop) + first touch (mobile)
   document.addEventListener("mouseover", onIntent, { passive: true });
   document.addEventListener("touchstart", onIntent, { passive: true });
-})();
 </script>
 `;
 
