@@ -79,7 +79,8 @@ export function mapStoryToItem(raw: HNAPIItem, level = 0): Item {
   const points = typeof raw.points === "number" ? raw.points : null;
   const user = raw.user ?? null;
   const content = raw.content ?? "";
-  const commentsCount = typeof raw.comments_count === "number" ? raw.comments_count : 0;
+  const commentsCount =
+    typeof raw.comments_count === "number" ? raw.comments_count : 0;
   const domain = raw.domain ?? extractDomain(raw.url);
 
   return {
@@ -95,7 +96,7 @@ export function mapStoryToItem(raw: HNAPIItem, level = 0): Item {
     type: raw.type,
     url: raw.url,
     domain,
-    comments: [], // filled in explicitly when we need comments
+    comments: [],
     level,
     comments_count: commentsCount,
   };
@@ -116,15 +117,15 @@ export async function fetchItem(id: number): Promise<HNAPIItem | null> {
   }
 }
 
-// Top stories page
-export async function fetchTopStoriesPage(
+async function fetchStoriesPageForFeed(
+  feed: "news" | "ask" | "show" | "jobs",
   pageNumber: number,
   pageSize = 30,
 ): Promise<Item[]> {
   try {
-    const res = await fetch(`${HN_API_BASE}/news/${pageNumber}.json`);
+    const res = await fetch(`${HN_API_BASE}/${feed}/${pageNumber}.json`);
     if (!res.ok) {
-      console.error("HN news API error:", res.status, pageNumber);
+      console.error(`HN ${feed} API error:`, res.status, pageNumber);
       return [];
     }
 
@@ -138,7 +139,39 @@ export async function fetchTopStoriesPage(
       .filter((s) => !!s && !s.deleted && !s.dead)
       .map((s) => mapStoryToItem(s, 0));
   } catch (e) {
-    console.error("HN news fetch error:", pageNumber, e);
+    console.error(`HN ${feed} fetch error:`, pageNumber, e);
     return [];
   }
+}
+
+// Top stories page (news)
+export function fetchTopStoriesPage(
+  pageNumber: number,
+  pageSize = 30,
+): Promise<Item[]> {
+  return fetchStoriesPageForFeed("news", pageNumber, pageSize);
+}
+
+// Ask HN
+export function fetchAskStoriesPage(
+  pageNumber: number,
+  pageSize = 30,
+): Promise<Item[]> {
+  return fetchStoriesPageForFeed("ask", pageNumber, pageSize);
+}
+
+// Show HN
+export function fetchShowStoriesPage(
+  pageNumber: number,
+  pageSize = 30,
+): Promise<Item[]> {
+  return fetchStoriesPageForFeed("show", pageNumber, pageSize);
+}
+
+// Jobs
+export function fetchJobsStoriesPage(
+  pageNumber: number,
+  pageSize = 30,
+): Promise<Item[]> {
+  return fetchStoriesPageForFeed("jobs", pageNumber, pageSize);
 }
