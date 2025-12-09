@@ -1,6 +1,6 @@
 // render.ts
 import { escape, type HTML, html, unsafeHTML } from "./html.ts";
-import { type HNAPIItem, type Item } from "./hn.ts";
+import { type FeedSlug, type HNAPIItem, type Item } from "./hn.ts";
 
 // Limits to keep edge execution bounded
 const MAX_COMMENT_DEPTH = Infinity;
@@ -47,8 +47,6 @@ function primaryHref(item: Item): string {
   // Link / Job (and anything else) go to external URL if present, otherwise item page
   return item.url ?? `/item/${item.id}`;
 }
-
-type FeedSlug = "top" | "ask" | "show" | "jobs";
 
 const tpl = html;
 
