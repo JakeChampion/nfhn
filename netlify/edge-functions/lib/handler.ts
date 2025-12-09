@@ -101,23 +101,43 @@ async function handleTop(
   pageNumber: number,
 ): Promise<Response> {
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-    return new Response("Not Found", { status: 404 });
+    return new Response("Not Found (invalid page number)", { status: 404 });
   }
 
   return withProgrammableCache(
     request,
     HTML_CACHE_NAME,
-    30, // TTL for top pages (seconds)
+    30,
     async () => {
       try {
         const results = await fetchTopStoriesPage(pageNumber);
-        if (!results.length) {
-          return new Response("No such page", { status: 404 });
+
+        if (!results || results.length === 0) {
+          // Fetch from the API directly to check what's happening (bypass cache)
+          const url = `https://api.hnpwa.com/v0/news/${pageNumber}.json`;
+          const debugFetch = await fetch(url);
+          const debugText = await debugFetch.text();
+
+          return new Response(
+            `No stories returned for page ${pageNumber} (length = 0)\n\n` +
+              `Fetched: ${url}\n` +
+              `Status: ${debugFetch.status} ${debugFetch.statusText}\n\n` +
+              `Raw body:\n${debugText.slice(0, 1000)}...`,
+            { status: 502 },
+          );
         }
+
         return new HTMLResponse(home(results, pageNumber));
       } catch (e) {
-        console.error("Top stories fetch error:", e);
-        return new Response("Hacker News API error", { status: 502 });
+        const err = e as Error;
+        console.error("Top stories fetch error:", err);
+
+        const body =
+          "Hacker News API error while fetching top stories.\n\n" +
+          `Message: ${err.message ?? String(err)}\n\n` +
+          (err.stack ? `Stack:\n${err.stack}` : "");
+
+        return new Response(body, { status: 502 });
       }
     },
   );
