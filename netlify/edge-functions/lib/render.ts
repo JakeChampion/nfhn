@@ -56,7 +56,13 @@ function primaryHref(item: Item): string {
   return item.url ?? `/item/${item.id}`;
 }
 
-export const home = (content: Item[], pageNumber: number): HTML => html`
+type FeedSlug = "top" | "ask" | "show" | "jobs";
+
+export const home = (
+  content: Item[],
+  pageNumber: number,
+  feed: FeedSlug = "top",
+): HTML => html`
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -174,11 +180,33 @@ export const home = (content: Item[], pageNumber: number): HTML => html`
         font-size: 0.85em;
         opacity: 0.8;
       }
+      .nav-feeds {
+        display: flex;
+        gap: 0.75em;
+        margin-bottom: 1.5em;
+        font-size: 0.9em;
+      }
+      .nav-feeds a {
+        text-decoration: none;
+        color: inherit;
+        opacity: 0.7;
+      }
+      .nav-feeds a.active {
+        font-weight: 600;
+        opacity: 1;
+        text-decoration: underline;
+      }
     </style>
     <title>NFHN: Page ${pageNumber}</title>
   </head>
   <body>
     <main>
+      <nav class="nav-feeds">
+        <a href="/top/1" class="${feed === "top" ? "active" : ""}">Top</a>
+        <a href="/ask/1" class="${feed === "ask" ? "active" : ""}">Ask</a>
+        <a href="/show/1" class="${feed === "show" ? "active" : ""}">Show</a>
+        <a href="/jobs/1" class="${feed === "jobs" ? "active" : ""}">Jobs</a>
+      </nav>
       <ol>
         ${content.map((data: Item) => html`
           <li>
@@ -195,7 +223,7 @@ export const home = (content: Item[], pageNumber: number): HTML => html`
           </li>
         `)}
       </ol>
-      <a href="/top/${pageNumber + 1}" style="text-align: center; display:block; margin-top:1.5em;">More</a>
+      <a href="/${feed}/${pageNumber + 1}" style="text-align: center; display:block; margin-top:1.5em;">More</a>
     </main>
   </body>
 </html>
