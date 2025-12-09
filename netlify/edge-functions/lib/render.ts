@@ -136,10 +136,10 @@ export const home = (
         font-family: system-ui, sans-serif;
         background-color: whitesmoke;
         margin: 40px auto;
-        max-width: 650px;
+        max-width: 80ch;
         line-height: 1.6;
         font-size: 18px;
-        padding: 0 1em;
+        padding: 0 10px;
         box-sizing: border-box;
       }
       main {
