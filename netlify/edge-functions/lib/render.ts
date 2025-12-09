@@ -393,13 +393,10 @@ const renderComment = (comment: HNAPIItem, level: number): HTML => {
   const time_ago = comment.time_ago ?? "";
   const user = comment.user ?? "[deleted]";
   const content = unsafeHTML(comment.content ?? "");
-  const isRoot = level === 0;
   const children = (comment.comments ?? []).filter(isRenderableComment);
 
   const details = html`
-    <details ${isRoot ? "open" : ""} id="${comment.id}" aria-expanded="${isRoot
-      ? "true"
-      : "false"}">
+    <details id="${comment.id}">
       <summary aria-label="Comment by ${user}, posted ${time_ago}">
         <span>${user} - <a href="#${comment.id}">${time_ago}</a></span>
       </summary>
