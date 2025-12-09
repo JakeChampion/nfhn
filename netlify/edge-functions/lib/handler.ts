@@ -31,61 +31,43 @@ async function withProgrammableCache(
 
   // 1. Cache-first
   const cached = await cache.match(request);
-  if (cached) {
-    return cached;
-  }
+  if (cached) return cached;
 
-  // 2. Produce the response
+  // 2. Produce fresh
   const response = await producer();
 
-  // Only cache "successful" responses
   if (response.status < 200 || response.status >= 300) {
     return response;
   }
 
   const originalBody = response.body;
 
-  // Normalise headers + set TTL
   const headers = new Headers(response.headers);
   headers.set("Cache-Control", `public, max-age=${ttlSeconds}`);
 
-  // No body: just cache a simple empty response
   if (!originalBody) {
-    const cacheable = new Response(null, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
-
-    cache.put(request, cacheable).catch((err) => {
-      console.error("Failed to cache (no-body) response:", err);
-    });
-
-    return new Response(null, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
+    const cacheable = new Response(null, { status: response.status, headers });
+    cache.put(request, cacheable).catch((err) =>
+      console.error("Failed to cache (no-body):", err)
+    );
+    return new Response(null, { status: response.status, headers });
   }
 
-  // 3. Tee the body so we can stream to client AND cache
   const [bodyForClient, bodyForCache] = originalBody.tee();
 
   const responseForClient = new Response(bodyForClient, {
     status: response.status,
-    statusText: response.statusText,
     headers,
   });
 
   const responseForCache = new Response(bodyForCache, {
     status: response.status,
-    statusText: response.statusText,
     headers,
   });
 
-  cache.put(request, responseForCache).catch((err) => {
-    console.error("Failed to cache streaming response:", err);
-  });
+  cache.put(request, responseForCache).catch((err) =>
+    console.error("Failed to cache streaming response:", err)
+  );
 
   return responseForClient;
 }
@@ -107,7 +89,7 @@ async function handleTop(
   return withProgrammableCache(
     request,
     HTML_CACHE_NAME,
-    30, // TTL for top pages (seconds)
+    30,
     async () => {
       try {
         const results = await fetchTopStoriesPage(pageNumber);
@@ -116,14 +98,17 @@ async function handleTop(
         }
         return new HTMLResponse(home(results, pageNumber));
       } catch (e) {
-        console.error("Top stories fetch error:", e);
+        console.error("Top fetch error:", e);
         return new Response("Hacker News API error", { status: 502 });
       }
     },
   );
 }
 
-async function handleItem(request: Request, id: number): Promise<Response> {
+async function handleItem(
+  request: Request,
+  id: number,
+): Promise<Response> {
   if (!Number.isFinite(id)) {
     return new Response("Not Found", { status: 404 });
   }
@@ -131,19 +116,20 @@ async function handleItem(request: Request, id: number): Promise<Response> {
   return withProgrammableCache(
     request,
     HTML_CACHE_NAME,
-    60, // TTL for item pages (seconds)
+    60,
     async () => {
       try {
         const raw = await fetchItem(id);
-        if (!raw || raw.deleted || raw.dead || raw.type !== "story") {
+
+        // Important: HNPWA `type` is not always "story".
+        // Just reject missing/deleted/dead.
+        if (!raw || raw.deleted || raw.dead) {
           return new Response("No such page", { status: 404 });
         }
 
-        // Map top-level story fields into your internal Item shape
         const story = mapStoryToItem(raw) as any;
 
-        // Attach the HNPWA comments tree so render.ts can walk it
-        // (render.ts will cast this back to HNAPIItem[])
+        // HNPWA provides nested comments already
         story.comments = raw.comments ?? [];
 
         return new HTMLResponse(article(story));
@@ -159,17 +145,12 @@ async function handleIcon(request: Request): Promise<Response> {
   return withProgrammableCache(
     request,
     ASSET_CACHE_NAME,
-    86400, // 1 day for the icon
-    async () => {
-      return new Response(contents, {
+    86400,
+    async () =>
+      new Response(contents, {
         status: 200,
-        headers: {
-          "content-type": "image/svg+xml; charset=utf-8",
-          // This will be overridden with Cache-Control by the helper,
-          // but you can keep other headers here if needed.
-        },
-      });
-    },
+        headers: { "content-type": "image/svg+xml; charset=utf-8" },
+      }),
   );
 }
 
@@ -185,25 +166,22 @@ export default async function handler(
     }
 
     if (path === "/icon.svg") {
-      return await handleIcon(request);
+      return handleIcon(request);
     }
 
     const topMatch = path.match(/^\/top\/(\d+)$/);
     if (topMatch) {
-      const pageNumber = Number.parseInt(topMatch[1], 10);
-      return await handleTop(request, pageNumber);
+      return handleTop(request, Number(topMatch[1]));
     }
 
     const itemMatch = path.match(/^\/item\/(\d+)$/);
     if (itemMatch) {
-      const id = Number.parseInt(itemMatch[1], 10);
-      return await handleItem(request, id);
+      return handleItem(request, Number(itemMatch[1]));
     }
 
     return new Response("Not Found", { status: 404 });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("Unhandled error in edge function:", message);
+  } catch (err) {
+    console.error("Unhandled edge error:", err);
     return new Response("Internal Server Error", { status: 500 });
   }
 }
