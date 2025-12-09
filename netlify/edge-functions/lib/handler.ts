@@ -1,13 +1,13 @@
 // handler.ts
 import { contents } from "../handlers/icon.ts";
-import { HTMLResponse, escape } from "./html.ts";
-import { home, article } from "./render.ts";
+import { escape, HTMLResponse } from "./html.ts";
+import { article, home } from "./render.ts";
 import {
-  fetchTopStoriesPage,
   fetchAskStoriesPage,
-  fetchShowStoriesPage,
-  fetchJobsStoriesPage,
   fetchItem,
+  fetchJobsStoriesPage,
+  fetchShowStoriesPage,
+  fetchTopStoriesPage,
   mapStoryToItem,
 } from "./hn.ts";
 
@@ -19,6 +19,15 @@ const ITEM_TTL_SECONDS = 60;
 const ITEM_STALE_SECONDS = 600;
 const ICON_TTL_SECONDS = 86400;
 const ICON_STALE_SECONDS = 604800;
+
+type FeedSlug = "top" | "ask" | "show" | "jobs";
+type FeedHandler = (request: Request, pageNumber: number) => Promise<Response>;
+
+const parsePositiveInt = (value: string): number | null => {
+  const num = Number.parseInt(value, 10);
+  if (!Number.isFinite(num) || num < 1) return null;
+  return num;
+};
 
 const renderErrorPage = (
   status: number,
@@ -207,12 +216,14 @@ const redirectToJobs1 = (): Response =>
     headers: { Location: "/jobs/1" },
   });
 
-async function handleTop(
+function handleTop(
   request: Request,
   pageNumber: number,
 ): Promise<Response> {
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-    return renderErrorPage(404, "Page not found", "That page number is invalid.");
+    return Promise.resolve(
+      renderErrorPage(404, "Page not found", "That page number is invalid."),
+    );
   }
 
   return withProgrammableCache(
@@ -243,12 +254,14 @@ async function handleTop(
   );
 }
 
-async function handleAsk(
+function handleAsk(
   request: Request,
   pageNumber: number,
 ): Promise<Response> {
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-    return renderErrorPage(404, "Page not found", "That page number is invalid.");
+    return Promise.resolve(
+      renderErrorPage(404, "Page not found", "That page number is invalid."),
+    );
   }
 
   return withProgrammableCache(
@@ -279,12 +292,14 @@ async function handleAsk(
   );
 }
 
-async function handleShow(
+function handleShow(
   request: Request,
   pageNumber: number,
 ): Promise<Response> {
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-    return renderErrorPage(404, "Page not found", "That page number is invalid.");
+    return Promise.resolve(
+      renderErrorPage(404, "Page not found", "That page number is invalid."),
+    );
   }
 
   return withProgrammableCache(
@@ -315,12 +330,14 @@ async function handleShow(
   );
 }
 
-async function handleJobs(
+function handleJobs(
   request: Request,
   pageNumber: number,
 ): Promise<Response> {
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-    return renderErrorPage(404, "Page not found", "That page number is invalid.");
+    return Promise.resolve(
+      renderErrorPage(404, "Page not found", "That page number is invalid."),
+    );
   }
 
   return withProgrammableCache(
@@ -351,12 +368,14 @@ async function handleJobs(
   );
 }
 
-async function handleItem(request: Request, id: number): Promise<Response> {
+function handleItem(request: Request, id: number): Promise<Response> {
   if (!Number.isFinite(id)) {
-    return renderErrorPage(
-      404,
-      "Item not found",
-      "That story ID looks invalid.",
+    return Promise.resolve(
+      renderErrorPage(
+        404,
+        "Item not found",
+        "That story ID looks invalid.",
+      ),
     );
   }
 
@@ -392,21 +411,30 @@ async function handleItem(request: Request, id: number): Promise<Response> {
   );
 }
 
-async function handleIcon(request: Request): Promise<Response> {
+function handleIcon(request: Request): Promise<Response> {
   return withProgrammableCache(
     request,
     ASSET_CACHE_NAME,
     ICON_TTL_SECONDS,
     ICON_STALE_SECONDS,
-    async () =>
-      new Response(contents, {
-        status: 200,
-        headers: {
-          "content-type": "image/svg+xml; charset=utf-8",
-        },
-      }),
+    () =>
+      Promise.resolve(
+        new Response(contents, {
+          status: 200,
+          headers: {
+            "content-type": "image/svg+xml; charset=utf-8",
+          },
+        }),
+      ),
   );
 }
+
+const feedRoutes: { slug: FeedSlug; pattern: RegExp; handler: FeedHandler }[] = [
+  { slug: "top", pattern: /^\/top\/(\d+)$/, handler: handleTop },
+  { slug: "ask", pattern: /^\/ask\/(\d+)$/, handler: handleAsk },
+  { slug: "show", pattern: /^\/show\/(\d+)$/, handler: handleShow },
+  { slug: "jobs", pattern: /^\/jobs\/(\d+)$/, handler: handleJobs },
+];
 
 export default async function handler(
   request: Request,
@@ -435,33 +463,30 @@ export default async function handler(
       return await handleIcon(request);
     }
 
-    const topMatch = path.match(/^\/top\/(\d+)$/);
-    if (topMatch) {
-      const pageNumber = Number.parseInt(topMatch[1], 10);
-      return await handleTop(request, pageNumber);
-    }
-
-    const askMatch = path.match(/^\/ask\/(\d+)$/);
-    if (askMatch) {
-      const pageNumber = Number.parseInt(askMatch[1], 10);
-      return await handleAsk(request, pageNumber);
-    }
-
-    const showMatch = path.match(/^\/show\/(\d+)$/);
-    if (showMatch) {
-      const pageNumber = Number.parseInt(showMatch[1], 10);
-      return await handleShow(request, pageNumber);
-    }
-
-    const jobsMatch = path.match(/^\/jobs\/(\d+)$/);
-    if (jobsMatch) {
-      const pageNumber = Number.parseInt(jobsMatch[1], 10);
-      return await handleJobs(request, pageNumber);
+    for (const route of feedRoutes) {
+      const match = path.match(route.pattern);
+      if (!match) continue;
+      const pageNumber = parsePositiveInt(match[1]);
+      if (pageNumber === null) {
+        return renderErrorPage(
+          404,
+          "Page not found",
+          "That page number is invalid.",
+        );
+      }
+      return await route.handler(request, pageNumber);
     }
 
     const itemMatch = path.match(/^\/item\/(\d+)$/);
     if (itemMatch) {
-      const id = Number.parseInt(itemMatch[1], 10);
+      const id = parsePositiveInt(itemMatch[1]);
+      if (id === null) {
+        return renderErrorPage(
+          404,
+          "Item not found",
+          "That story ID looks invalid.",
+        );
+      }
       return await handleItem(request, id);
     }
 

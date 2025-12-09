@@ -83,8 +83,7 @@ async function fetchJsonWithRetry<T>(
         e,
       );
       if (isLast) break;
-    }
-    finally {
+    } finally {
       clear();
     }
   }
@@ -120,8 +119,7 @@ export function mapStoryToItem(raw: HNAPIItem, level = 0): Item {
   const points = typeof raw.points === "number" ? raw.points : null;
   const user = raw.user ?? null;
   const content = raw.content ?? "";
-  const commentsCount =
-    typeof raw.comments_count === "number" ? raw.comments_count : 0;
+  const commentsCount = typeof raw.comments_count === "number" ? raw.comments_count : 0;
   const domain = raw.domain ?? extractDomain(raw.url);
 
   return {

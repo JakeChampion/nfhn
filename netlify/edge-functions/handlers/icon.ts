@@ -17,4 +17,4 @@ export const contents = `
 @media (prefers-color-scheme:light){:root{filter:none}}
 </style>
 </svg>
-`
+`;

@@ -1,42 +1,41 @@
 import handler from "../netlify/edge-functions/lib/handler.ts";
-import {
-  assertEquals,
-  assertStringIncludes,
-} from "https://deno.land/std@0.224.0/testing/asserts.ts";
+import { assertEquals, assertStringIncludes } from "std/testing/asserts.ts";
 
 type RouteMap = Record<string, unknown>;
 
 class MemoryCache {
   #store = new Map<string, Response>();
 
-  async match(request: Request | string): Promise<Response | undefined> {
+  match(request: Request | string): Promise<Response | undefined> {
     const key = typeof request === "string" ? request : request.url;
     const res = this.#store.get(key);
-    return res ? res.clone() : undefined;
+    return Promise.resolve(res ? res.clone() : undefined);
   }
 
-  async put(request: Request | string, response: Response): Promise<void> {
+  put(request: Request | string, response: Response): Promise<void> {
     const key = typeof request === "string" ? request : request.url;
     this.#store.set(key, response.clone());
+    return Promise.resolve();
   }
 }
 
 class MemoryCacheStorage {
   #caches = new Map<string, MemoryCache>();
 
-  async open(name: string): Promise<MemoryCache> {
+  open(name: string): Promise<MemoryCache> {
     if (!this.#caches.has(name)) {
       this.#caches.set(name, new MemoryCache());
     }
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    return this.#caches.get(name)!;
+    const cache = this.#caches.get(name);
+    if (!cache) throw new Error("Cache not initialized");
+    return Promise.resolve(cache);
   }
 }
 
 function createMockFetch(routes: RouteMap) {
   const counts = new Map<string, number>();
 
-  const mockFetch = async (
+  const mockFetch = (
     input: Request | string,
     _init?: RequestInit,
   ): Promise<Response> => {
@@ -45,21 +44,23 @@ function createMockFetch(routes: RouteMap) {
 
     const entry = routes[url];
     if (!entry) {
-      return new Response("not found", { status: 404 });
+      return Promise.resolve(new Response("not found", { status: 404 }));
     }
 
     if (entry instanceof Response) {
-      return entry.clone();
+      return Promise.resolve(entry.clone());
     }
 
     if (typeof entry === "string") {
-      return new Response(entry);
+      return Promise.resolve(new Response(entry));
     }
 
-    return new Response(JSON.stringify(entry), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
+    return Promise.resolve(
+      new Response(JSON.stringify(entry), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
   };
 
   return { mockFetch, counts };
@@ -82,8 +83,7 @@ async function withMockedEnv(
   (globalThis as Record<string, unknown>).fetch = mockFetch;
   if (cachesAny) {
     try {
-      cachesAny.open = (...args: unknown[]) =>
-        mockCacheStorage.open(args[0] as string);
+      cachesAny.open = (...args: unknown[]) => mockCacheStorage.open(args[0] as string);
       restoreCaches = () => {
         if (originalCacheOpen) cachesAny.open = originalCacheOpen;
       };
@@ -91,8 +91,7 @@ async function withMockedEnv(
       try {
         Object.defineProperty(cachesAny, "open", {
           configurable: true,
-          value: (...args: unknown[]) =>
-            mockCacheStorage.open(args[0] as string),
+          value: (...args: unknown[]) => mockCacheStorage.open(args[0] as string),
         });
         restoreCaches = () => {
           if (originalCacheOpen) {

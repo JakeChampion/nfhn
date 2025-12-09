@@ -38,16 +38,24 @@ export const escape = (value: unknown): string => {
 };
 
 const isRawHTML = (v: unknown): v is RawHTML =>
-  !!v && typeof v === "object" && (v as any)[RAW_HTML_SYMBOL] === true;
+  typeof v === "object" &&
+  v !== null &&
+  RAW_HTML_SYMBOL in v &&
+  (v as { [RAW_HTML_SYMBOL]: unknown })[RAW_HTML_SYMBOL] === true;
 
 const isAsyncIterable = (v: unknown): v is AsyncIterable<unknown> =>
-  !!v && typeof (v as any)[Symbol.asyncIterator] === "function";
+  typeof v === "object" &&
+  v !== null &&
+  typeof (v as { [Symbol.asyncIterator]?: unknown })[Symbol.asyncIterator] ===
+    "function";
 
 const isIterable = (v: unknown): v is Iterable<unknown> =>
-  !!v && typeof (v as any)[Symbol.iterator] === "function";
+  typeof v === "object" &&
+  v !== null &&
+  typeof (v as { [Symbol.iterator]?: unknown })[Symbol.iterator] ===
+    "function";
 
-const isHTML = (v: unknown): v is HTML =>
-  isAsyncIterable(v) && !isRawHTML(v);
+const isHTML = (v: unknown): v is HTML => isAsyncIterable(v) && !isRawHTML(v);
 
 // Reuse a single TextEncoder per edge instance
 const sharedEncoder = new TextEncoder();
@@ -157,11 +165,8 @@ export class HTMLResponse extends Response {
       headers.set("content-type", "text/html; charset=utf-8");
     }
 
-    if (typeof body === "string") {
-      super(body, { ...init, headers });
-    } else {
-      const stream = htmlToStream(body);
-      super(stream as any, { ...init, headers });
-    }
+    const responseBody = typeof body === "string" ? body : htmlToStream(body);
+
+    super(responseBody as BodyInit, { ...init, headers });
   }
 }

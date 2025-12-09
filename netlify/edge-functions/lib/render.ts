@@ -1,14 +1,6 @@
 // render.ts
-import {
-  type HTML,
-  html,
-  unsafeHTML,
-  escape,
-} from "./html.ts";
-import {
-  type Item,
-  type HNAPIItem,
-} from "./hn.ts";
+import { escape, type HTML, html, unsafeHTML } from "./html.ts";
+import { type HNAPIItem, type Item } from "./hn.ts";
 
 // Limits to keep edge execution bounded
 const MAX_COMMENT_DEPTH = 10;
@@ -58,28 +50,32 @@ function primaryHref(item: Item): string {
 
 type FeedSlug = "top" | "ask" | "show" | "jobs";
 
-const renderStory = (data: Item): HTML => html`
-  <li>
-    <a class="title" href="${primaryHref(data)}">
-      <span class="badge ${typeClass(data.type)}">${typeLabel(data.type)}</span>
-      <span class="story-title-text">${data.title}</span>
-      ${data.domain
-        ? html`<span class="story-meta">(${data.domain})</span>`
-        : ""}
-    </a>
-    <a class="comments" href="/item/${data.id}">
-      view ${data.comments_count > 0 ? data.comments_count + " comments" : "discussion"}
-    </a>
-  </li>
-`;
+const tpl = html;
+
+const renderStory = (data: Item): HTML =>
+  html`
+    <li>
+      <a class="title" href="${primaryHref(data)}">
+        <span class="badge ${typeClass(data.type)}">${typeLabel(data.type)}</span>
+        <span class="story-title-text">${data.title}</span>
+        ${data.domain
+          ? html`
+            <span class="story-meta">(${data.domain})</span>
+          `
+          : ""}
+      </a>
+      <a class="comments" href="/item/${data.id}">
+        view ${data.comments_count > 0 ? data.comments_count + " comments" : "discussion"}
+      </a>
+    </li>
+  `;
 
 export const home = (
   content: Item[],
   pageNumber: number,
   feed: FeedSlug = "top",
 ): HTML =>
-  (async function* (): AsyncGenerator<string> {
-    yield* html`
+  tpl`
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -225,25 +221,20 @@ export const home = (
         <a href="/jobs/1" class="${feed === "jobs" ? "active" : ""}">Jobs</a>
       </nav>
       <ol>
-    `;
-
-    for (const data of content) {
-      yield* renderStory(data);
-    }
-
-    yield* html`
+        ${content.map((data: Item) => renderStory(data))}
       </ol>
-      <a href="/${feed}/${pageNumber + 1}" style="text-align: center; display:block; margin-top:1.5em;">More</a>
+      <a href="/${feed}/${
+    pageNumber + 1
+  }" style="text-align: center; display:block; margin-top:1.5em;">More</a>
     </main>
   </body>
 </html>
-    `;
-  })();
+`;
 
 // Shell page for article
 const shellPage = (title: string, body: HTML): HTML =>
   (async function* (): AsyncGenerator<string> {
-    yield* html`
+    yield* tpl`
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -366,8 +357,8 @@ const shellPage = (title: string, body: HTML): HTML =>
     yield* body;
 
     yield* html`
-  </body>
-</html>
+      </body>
+      </html>
     `;
   })();
 
@@ -416,9 +407,9 @@ async function* streamComments(
     if (isNested) yield "<li>";
 
     yield `<details ${level === 0 ? "open" : ""} id="${comment.id}">`;
-    yield `<summary><span>${escape(user)} - <a href="#${
-      comment.id
-    }">${escape(time_ago)}</a></span></summary>`;
+    yield `<summary><span>${escape(user)} - <a href="#${comment.id}">${
+      escape(time_ago)
+    }</a></span></summary>`;
     // HNPWA comment content is already HTML
     yield `<div>${content}</div>`;
 
@@ -428,11 +419,13 @@ async function* streamComments(
       state.remaining > 0 &&
       level + 1 < MAX_COMMENT_DEPTH
     ) {
-      for await (const chunk of streamComments(
-        comment.comments,
-        level + 1,
-        state,
-      )) {
+      for await (
+        const chunk of streamComments(
+          comment.comments,
+          level + 1,
+          state,
+        )
+      ) {
         yield chunk;
       }
     }
@@ -446,32 +439,37 @@ async function* streamComments(
 }
 
 export const article = (item: Item): HTML =>
-  shellPage(`NFHN: ${item.title}`, html`
-    <nav>
-      <a href="/">Home</a>
-    </nav>
-    <hr />
-    <main>
-      <article>
-        <a href="${primaryHref(item)}">
-          <span class="badge ${typeClass(item.type)}">${typeLabel(item.type)}</span>
-          <h1 style="display:inline-block; margin-left:0.4em;">${item.title}</h1>
-          ${item.domain
-            ? html`<small>${item.domain}</small>`
-            : ""}
-        </a>
-        ${
-          // Job with no comments: hide points/comments line, just show "posted X ago"
+  shellPage(
+    `NFHN: ${item.title}`,
+    html`
+      <nav>
+        <a href="/">Home</a>
+      </nav>
+      <hr />
+      <main>
+        <article>
+          <a href="${primaryHref(item)}">
+            <span class="badge ${typeClass(item.type)}">${typeLabel(item.type)}</span>
+            <h1 style="display:inline-block; margin-left:0.4em;">${item.title}</h1>
+            ${item.domain
+              ? html`
+                <small>${item.domain}</small>
+              `
+              : ""}
+          </a>
+          ${// Job with no comments: hide points/comments line, just show "posted X ago"
           item.type === "job" && item.comments_count === 0
-            ? html`<p class="meta-line">posted ${item.time_ago}</p>`
-            : html`<p class="meta-line">
-                ${item.points ?? 0} points by
-                ${item.user ?? "[deleted]"} ${item.time_ago}
-              </p>`
-        }
-        <hr />
-        ${unsafeHTML(item.content || "")}
-        ${commentsSection(item.comments)}
-      </article>
-    </main>
-  `);
+            ? html`
+              <p class="meta-line">posted ${item.time_ago}</p>
+            `
+            : html`
+              <p class="meta-line">
+                ${item.points ?? 0} points by ${item.user ?? "[deleted]"} ${item.time_ago}
+              </p>
+            `}
+          <hr />
+          ${unsafeHTML(item.content || "")} ${commentsSection(item.comments)}
+        </article>
+      </main>
+    `,
+  );
