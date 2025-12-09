@@ -20,6 +20,9 @@ const encoder = new TextEncoder();
 type FeedSlug = "top" | "ask" | "show" | "jobs";
 type FeedHandler = (request: Request, pageNumber: number) => Promise<Response>;
 
+const getRequestId = (request: Request): string | undefined =>
+  request.headers.get("x-nf-request-id") ?? undefined;
+
 const computeCanonical = (request: Request, pathname: string): string =>
   new URL(pathname, request.url).toString();
 
@@ -153,6 +156,7 @@ async function withProgrammableCache(
   swrSeconds: number,
   producer: () => Promise<Response>,
 ): Promise<Response> {
+  const requestId = getRequestId(request);
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
   const cachedAge = cached ? ageSeconds(cached) : Infinity;
@@ -213,6 +217,7 @@ async function withProgrammableCache(
       500,
       "Something went wrong",
       "Please try again in a moment.",
+      requestId,
     );
   }
 }
@@ -245,9 +250,15 @@ async function handleTop(
   request: Request,
   pageNumber: number,
 ): Promise<Response> {
+  const requestId = getRequestId(request);
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
     return Promise.resolve(
-      renderErrorPage(404, "Page not found", "That page number is invalid."),
+      renderErrorPage(
+        404,
+        "Page not found",
+        "That page number is invalid.",
+        requestId,
+      ),
     );
   }
 
@@ -264,6 +275,7 @@ async function handleTop(
             404,
             "No stories found",
             "We couldn't find that page of top stories.",
+            requestId,
           );
         }
         const canonical = computeCanonical(request, `/top/${pageNumber}`);
@@ -279,6 +291,7 @@ async function handleTop(
           502,
           "Hacker News is unavailable",
           "Please try again in a moment.",
+          requestId,
         );
       }
     },
@@ -289,9 +302,15 @@ async function handleAsk(
   request: Request,
   pageNumber: number,
 ): Promise<Response> {
+  const requestId = getRequestId(request);
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
     return Promise.resolve(
-      renderErrorPage(404, "Page not found", "That page number is invalid."),
+      renderErrorPage(
+        404,
+        "Page not found",
+        "That page number is invalid.",
+        requestId,
+      ),
     );
   }
 
@@ -308,6 +327,7 @@ async function handleAsk(
             404,
             "No stories found",
             "We couldn't find that page of Ask HN posts.",
+            requestId,
           );
         }
         const canonical = computeCanonical(request, `/ask/${pageNumber}`);
@@ -323,6 +343,7 @@ async function handleAsk(
           502,
           "Hacker News is unavailable",
           "Please try again in a moment.",
+          requestId,
         );
       }
     },
@@ -333,9 +354,15 @@ async function handleShow(
   request: Request,
   pageNumber: number,
 ): Promise<Response> {
+  const requestId = getRequestId(request);
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
     return Promise.resolve(
-      renderErrorPage(404, "Page not found", "That page number is invalid."),
+      renderErrorPage(
+        404,
+        "Page not found",
+        "That page number is invalid.",
+        requestId,
+      ),
     );
   }
 
@@ -352,6 +379,7 @@ async function handleShow(
             404,
             "No stories found",
             "We couldn't find that page of Show HN posts.",
+            requestId,
           );
         }
         const canonical = computeCanonical(request, `/show/${pageNumber}`);
@@ -367,6 +395,7 @@ async function handleShow(
           502,
           "Hacker News is unavailable",
           "Please try again in a moment.",
+          requestId,
         );
       }
     },
@@ -377,9 +406,15 @@ async function handleJobs(
   request: Request,
   pageNumber: number,
 ): Promise<Response> {
+  const requestId = getRequestId(request);
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
     return Promise.resolve(
-      renderErrorPage(404, "Page not found", "That page number is invalid."),
+      renderErrorPage(
+        404,
+        "Page not found",
+        "That page number is invalid.",
+        requestId,
+      ),
     );
   }
 
@@ -396,6 +431,7 @@ async function handleJobs(
             404,
             "No jobs found",
             "We couldn't find that page of jobs.",
+            requestId,
           );
         }
         const canonical = computeCanonical(request, `/jobs/${pageNumber}`);
@@ -411,6 +447,7 @@ async function handleJobs(
           502,
           "Hacker News is unavailable",
           "Please try again in a moment.",
+          requestId,
         );
       }
     },
@@ -418,12 +455,14 @@ async function handleJobs(
 }
 
 async function handleItem(request: Request, id: number): Promise<Response> {
+  const requestId = getRequestId(request);
   if (!Number.isFinite(id)) {
     return Promise.resolve(
       renderErrorPage(
         404,
         "Item not found",
         "That story ID looks invalid.",
+        requestId,
       ),
     );
   }
@@ -441,6 +480,7 @@ async function handleItem(request: Request, id: number): Promise<Response> {
             404,
             "Item not found",
             "That story is unavailable.",
+            requestId,
           );
         }
 
@@ -464,6 +504,7 @@ async function handleItem(request: Request, id: number): Promise<Response> {
           502,
           "Hacker News is unavailable",
           "Please try again in a moment.",
+          requestId,
         );
       }
     },
@@ -509,6 +550,7 @@ export default async function handler(
           404,
           "Page not found",
           "That page number is invalid.",
+          getRequestId(request),
         );
       }
       return await route.handler(request, pageNumber);
@@ -522,6 +564,7 @@ export default async function handler(
           404,
           "Item not found",
           "That story ID looks invalid.",
+          getRequestId(request),
         );
       }
       return await handleItem(request, id);
@@ -531,6 +574,7 @@ export default async function handler(
       404,
       "Page not found",
       "We couldn't find what you're looking for.",
+      getRequestId(request),
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -539,6 +583,7 @@ export default async function handler(
       500,
       "Something went wrong",
       "Please try again in a moment.",
+      getRequestId(request),
     );
   }
 }
