@@ -36,38 +36,54 @@ async function withProgrammableCache(
   // 2. Produce fresh
   const response = await producer();
 
+  // Only cache "successful" responses
   if (response.status < 200 || response.status >= 300) {
     return response;
   }
 
   const originalBody = response.body;
 
+  // Normalise headers + set TTL
   const headers = new Headers(response.headers);
   headers.set("Cache-Control", `public, max-age=${ttlSeconds}`);
 
+  // No body: just cache a simple empty response
   if (!originalBody) {
-    const cacheable = new Response(null, { status: response.status, headers });
-    cache.put(request, cacheable).catch((err) =>
-      console.error("Failed to cache (no-body):", err)
-    );
-    return new Response(null, { status: response.status, headers });
+    const cacheable = new Response(null, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+
+    cache.put(request, cacheable).catch((err) => {
+      console.error("Failed to cache (no-body) response:", err);
+    });
+
+    return new Response(null, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   }
 
+  // 3. Tee the body so we can stream to client AND cache
   const [bodyForClient, bodyForCache] = originalBody.tee();
 
   const responseForClient = new Response(bodyForClient, {
     status: response.status,
+    statusText: response.statusText,
     headers,
   });
 
   const responseForCache = new Response(bodyForCache, {
     status: response.status,
+    statusText: response.statusText,
     headers,
   });
 
-  cache.put(request, responseForCache).catch((err) =>
-    console.error("Failed to cache streaming response:", err)
-  );
+  cache.put(request, responseForCache).catch((err) => {
+    console.error("Failed to cache streaming response:", err);
+  });
 
   return responseForClient;
 }
@@ -83,50 +99,77 @@ async function handleTop(
   pageNumber: number,
 ): Promise<Response> {
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-    return new Response("Not Found", { status: 404 });
+    return new Response("Not Found (invalid page number)", { status: 404 });
   }
 
   return withProgrammableCache(
     request,
     HTML_CACHE_NAME,
-    30,
+    30, // TTL for top pages (seconds)
     async () => {
       try {
         const results = await fetchTopStoriesPage(pageNumber);
-        if (!results.length) {
-          return new Response("No such page", { status: 404 });
+
+        if (!results || results.length === 0) {
+          // <-- instead of "No such page", return explicit debug info
+          return new Response(
+            `No stories returned for page ${pageNumber} (length = 0).` +
+              `\nThis likely means fetchTopStoriesPage() returned an empty array.`,
+            { status: 500 },
+          );
         }
+
         return new HTMLResponse(home(results, pageNumber));
       } catch (e) {
-        console.error("Top fetch error:", e);
-        return new Response("Hacker News API error", { status: 502 });
+        const err = e as Error;
+        console.error("Top stories fetch error:", err);
+
+        const body =
+          "Hacker News API error while fetching top stories.\n\n" +
+          `Message: ${err.message ?? String(err)}\n\n` +
+          (err.stack ? `Stack:\n${err.stack}` : "");
+
+        return new Response(body, { status: 502 });
       }
     },
   );
 }
 
-async function handleItem(
-  request: Request,
-  id: number,
-): Promise<Response> {
+async function handleItem(request: Request, id: number): Promise<Response> {
   if (!Number.isFinite(id)) {
-    return new Response("Not Found", { status: 404 });
+    return new Response("Not Found (invalid item id)", { status: 404 });
   }
 
   return withProgrammableCache(
     request,
     HTML_CACHE_NAME,
-    60,
+    60, // TTL for item pages (seconds)
     async () => {
       try {
         const raw = await fetchItem(id);
 
-        // Important: HNPWA `type` is not always "story".
-        // Just reject missing/deleted/dead.
-        if (!raw || raw.deleted || raw.dead) {
-          return new Response("No such page", { status: 404 });
+        if (!raw) {
+          return new Response(
+            `No such page: fetchItem(${id}) returned null/undefined.`,
+            { status: 404 },
+          );
         }
 
+        if (raw.deleted) {
+          return new Response(
+            `No such page: item ${id} is marked as deleted.`,
+            { status: 404 },
+          );
+        }
+
+        if (raw.dead) {
+          return new Response(
+            `No such page: item ${id} is marked as dead.`,
+            { status: 404 },
+          );
+        }
+
+        // Map top-level story fields into your internal Item shape
         const story = mapStoryToItem(raw) as any;
 
         // HNPWA provides nested comments already
@@ -134,8 +177,15 @@ async function handleItem(
 
         return new HTMLResponse(article(story));
       } catch (e) {
-        console.error("Item fetch error:", e);
-        return new Response("Hacker News API error", { status: 502 });
+        const err = e as Error;
+        console.error("Item fetch error:", err);
+
+        const body =
+          `Hacker News API error while fetching item ${id}.\n\n` +
+          `Message: ${err.message ?? String(err)}\n\n` +
+          (err.stack ? `Stack:\n${err.stack}` : "");
+
+        return new Response(body, { status: 502 });
       }
     },
   );
@@ -145,12 +195,15 @@ async function handleIcon(request: Request): Promise<Response> {
   return withProgrammableCache(
     request,
     ASSET_CACHE_NAME,
-    86400,
-    async () =>
-      new Response(contents, {
+    86400, // 1 day for the icon
+    async () => {
+      return new Response(contents, {
         status: 200,
-        headers: { "content-type": "image/svg+xml; charset=utf-8" },
-      }),
+        headers: {
+          "content-type": "image/svg+xml; charset=utf-8",
+        },
+      });
+    },
   );
 }
 
@@ -166,22 +219,30 @@ export default async function handler(
     }
 
     if (path === "/icon.svg") {
-      return handleIcon(request);
+      return await handleIcon(request);
     }
 
     const topMatch = path.match(/^\/top\/(\d+)$/);
     if (topMatch) {
-      return handleTop(request, Number(topMatch[1]));
+      const pageNumber = Number.parseInt(topMatch[1], 10);
+      return await handleTop(request, pageNumber);
     }
 
     const itemMatch = path.match(/^\/item\/(\d+)$/);
     if (itemMatch) {
-      return handleItem(request, Number(itemMatch[1]));
+      const id = Number.parseInt(itemMatch[1], 10);
+      return await handleItem(request, id);
     }
 
-    return new Response("Not Found", { status: 404 });
-  } catch (err) {
-    console.error("Unhandled edge error:", err);
-    return new Response("Internal Server Error", { status: 500 });
+    return new Response(`Not Found: ${path}`, { status: 404 });
+  } catch (error) {
+    const err = error as Error;
+    const message =
+      "Unhandled error in edge function.\n\n" +
+      `Message: ${err.message ?? String(err)}\n\n` +
+      (err.stack ? `Stack:\n${err.stack}` : "");
+
+    console.error("Unhandled error in edge function:", err);
+    return new Response(message, { status: 500 });
   }
 }
