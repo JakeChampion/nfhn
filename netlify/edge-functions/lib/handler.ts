@@ -11,16 +11,6 @@ import {
 const HTML_CACHE_NAME = "nfhn-html";
 const ASSET_CACHE_NAME = "nfhn-assets";
 
-/**
- * Generic programmable cache wrapper.
- *
- * - Checks cache first (keyed by the incoming Request).
- * - If miss, calls `producer` to create a Response.
- * - For successful (2xx) responses, tees the body:
- *   - one stream to the client
- *   - one stream into Netlify's programmable cache
- * - Adds/overrides Cache-Control with `max-age=ttlSeconds`.
- */
 async function withProgrammableCache(
   request: Request,
   cacheName: string,
@@ -42,12 +32,9 @@ async function withProgrammableCache(
   }
 
   const originalBody = response.body;
-
-  // Normalise headers + set TTL
   const headers = new Headers(response.headers);
   headers.set("Cache-Control", `public, max-age=${ttlSeconds}`);
 
-  // No body: just cache a simple empty response
   if (!originalBody) {
     const cacheable = new Response(null, {
       status: response.status,
@@ -66,7 +53,6 @@ async function withProgrammableCache(
     });
   }
 
-  // 3. Tee the body so we can stream to client AND cache
   const [bodyForClient, bodyForCache] = originalBody.tee();
 
   const responseForClient = new Response(bodyForClient, {
@@ -99,7 +85,7 @@ async function handleTop(
   pageNumber: number,
 ): Promise<Response> {
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-    return new Response("Not Found (invalid page number)", { status: 404 });
+    return new Response("Not Found", { status: 404 });
   }
 
   return withProgrammableCache(
@@ -109,33 +95,13 @@ async function handleTop(
     async () => {
       try {
         const results = await fetchTopStoriesPage(pageNumber);
-
-        if (!results || results.length === 0) {
-          // Fetch from the API directly to check what's happening (bypass cache)
-          const url = `https://api.hnpwa.com/v0/news/${pageNumber}.json`;
-          const debugFetch = await fetch(url);
-          const debugText = await debugFetch.text();
-
-          return new Response(
-            `No stories returned for page ${pageNumber} (length = 0)\n\n` +
-              `Fetched: ${url}\n` +
-              `Status: ${debugFetch.status} ${debugFetch.statusText}\n\n` +
-              `Raw body:\n${debugText.slice(0, 1000)}...`,
-            { status: 502 },
-          );
+        if (!results.length) {
+          return new Response("No such page", { status: 404 });
         }
-
         return new HTMLResponse(home(results, pageNumber));
       } catch (e) {
-        const err = e as Error;
-        console.error("Top stories fetch error:", err);
-
-        const body =
-          "Hacker News API error while fetching top stories.\n\n" +
-          `Message: ${err.message ?? String(err)}\n\n` +
-          (err.stack ? `Stack:\n${err.stack}` : "");
-
-        return new Response(body, { status: 502 });
+        console.error("Top stories fetch error:", e);
+        return new Response("Hacker News API error", { status: 502 });
       }
     },
   );
@@ -143,55 +109,27 @@ async function handleTop(
 
 async function handleItem(request: Request, id: number): Promise<Response> {
   if (!Number.isFinite(id)) {
-    return new Response("Not Found (invalid item id)", { status: 404 });
+    return new Response("Not Found", { status: 404 });
   }
 
   return withProgrammableCache(
     request,
     HTML_CACHE_NAME,
-    60, // TTL for item pages (seconds)
+    60,
     async () => {
       try {
         const raw = await fetchItem(id);
-
-        if (!raw) {
-          return new Response(
-            `No such page: fetchItem(${id}) returned null/undefined.`,
-            { status: 404 },
-          );
+        if (!raw || raw.deleted || raw.dead) {
+          return new Response("No such page", { status: 404 });
         }
 
-        if (raw.deleted) {
-          return new Response(
-            `No such page: item ${id} is marked as deleted.`,
-            { status: 404 },
-          );
-        }
-
-        if (raw.dead) {
-          return new Response(
-            `No such page: item ${id} is marked as dead.`,
-            { status: 404 },
-          );
-        }
-
-        // Map top-level story fields into your internal Item shape
-        const story = mapStoryToItem(raw) as any;
-
-        // HNPWA provides nested comments already
+        const story = mapStoryToItem(raw);
         story.comments = raw.comments ?? [];
 
         return new HTMLResponse(article(story));
       } catch (e) {
-        const err = e as Error;
-        console.error("Item fetch error:", err);
-
-        const body =
-          `Hacker News API error while fetching item ${id}.\n\n` +
-          `Message: ${err.message ?? String(err)}\n\n` +
-          (err.stack ? `Stack:\n${err.stack}` : "");
-
-        return new Response(body, { status: 502 });
+        console.error("Item fetch error:", e);
+        return new Response("Hacker News API error", { status: 502 });
       }
     },
   );
@@ -201,15 +139,14 @@ async function handleIcon(request: Request): Promise<Response> {
   return withProgrammableCache(
     request,
     ASSET_CACHE_NAME,
-    86400, // 1 day for the icon
-    async () => {
-      return new Response(contents, {
+    86400,
+    async () =>
+      new Response(contents, {
         status: 200,
         headers: {
           "content-type": "image/svg+xml; charset=utf-8",
         },
-      });
-    },
+      }),
   );
 }
 
@@ -240,15 +177,10 @@ export default async function handler(
       return await handleItem(request, id);
     }
 
-    return new Response(`Not Found: ${path}`, { status: 404 });
+    return new Response("Not Found", { status: 404 });
   } catch (error) {
-    const err = error as Error;
-    const message =
-      "Unhandled error in edge function.\n\n" +
-      `Message: ${err.message ?? String(err)}\n\n` +
-      (err.stack ? `Stack:\n${err.stack}` : "");
-
-    console.error("Unhandled error in edge function:", err);
-    return new Response(message, { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("Unhandled error in edge function:", message);
+    return new Response("Internal Server Error", { status: 500 });
   }
 }
