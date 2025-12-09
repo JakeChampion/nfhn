@@ -11,6 +11,8 @@ const FEED_ENDPOINTS: Record<FeedSlug, "news" | "ask" | "show" | "jobs"> = {
   jobs: "jobs",
 };
 
+export type ItemType = "ask" | "show" | "job" | "link" | "comment";
+
 export interface HNAPIItem {
   id: number;
   title?: string;
@@ -19,7 +21,7 @@ export interface HNAPIItem {
   time?: number;
   time_ago?: string;
   comments_count?: number;
-  type: string; // "link" | "ask" | "show" | "job" | "comment"
+  type: ItemType; // "link" | "ask" | "show" | "job" | "comment"
   url?: string;
   domain?: string;
   content?: string;
@@ -38,7 +40,7 @@ export interface Item {
   content: string;
   deleted?: boolean;
   dead?: boolean;
-  type: string;
+  type: ItemType;
   url?: string;
   domain?: string;
   comments: HNAPIItem[]; // nested HNPWA comments tree

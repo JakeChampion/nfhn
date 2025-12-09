@@ -1,9 +1,7 @@
 // render.ts
 import { escape, type HTML, html, unsafeHTML } from "./html.ts";
 import { FEEDS } from "./feeds.ts";
-import { type FeedSlug, type HNAPIItem, type Item } from "./hn.ts";
-
-type StoryType = Item["type"];
+import { type FeedSlug, type HNAPIItem, type Item, type ItemType } from "./hn.ts";
 
 type TypeMeta = {
   label: string;
@@ -11,9 +9,9 @@ type TypeMeta = {
   href: (item: Item) => string;
 };
 
-type KnownType = "ask" | "show" | "job" | "link" | "comment";
+type StoryType = ItemType;
 
-const TYPE_META: Record<KnownType, TypeMeta> = {
+const TYPE_META: Record<ItemType, TypeMeta> = {
   ask: { label: "Ask HN", badgeClass: "badge-ask", href: (item) => `/item/${item.id}` },
   show: { label: "Show HN", badgeClass: "badge-show", href: (item) => `/item/${item.id}` },
   job: {
@@ -29,12 +27,7 @@ const TYPE_META: Record<KnownType, TypeMeta> = {
   comment: { label: "Comment", badgeClass: "badge-default", href: (item) => `/item/${item.id}` },
 };
 
-const getTypeMeta = (type: StoryType): TypeMeta =>
-  TYPE_META[type as KnownType] ?? {
-    label: type,
-    badgeClass: "badge-default",
-    href: (item: Item) => item.url ?? `/item/${item.id}`,
-  };
+const getTypeMeta = (type: StoryType): TypeMeta => TYPE_META[type];
 
 const tpl = html;
 
