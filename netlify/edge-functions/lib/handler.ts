@@ -4,6 +4,9 @@ import { HTMLResponse } from "./html.ts";
 import { home, article } from "./render.ts";
 import {
   fetchTopStoriesPage,
+  fetchAskStoriesPage,
+  fetchShowStoriesPage,
+  fetchJobsStoriesPage,
   fetchItem,
   mapStoryToItem,
 } from "./hn.ts";
@@ -80,6 +83,24 @@ const redirectToTop1 = (): Response =>
     headers: { Location: "/top/1" },
   });
 
+const redirectToAsk1 = (): Response =>
+  new Response(null, {
+    status: 301,
+    headers: { Location: "/ask/1" },
+  });
+
+const redirectToShow1 = (): Response =>
+  new Response(null, {
+    status: 301,
+    headers: { Location: "/show/1" },
+  });
+
+const redirectToJobs1 = (): Response =>
+  new Response(null, {
+    status: 301,
+    headers: { Location: "/jobs/1" },
+  });
+
 async function handleTop(
   request: Request,
   pageNumber: number,
@@ -98,9 +119,90 @@ async function handleTop(
         if (!results.length) {
           return new Response("No such page", { status: 404 });
         }
-        return new HTMLResponse(home(results, pageNumber));
+        return new HTMLResponse(home(results, pageNumber, "top"));
       } catch (e) {
         console.error("Top stories fetch error:", e);
+        return new Response("Hacker News API error", { status: 502 });
+      }
+    },
+  );
+}
+
+async function handleAsk(
+  request: Request,
+  pageNumber: number,
+): Promise<Response> {
+  if (!Number.isFinite(pageNumber) || pageNumber < 1) {
+    return new Response("Not Found", { status: 404 });
+  }
+
+  return withProgrammableCache(
+    request,
+    HTML_CACHE_NAME,
+    30,
+    async () => {
+      try {
+        const results = await fetchAskStoriesPage(pageNumber);
+        if (!results.length) {
+          return new Response("No such page", { status: 404 });
+        }
+        return new HTMLResponse(home(results, pageNumber, "ask"));
+      } catch (e) {
+        console.error("Ask stories fetch error:", e);
+        return new Response("Hacker News API error", { status: 502 });
+      }
+    },
+  );
+}
+
+async function handleShow(
+  request: Request,
+  pageNumber: number,
+): Promise<Response> {
+  if (!Number.isFinite(pageNumber) || pageNumber < 1) {
+    return new Response("Not Found", { status: 404 });
+  }
+
+  return withProgrammableCache(
+    request,
+    HTML_CACHE_NAME,
+    30,
+    async () => {
+      try {
+        const results = await fetchShowStoriesPage(pageNumber);
+        if (!results.length) {
+          return new Response("No such page", { status: 404 });
+        }
+        return new HTMLResponse(home(results, pageNumber, "show"));
+      } catch (e) {
+        console.error("Show stories fetch error:", e);
+        return new Response("Hacker News API error", { status: 502 });
+      }
+    },
+  );
+}
+
+async function handleJobs(
+  request: Request,
+  pageNumber: number,
+): Promise<Response> {
+  if (!Number.isFinite(pageNumber) || pageNumber < 1) {
+    return new Response("Not Found", { status: 404 });
+  }
+
+  return withProgrammableCache(
+    request,
+    HTML_CACHE_NAME,
+    30,
+    async () => {
+      try {
+        const results = await fetchJobsStoriesPage(pageNumber);
+        if (!results.length) {
+          return new Response("No such page", { status: 404 });
+        }
+        return new HTMLResponse(home(results, pageNumber, "jobs"));
+      } catch (e) {
+        console.error("Jobs stories fetch error:", e);
         return new Response("Hacker News API error", { status: 502 });
       }
     },
@@ -161,6 +263,18 @@ export default async function handler(
       return redirectToTop1();
     }
 
+    if (path === "/ask" || path === "/ask/") {
+      return redirectToAsk1();
+    }
+
+    if (path === "/show" || path === "/show/") {
+      return redirectToShow1();
+    }
+
+    if (path === "/jobs" || path === "/jobs/") {
+      return redirectToJobs1();
+    }
+
     if (path === "/icon.svg") {
       return await handleIcon(request);
     }
@@ -169,6 +283,24 @@ export default async function handler(
     if (topMatch) {
       const pageNumber = Number.parseInt(topMatch[1], 10);
       return await handleTop(request, pageNumber);
+    }
+
+    const askMatch = path.match(/^\/ask\/(\d+)$/);
+    if (askMatch) {
+      const pageNumber = Number.parseInt(askMatch[1], 10);
+      return await handleAsk(request, pageNumber);
+    }
+
+    const showMatch = path.match(/^\/show\/(\d+)$/);
+    if (showMatch) {
+      const pageNumber = Number.parseInt(showMatch[1], 10);
+      return await handleShow(request, pageNumber);
+    }
+
+    const jobsMatch = path.match(/^\/jobs\/(\d+)$/);
+    if (jobsMatch) {
+      const pageNumber = Number.parseInt(jobsMatch[1], 10);
+      return await handleJobs(request, pageNumber);
     }
 
     const itemMatch = path.match(/^\/item\/(\d+)$/);
