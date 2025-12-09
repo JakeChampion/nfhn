@@ -1,13 +1,16 @@
 // hn.ts
-const HN_API_BASE = "https://hacker-news.firebaseio.com/v0";
+const HN_API_BASE = "https://api.hnpwa.com/v0";
 
 // Netlify programmable cache settings
 const HN_CACHE_NAME = "nfhn-hn-api";
 const TOP_IDS_TTL_SECONDS = 30; // 30s
 const ITEM_TTL_SECONDS = 60; // 60s
 
+// HNPWA + legacy HN item shape (superset to keep things flexible)
 export interface HNAPIItem {
   id: number;
+
+  // Legacy HN fields (firebase API)
   by?: string;
   time?: number;
   type: string;
@@ -20,6 +23,15 @@ export interface HNAPIItem {
   deleted?: boolean;
   dead?: boolean;
   domain?: string;
+
+  // HNPWA fields
+  user?: string;
+  points?: number;
+  time_ago?: string;
+  content?: string;
+  comments?: HNAPIItem[];
+  level?: number;
+  comments_count?: number;
 }
 
 export interface Item {
@@ -135,35 +147,51 @@ export function formatTimeAgo(unixSeconds: number | undefined): string {
   return `${years} year${years === 1 ? "" : "s"} ago`;
 }
 
-export function mapStoryToItem(
-  raw: HNAPIItem,
-  level = 0,
-): Item {
+// Map either HNPWA items or legacy HN items into your internal Item
+export function mapStoryToItem(raw: HNAPIItem, level = 0): Item {
   const time = raw.time ?? 0;
+
+  const points =
+    typeof raw.points === "number"
+      ? raw.points
+      : typeof raw.score === "number"
+        ? raw.score
+        : null;
+
+  const user = raw.user ?? raw.by ?? null;
+
+  const content = raw.content ?? raw.text ?? "";
+
+  const commentsCount =
+    typeof raw.comments_count === "number"
+      ? raw.comments_count
+      : typeof raw.descendants === "number"
+        ? raw.descendants
+        : 0;
+
+  const domain = raw.domain ?? extractDomain(raw.url);
+
   return {
     id: raw.id,
     title: raw.title ?? "",
-    points: typeof raw.score === "number" ? raw.score : null,
-    user: raw.by ?? null,
+    points,
+    user,
     time,
-    time_ago: formatTimeAgo(time),
-    content: raw.text ?? "",
+    // Prefer HNPWA's precomputed label if present, otherwise compute
+    time_ago: raw.time_ago || formatTimeAgo(time),
+    content,
     deleted: raw.deleted,
     dead: raw.dead,
     type: raw.type,
     url: raw.url,
-    domain: extractDomain(raw.url),
-    comments: [], // comments are streamed separately now
+    domain,
+    comments: [], // comments are streamed / fetched separately
     level,
-    comments_count:
-      typeof raw.descendants === "number" ? raw.descendants : 0,
+    comments_count: commentsCount,
   };
 }
 
-async function fetchTopIds(): Promise<number[] | null> {
-  return fetchJSONWithNetlifyCache<number[]>("/topstories.json", TOP_IDS_TTL_SECONDS);
-}
-
+// Single item (with comments) from HNPWA
 export async function fetchItem(id: number): Promise<HNAPIItem | null> {
   return fetchJSONWithNetlifyCache<HNAPIItem>(
     `/item/${id}.json`,
@@ -171,25 +199,24 @@ export async function fetchItem(id: number): Promise<HNAPIItem | null> {
   );
 }
 
+// Top stories page from HNPWA
 export async function fetchTopStoriesPage(
   pageNumber: number,
   pageSize = 30,
 ): Promise<Item[]> {
-  const ids = await fetchTopIds();
-  if (!ids || !ids.length) {
+  // HNPWA is already paginated: /news/1.json, /news/2.json, ...
+  const stories = await fetchJSONWithNetlifyCache<HNAPIItem[]>(
+    `/news/${pageNumber}.json`,
+    TOP_IDS_TTL_SECONDS,
+  );
+
+  if (!stories || !stories.length) {
     return [];
   }
 
-  const start = (pageNumber - 1) * pageSize;
-  const end = start + pageSize;
-  const slice = ids.slice(start, end);
-  if (!slice.length) {
-    return [];
-  }
+  const slice = stories.slice(0, pageSize);
 
-  const stories = await Promise.all(slice.map((id) => fetchItem(id)));
-
-  return stories
+  return slice
     .filter(
       (s): s is HNAPIItem =>
         !!s && !s.deleted && !s.dead && s.type === "story",
