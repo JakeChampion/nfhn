@@ -14,6 +14,48 @@ import {
 const MAX_COMMENT_DEPTH = 10;
 const MAX_COMMENTS_TOTAL = 300;
 
+function typeLabel(type: string): string {
+  switch (type) {
+    case "ask":
+      return "Ask HN";
+    case "show":
+      return "Show HN";
+    case "job":
+      return "Job";
+    case "link":
+      return "Link";
+    case "comment":
+      return "Comment";
+    default:
+      return type;
+  }
+}
+
+function typeClass(type: string): string {
+  switch (type) {
+    case "ask":
+      return "badge-ask";
+    case "show":
+      return "badge-show";
+    case "job":
+      return "badge-job";
+    case "link":
+      return "badge-link";
+    default:
+      return "badge-default";
+  }
+}
+
+// Decide where the main story title link should go
+function primaryHref(item: Item): string {
+  // Ask / Show should always go to the item page (discussion/content)
+  if (item.type === "ask" || item.type === "show") {
+    return `/item/${item.id}`;
+  }
+  // Link / Job (and anything else) go to external URL if present, otherwise item page
+  return item.url ?? `/item/${item.id}`;
+}
+
 export const home = (content: Item[], pageNumber: number): HTML => html`
 <!DOCTYPE html>
 <html lang="en">
@@ -85,9 +127,52 @@ export const home = (content: Item[], pageNumber: number): HTML => html`
         justify-content: center;
         align-content: center;
         flex-direction: column;
+        text-decoration: none;
+        color: inherit;
+      }
+      a:hover .story-title-text {
+        text-decoration: underline;
       }
       h1,h2,h3 {
         line-height: 1.2
+      }
+      .badge {
+        display: inline-block;
+        padding: 0.1em 0.4em;
+        border-radius: 999px;
+        font-size: 0.7em;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-right: 0.5em;
+        border: 1px solid rgba(0,0,0,0.1);
+        background: rgba(0,0,0,0.04);
+      }
+      .badge-link {
+        background: rgba(25, 118, 210, 0.08);
+        border-color: rgba(25, 118, 210, 0.25);
+      }
+      .badge-ask {
+        background: rgba(244, 67, 54, 0.08);
+        border-color: rgba(244, 67, 54, 0.25);
+      }
+      .badge-show {
+        background: rgba(67, 160, 71, 0.08);
+        border-color: rgba(67, 160, 71, 0.25);
+      }
+      .badge-job {
+        background: rgba(255, 160, 0, 0.08);
+        border-color: rgba(255, 160, 0, 0.25);
+      }
+      .badge-default {
+        background: rgba(0, 0, 0, 0.04);
+        border-color: rgba(0, 0, 0, 0.15);
+      }
+      .story-title-text {
+        font-weight: 500;
+      }
+      .story-meta {
+        font-size: 0.85em;
+        opacity: 0.8;
       }
     </style>
     <title>NFHN: Page ${pageNumber}</title>
@@ -97,8 +182,12 @@ export const home = (content: Item[], pageNumber: number): HTML => html`
       <ol>
         ${content.map((data: Item) => html`
           <li>
-            <a class="title" href="${data.url ?? `/item/${data.id}`}">
-              ${data.title}
+            <a class="title" href="${primaryHref(data)}">
+              <span class="badge ${typeClass(data.type)}">${typeLabel(data.type)}</span>
+              <span class="story-title-text">${data.title}</span>
+              ${data.domain
+                ? html`<span class="story-meta">(${data.domain})</span>`
+                : ""}
             </a>
             <a class="comments" href="/item/${data.id}">
               view ${data.comments_count > 0 ? data.comments_count + " comments" : "discussion"}
@@ -106,7 +195,7 @@ export const home = (content: Item[], pageNumber: number): HTML => html`
           </li>
         `)}
       </ol>
-      <a href="/top/${pageNumber + 1}" style="text-align: center;">More</a>
+      <a href="/top/${pageNumber + 1}" style="text-align: center; display:block; margin-top:1.5em;">More</a>
     </main>
   </body>
 </html>
@@ -185,6 +274,49 @@ const shellPage = (title: string, body: HTML): HTML =>
       p {
         padding-block: 0.5em;
         margin: 0;
+      }
+      nav a {
+        text-decoration: none;
+        color: inherit;
+      }
+      nav a:hover {
+        text-decoration: underline;
+      }
+      .badge {
+        display: inline-block;
+        padding: 0.2em 0.6em;
+        border-radius: 999px;
+        font-size: 0.7em;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-right: 0.5em;
+        border: 1px solid rgba(0,0,0,0.1);
+        background: rgba(0,0,0,0.04);
+        vertical-align: middle;
+      }
+      .badge-link {
+        background: rgba(25, 118, 210, 0.08);
+        border-color: rgba(25, 118, 210, 0.25);
+      }
+      .badge-ask {
+        background: rgba(244, 67, 54, 0.08);
+        border-color: rgba(244, 67, 54, 0.25);
+      }
+      .badge-show {
+        background: rgba(67, 160, 71, 0.08);
+        border-color: rgba(67, 160, 71, 0.25);
+      }
+      .badge-job {
+        background: rgba(255, 160, 0, 0.08);
+        border-color: rgba(255, 160, 0, 0.25);
+      }
+      .badge-default {
+        background: rgba(0, 0, 0, 0.04);
+        border-color: rgba(0, 0, 0, 0.15);
+      }
+      .meta-line {
+        font-size: 0.9em;
+        opacity: 0.85;
       }
     </style>
     <title>${title}</title>
@@ -282,14 +414,22 @@ export const article = (item: Item): HTML =>
     <hr />
     <main>
       <article>
-        <a href="${item.url ?? "#"}">
-          <h1>${item.title}</h1>
-          <small>${item.domain ?? ""}</small>
+        <a href="${primaryHref(item)}">
+          <span class="badge ${typeClass(item.type)}">${typeLabel(item.type)}</span>
+          <h1 style="display:inline-block; margin-left:0.4em;">${item.title}</h1>
+          ${item.domain
+            ? html`<small>${item.domain}</small>`
+            : ""}
         </a>
-        <p>
-          ${item.points ?? 0} points by
-          ${item.user ?? "[deleted]"} ${item.time_ago}
-        </p>
+        ${
+          // Job with no comments: hide points/comments line, just show "posted X ago"
+          item.type === "job" && item.comments_count === 0
+            ? html`<p class="meta-line">posted ${item.time_ago}</p>`
+            : html`<p class="meta-line">
+                ${item.points ?? 0} points by
+                ${item.user ?? "[deleted]"} ${item.time_ago}
+              </p>`
+        }
         <hr />
         ${unsafeHTML(item.content || "")}
         ${commentsSection(item.comments)}
