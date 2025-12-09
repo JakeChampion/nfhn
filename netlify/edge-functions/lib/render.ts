@@ -1,16 +1,13 @@
 // render.ts
 import {
   type HTML,
-  type HTMLValue,
   html,
-  raw,
   unsafeHTML,
   escape,
 } from "./html.ts";
 import {
   type Item,
   type HNAPIItem,
-  formatTimeAgo,
 } from "./hn.ts";
 
 // Limits to keep edge execution bounded
@@ -203,7 +200,7 @@ const shellPage = (title: string, body: HTML): HTML =>
     `;
   })();
 
-// Streaming comments section — now works with nested HNPWA comment objects
+// Streaming comments section over nested HNPWA comments
 const commentsSection = (rootComments: HNAPIItem[] | undefined): HTML =>
   (async function* (): AsyncGenerator<string> {
     if (!rootComments || rootComments.length === 0) {
@@ -221,7 +218,6 @@ const commentsSection = (rootComments: HNAPIItem[] | undefined): HTML =>
     yield "</section>";
   })();
 
-// Core streaming comment renderer: walk nested comments tree
 async function* streamComments(
   comments: HNAPIItem[],
   level: number,
@@ -236,29 +232,25 @@ async function* streamComments(
 
   for (const comment of comments) {
     if (state.remaining <= 0) break;
-
     if (comment.deleted || comment.dead || comment.type !== "comment") {
       continue;
     }
 
     state.remaining -= 1;
 
-    const time_ago =
-      comment.time_ago || formatTimeAgo(comment.time ?? 0);
+    const time_ago = comment.time_ago ?? "";
     const user = comment.user ?? "[deleted]";
     const content = comment.content ?? "";
 
     if (isNested) yield "<li>";
 
-    // Render a single comment block
     yield `<details ${level === 0 ? "open" : ""} id="${comment.id}">`;
     yield `<summary><span>${escape(user)} - <a href="#${
       comment.id
     }">${escape(time_ago)}</a></span></summary>`;
-    // HNPWA comment content is already HTML (e.g. <p>...</p>), so don't escape
+    // HNPWA comment content is already HTML
     yield `<div>${content}</div>`;
 
-    // Children streamed recursively
     if (
       comment.comments &&
       comment.comments.length &&
@@ -266,7 +258,7 @@ async function* streamComments(
       level + 1 < MAX_COMMENT_DEPTH
     ) {
       for await (const chunk of streamComments(
-        comment.comments as HNAPIItem[],
+        comment.comments,
         level + 1,
         state,
       )) {
@@ -282,7 +274,6 @@ async function* streamComments(
   if (isNested) yield "</ul>";
 }
 
-// Note: second arg is now unnecessary because item.comments already holds the tree
 export const article = (item: Item): HTML =>
   shellPage(`NFHN: ${item.title}`, html`
     <nav>
@@ -301,7 +292,7 @@ export const article = (item: Item): HTML =>
         </p>
         <hr />
         ${unsafeHTML(item.content || "")}
-        ${commentsSection(item.comments as unknown as HNAPIItem[])}
+        ${commentsSection(item.comments)}
       </article>
     </main>
   `);
