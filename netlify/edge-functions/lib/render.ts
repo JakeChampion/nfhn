@@ -2,47 +2,38 @@
 import { escape, type HTML, html, unsafeHTML } from "./html.ts";
 import { type FeedSlug, type HNAPIItem, type Item } from "./hn.ts";
 
-function typeLabel(type: string): string {
-  switch (type) {
-    case "ask":
-      return "Ask HN";
-    case "show":
-      return "Show HN";
-    case "job":
-      return "Job";
-    case "link":
-      return "Link";
-    case "comment":
-      return "Comment";
-    default:
-      return type;
-  }
-}
+type StoryType = Item["type"];
 
-function typeClass(type: string): string {
-  switch (type) {
-    case "ask":
-      return "badge-ask";
-    case "show":
-      return "badge-show";
-    case "job":
-      return "badge-job";
-    case "link":
-      return "badge-link";
-    default:
-      return "badge-default";
-  }
-}
+type TypeMeta = {
+  label: string;
+  badgeClass: string;
+  href: (item: Item) => string;
+};
 
-// Decide where the main story title link should go
-function primaryHref(item: Item): string {
-  // Ask / Show should always go to the item page (discussion/content)
-  if (item.type === "ask" || item.type === "show") {
-    return `/item/${item.id}`;
-  }
-  // Link / Job (and anything else) go to external URL if present, otherwise item page
-  return item.url ?? `/item/${item.id}`;
-}
+type KnownType = "ask" | "show" | "job" | "link" | "comment";
+
+const TYPE_META: Record<KnownType, TypeMeta> = {
+  ask: { label: "Ask HN", badgeClass: "badge-ask", href: (item) => `/item/${item.id}` },
+  show: { label: "Show HN", badgeClass: "badge-show", href: (item) => `/item/${item.id}` },
+  job: {
+    label: "Job",
+    badgeClass: "badge-job",
+    href: (item) => item.url ?? `/item/${item.id}`,
+  },
+  link: {
+    label: "Link",
+    badgeClass: "badge-link",
+    href: (item) => item.url ?? `/item/${item.id}`,
+  },
+  comment: { label: "Comment", badgeClass: "badge-default", href: (item) => `/item/${item.id}` },
+};
+
+const getTypeMeta = (type: StoryType): TypeMeta =>
+  TYPE_META[type as KnownType] ?? {
+    label: type,
+    badgeClass: "badge-default",
+    href: (item: Item) => item.url ?? `/item/${item.id}`,
+  };
 
 const tpl = html;
 
@@ -97,11 +88,13 @@ const turboScript = tpl`
 </script>
 `;
 
-const renderStory = (data: Item): HTML =>
-  html`
+const renderStory = (data: Item): HTML => {
+  const meta = getTypeMeta(data.type);
+
+  return html`
     <li>
-      <a class="title" href="${primaryHref(data)}">
-        <span class="badge ${typeClass(data.type)}">${typeLabel(data.type)}</span>
+      <a class="title" href="${meta.href(data)}">
+        <span class="badge ${meta.badgeClass}">${meta.label}</span>
         <span class="story-title-text">${data.title}</span>
         ${data.domain
           ? html`
@@ -114,6 +107,7 @@ const renderStory = (data: Item): HTML =>
       </a>
     </li>
   `;
+};
 
 export const home = (
   content: Item[],
@@ -529,6 +523,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
     : item.type === "job"
     ? "jobs"
     : "top";
+  const meta = getTypeMeta(item.type);
 
   return shellPage(
     `NFHN: ${item.title}`,
@@ -549,8 +544,8 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
             : ""}" aria-current="${activeFeed === "jobs" ? "page" : ""}">Jobs</a>
         </nav>
         <article>
-          <a href="${primaryHref(item)}">
-            <span class="badge ${typeClass(item.type)}">${typeLabel(item.type)}</span>
+          <a href="${meta.href(item)}">
+            <span class="badge ${meta.badgeClass}">${meta.label}</span>
             <h1 style="display:inline-block; margin-left:0.4em;">${item.title}</h1>
             ${item.domain
               ? html`
