@@ -1,4 +1,2 @@
-# [[plugins]]
-#   package = "@netlify/plugin-csp-nonce"
-#   [plugins.inputs]
-#     reportOnly = false
+[build]
+  publish = "static"
