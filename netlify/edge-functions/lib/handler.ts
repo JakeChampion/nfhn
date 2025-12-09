@@ -48,8 +48,12 @@ const renderErrorPage = (
   status: number,
   title: string,
   description: string,
-): Response =>
-  new HTMLResponse(
+  requestId?: string,
+): Response => {
+  const now = new Date();
+  const id = requestId ?? crypto.randomUUID();
+
+  return new HTMLResponse(
     `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -82,12 +86,18 @@ const renderErrorPage = (
     <main>
       <h1>${escape(title)}</h1>
       <p>${escape(description)}</p>
-      <p><a href="/">Return to home</a></p>
+      <p><a href="/">Return to home</a> &middot; <a href="#" onclick="location.reload();return false;">Retry</a></p>
+      <p style="font-size:0.9em; opacity:0.7;">Request ID: ${escape(id)}<br/>${
+      escape(
+        now.toUTCString(),
+      )
+    }</p>
     </main>
   </body>
 </html>`,
     { status },
   );
+};
 
 const cacheControlValue = (ttlSeconds: number, swrSeconds: number): string => {
   const parts = [`public`, `max-age=${ttlSeconds}`];
