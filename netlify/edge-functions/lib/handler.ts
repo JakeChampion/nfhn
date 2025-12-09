@@ -1,5 +1,6 @@
 // handler.ts
 import { escape, HTMLResponse } from "./html.ts";
+import { FEEDS } from "./feeds.ts";
 import { article, home } from "./render.ts";
 import { type FeedSlug, fetchItem, fetchStoriesPage, mapStoryToItem } from "./hn.ts";
 
@@ -253,13 +254,9 @@ async function withProgrammableCache(
   const cached = await cache.match(request);
   const cachedAge = cached ? ageSeconds(cached) : Infinity;
 
-  // Fresh hit
-  if (cached && cachedAge <= ttlSeconds) {
-    return applyConditionalRequest(request, cached);
-  }
+  const serveFresh = (response: Response): Response => applyConditionalRequest(request, response);
 
-  // Stale-but-serveable hit: return now and refresh in background
-  if (cached && cachedAge <= ttlSeconds + swrSeconds) {
+  const revalidateInBackground = (): void => {
     producer()
       .then((response) => {
         if (!isCacheable(response)) return;
@@ -275,8 +272,35 @@ async function withProgrammableCache(
       .catch((err) => {
         console.error("Background revalidation failed:", err);
       });
+  };
 
-    return applyConditionalRequest(request, cached);
+  const serveStaleAndRevalidate = (stale: Response): Response => {
+    revalidateInBackground();
+    return serveFresh(stale);
+  };
+
+  const cacheAndReturn = (response: Response): Response => {
+    const { client, cacheable } = prepareResponses(
+      response,
+      ttlSeconds,
+      swrSeconds,
+    );
+
+    cache.put(request, cacheable).catch((err) => {
+      console.error("Failed to cache response:", err);
+    });
+
+    return serveFresh(client);
+  };
+
+  // Fresh hit
+  if (cached && cachedAge <= ttlSeconds) {
+    return serveFresh(cached);
+  }
+
+  // Stale-but-serveable hit: return now and refresh in background
+  if (cached && cachedAge <= ttlSeconds + swrSeconds) {
+    return serveStaleAndRevalidate(cached);
   }
 
   // Miss or too stale: fetch fresh
@@ -294,17 +318,7 @@ async function withProgrammableCache(
       return response;
     }
 
-    const { client, cacheable } = prepareResponses(
-      response,
-      ttlSeconds,
-      swrSeconds,
-    );
-
-    cache.put(request, cacheable).catch((err) => {
-      console.error("Failed to cache response:", err);
-    });
-
-    return applyConditionalRequest(request, client);
+    return cacheAndReturn(response);
   } catch (err) {
     console.error("Cache producer threw:", err);
     if (offlineFallback) return offlineFallback();
@@ -317,33 +331,6 @@ async function withProgrammableCache(
     );
   }
 }
-
-const FEEDS: Array<{
-  slug: FeedSlug;
-  emptyTitle: string;
-  emptyDescription: string;
-}> = [
-  {
-    slug: "top",
-    emptyTitle: "No stories found",
-    emptyDescription: "We couldn't find that page of top stories.",
-  },
-  {
-    slug: "ask",
-    emptyTitle: "No stories found",
-    emptyDescription: "We couldn't find that page of Ask HN posts.",
-  },
-  {
-    slug: "show",
-    emptyTitle: "No stories found",
-    emptyDescription: "We couldn't find that page of Show HN posts.",
-  },
-  {
-    slug: "jobs",
-    emptyTitle: "No jobs found",
-    emptyDescription: "We couldn't find that page of jobs.",
-  },
-];
 
 function createFeedHandler({
   slug,
