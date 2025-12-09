@@ -18,6 +18,57 @@ function primaryHref(item: Item): string {
 }
 
 const tpl = html;
+const baseStyles = tpl`
+      body {
+        font-family: system-ui, sans-serif;
+        background-color: whitesmoke;
+        line-height: 1.6;
+        font-size: 18px;
+      }
+      main {
+        display: block;
+      }
+      a {
+        text-decoration: none;
+        color: inherit;
+      }
+      a:focus-visible,
+      .more-link:focus-visible {
+        outline: 2px solid #ff7a18;
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
+      .badge {
+        display: inline-block;
+        border-radius: 999px;
+        font-size: 0.7em;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-right: 0.5em;
+        border: 1px solid rgba(0,0,0,0.1);
+        background: rgba(0,0,0,0.04);
+      }
+      .badge-link {
+        background: rgba(25, 118, 210, 0.08);
+        border-color: rgba(25, 118, 210, 0.25);
+      }
+      .badge-ask {
+        background: rgba(244, 67, 54, 0.08);
+        border-color: rgba(244, 67, 54, 0.25);
+      }
+      .badge-show {
+        background: rgba(67, 160, 71, 0.08);
+        border-color: rgba(67, 160, 71, 0.25);
+      }
+      .badge-job {
+        background: rgba(255, 160, 0, 0.08);
+        border-color: rgba(255, 160, 0, 0.25);
+      }
+      .badge-default {
+        background: rgba(0, 0, 0, 0.04);
+        border-color: rgba(0, 0, 0, 0.15);
+      }
+`;
 
 const turboScript = tpl`
 <script>
@@ -107,18 +158,12 @@ export const home = (
     <meta name="description" content="Hacker News ${feed} page ${pageNumber}: latest ${feed} stories.">
     <link rel="icon" type="image/svg+xml" href="/icon.svg">
     <style type="text/css">
+      ${baseStyles}
       body {
-        font-family: system-ui, sans-serif;
-        background-color: whitesmoke;
         margin: 40px auto;
         max-width: 650px;
-        line-height: 1.6;
-        font-size: 18px;
         padding: 0 1em;
         box-sizing: border-box;
-      }
-      main {
-        display: block;
       }
       ul {
         list-style: none;
@@ -170,51 +215,14 @@ export const home = (
         justify-content: center;
         align-content: center;
         flex-direction: column;
-        text-decoration: none;
-        color: inherit;
       }
       a:hover .story-title-text {
         text-decoration: underline;
       }
-      a:focus-visible {
-        outline: 2px solid #ff7a18;
-        outline-offset: 3px;
-        border-radius: 4px;
-      }
       h1,h2,h3 {
         line-height: 1.2
       }
-      .badge {
-        display: inline-block;
-        padding: 0.1em 0.4em;
-        border-radius: 999px;
-        font-size: 0.7em;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-right: 0.5em;
-        border: 1px solid rgba(0,0,0,0.1);
-        background: rgba(0,0,0,0.04);
-      }
-      .badge-link {
-        background: rgba(25, 118, 210, 0.08);
-        border-color: rgba(25, 118, 210, 0.25);
-      }
-      .badge-ask {
-        background: rgba(244, 67, 54, 0.08);
-        border-color: rgba(244, 67, 54, 0.25);
-      }
-      .badge-show {
-        background: rgba(67, 160, 71, 0.08);
-        border-color: rgba(67, 160, 71, 0.25);
-      }
-      .badge-job {
-        background: rgba(255, 160, 0, 0.08);
-        border-color: rgba(255, 160, 0, 0.25);
-      }
-      .badge-default {
-        background: rgba(0, 0, 0, 0.04);
-        border-color: rgba(0, 0, 0, 0.15);
-      }
+      .badge { padding: 0.1em 0.4em; }
       .story-title-text {
         font-weight: 500;
       }
@@ -280,21 +288,15 @@ const shellPage = (
     ${description ? tpl`<meta name="description" content="${description}" />` : ""}
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <style type="text/css">
+      ${baseStyles}
       * {
         box-sizing: border-box;
       }
       body {
-        font-family: system-ui, sans-serif;
-        background-color: whitesmoke;
         margin: 40px auto;
         max-width: 80ch;
-        line-height: 1.6;
-        font-size: 18px;
         color: #444;
         padding: 0 10px;
-      }
-      main {
-        display: block;
       }
       details {
         background-color: whitesmoke;
@@ -341,55 +343,10 @@ const shellPage = (
         padding-block: 0.5em;
         margin: 0;
       }
-      nav a {
-        text-decoration: none;
-        color: inherit;
-      }
       nav a:hover {
         text-decoration: underline;
       }
-      nav a:focus-visible {
-        outline: 2px solid #ff7a18;
-        outline-offset: 3px;
-        border-radius: 4px;
-      }
-      .more-link:focus-visible {
-        outline: 2px solid #ff7a18;
-        outline-offset: 3px;
-        border-radius: 4px;
-      }
-      .badge {
-        display: inline-block;
-        padding: 0.2em 0.6em;
-        border-radius: 999px;
-        font-size: 0.7em;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-right: 0.5em;
-        border: 1px solid rgba(0,0,0,0.1);
-        background: rgba(0,0,0,0.04);
-        vertical-align: middle;
-      }
-      .badge-link {
-        background: rgba(25, 118, 210, 0.08);
-        border-color: rgba(25, 118, 210, 0.25);
-      }
-      .badge-ask {
-        background: rgba(244, 67, 54, 0.08);
-        border-color: rgba(244, 67, 54, 0.25);
-      }
-      .badge-show {
-        background: rgba(67, 160, 71, 0.08);
-        border-color: rgba(67, 160, 71, 0.25);
-      }
-      .badge-job {
-        background: rgba(255, 160, 0, 0.08);
-        border-color: rgba(255, 160, 0, 0.25);
-      }
-      .badge-default {
-        background: rgba(0, 0, 0, 0.04);
-        border-color: rgba(0, 0, 0, 0.15);
-      }
+      .badge { padding: 0.2em 0.6em; vertical-align: middle; }
       .meta-line {
         font-size: 0.9em;
         opacity: 0.85;
