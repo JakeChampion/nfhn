@@ -3,6 +3,14 @@ const HN_API_BASE = "https://api.hnpwa.com/v0";
 const DEFAULT_TIMEOUT_MS = 4500;
 const MAX_RETRIES = 2;
 
+export type FeedSlug = "top" | "ask" | "show" | "jobs";
+const FEED_ENDPOINTS: Record<FeedSlug, "news" | "ask" | "show" | "jobs"> = {
+  top: "news",
+  ask: "ask",
+  show: "show",
+  jobs: "jobs",
+};
+
 export interface HNAPIItem {
   id: number;
   title?: string;
@@ -38,6 +46,8 @@ export interface Item {
   comments_count: number;
 }
 
+export type StoryItem = Item & { url?: string };
+
 function extractDomain(url?: string): string | undefined {
   if (!url) return undefined;
   try {
@@ -72,6 +82,7 @@ async function fetchJsonWithRetry<T>(
       const res = await fetch(url, { signal });
       if (!res.ok) {
         console.error(`HN ${label} API error:`, res.status, url);
+        if (res.status >= 400 && res.status < 500) break;
         continue;
       }
       return (await res.json()) as T;
@@ -114,7 +125,9 @@ export function formatTimeAgo(unixSeconds: number | undefined): string {
 }
 
 // Map HNPWA item → internal Item (sans comments)
-export function mapStoryToItem(raw: HNAPIItem, level = 0): Item {
+export function mapStoryToItem(raw: HNAPIItem, level = 0): Item | null {
+  if (!raw || typeof raw.id !== "number" || !raw.type) return null;
+
   const time = raw.time ?? 0;
   const points = typeof raw.points === "number" ? raw.points : null;
   const user = raw.user ?? null;
@@ -150,12 +163,12 @@ export async function fetchItem(id: number): Promise<HNAPIItem | null> {
 }
 
 async function fetchStoriesPageForFeed(
-  feed: "news" | "ask" | "show" | "jobs",
+  feed: FeedSlug,
   pageNumber: number,
   pageSize = 30,
-): Promise<Item[]> {
+): Promise<StoryItem[]> {
   const stories = await fetchJsonWithRetry<HNAPIItem[]>(
-    `${HN_API_BASE}/${feed}/${pageNumber}.json`,
+    `${HN_API_BASE}/${FEED_ENDPOINTS[feed]}/${pageNumber}.json`,
     feed,
   );
   if (!stories || !Array.isArray(stories) || !stories.length) {
@@ -165,37 +178,14 @@ async function fetchStoriesPageForFeed(
   const slice = stories.slice(0, pageSize);
   return slice
     .filter((s) => !!s && !s.deleted && !s.dead)
-    .map((s) => mapStoryToItem(s, 0));
+    .map((s) => mapStoryToItem(s, 0))
+    .filter((s): s is StoryItem => !!s);
 }
 
-// Top stories page (news)
-export function fetchTopStoriesPage(
+export function fetchStoriesPage(
+  feed: FeedSlug,
   pageNumber: number,
   pageSize = 30,
-): Promise<Item[]> {
-  return fetchStoriesPageForFeed("news", pageNumber, pageSize);
-}
-
-// Ask HN
-export function fetchAskStoriesPage(
-  pageNumber: number,
-  pageSize = 30,
-): Promise<Item[]> {
-  return fetchStoriesPageForFeed("ask", pageNumber, pageSize);
-}
-
-// Show HN
-export function fetchShowStoriesPage(
-  pageNumber: number,
-  pageSize = 30,
-): Promise<Item[]> {
-  return fetchStoriesPageForFeed("show", pageNumber, pageSize);
-}
-
-// Jobs
-export function fetchJobsStoriesPage(
-  pageNumber: number,
-  pageSize = 30,
-): Promise<Item[]> {
-  return fetchStoriesPageForFeed("jobs", pageNumber, pageSize);
+): Promise<StoryItem[]> {
+  return fetchStoriesPageForFeed(feed, pageNumber, pageSize);
 }

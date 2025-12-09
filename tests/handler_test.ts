@@ -321,3 +321,85 @@ Deno.test("caches list responses and avoids repeat fetches within TTL", async ()
     assertEquals(after, 1, "second request should use cached response");
   });
 });
+
+Deno.test("serves stale responses, revalidates, and honors conditional requests", async () => {
+  const stories = [
+    {
+      id: 1,
+      title: "Cached Story",
+      points: 10,
+      user: "cacher",
+      time: Math.floor(Date.now() / 1000) - 60,
+      type: "link",
+      url: "https://example.com/cached",
+      domain: "example.com",
+      comments_count: 0,
+    },
+    {
+      id: 1,
+      title: "Updated Story",
+      points: 12,
+      user: "refresher",
+      time: Math.floor(Date.now() / 1000) - 30,
+      type: "link",
+      url: "https://example.com/updated",
+      domain: "example.com",
+      comments_count: 1,
+    },
+  ];
+
+  let call = 0;
+  const routes = {
+    [topStoriesUrl]: () => {
+      const idx = Math.min(call, stories.length - 1);
+      call += 1;
+      return [stories[idx]];
+    },
+  };
+
+  await withMockedEnv(routes, async ({ counts }) => {
+    const originalNow = Date.now;
+    const baseNow = Date.now();
+    Date.now = () => baseNow;
+
+    try {
+      const fresh = await handler(new Request("https://nfhn.test/top/1"));
+      const freshBody = await fresh.text();
+
+      assertStringIncludes(freshBody, "Cached Story");
+      assertEquals(counts.get(topStoriesUrl) ?? 0, 1);
+
+      // Age the cached response so it is stale-but-serveable.
+      Date.now = () => baseNow + 31_000;
+
+      const stale = await handler(new Request("https://nfhn.test/top/1"));
+      const staleBody = await stale.text();
+      assertStringIncludes(staleBody, "Cached Story"); // served stale immediately
+
+      // Wait for background revalidation to complete.
+      for (let i = 0; i < 5 && (counts.get(topStoriesUrl) ?? 0) < 2; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      assertEquals(counts.get(topStoriesUrl) ?? 0, 2, "should revalidate in background");
+      // Give the background cache put a moment to settle.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      const updated = await handler(new Request("https://nfhn.test/top/1"));
+      const updatedEtag = updated.headers.get("etag");
+      const updatedBody = await updated.text();
+      assertStringIncludes(updatedBody, "Updated Story");
+      assertEquals(counts.get(topStoriesUrl) ?? 0, 2, "cache should serve updated copy");
+
+      if (!updatedEtag) throw new Error("expected updated etag");
+
+      const conditionalReq = new Request("https://nfhn.test/top/1", {
+        headers: { "if-none-match": updatedEtag },
+      });
+      const conditional = await handler(conditionalReq);
+      assertEquals(conditional.status, 304);
+      assertEquals(conditional.headers.get("content-length"), null);
+    } finally {
+      Date.now = originalNow;
+    }
+  });
+});
