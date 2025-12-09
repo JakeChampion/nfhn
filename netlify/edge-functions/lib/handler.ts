@@ -47,6 +47,37 @@ const parsePositiveInt = (value: string): number | null => {
   return num;
 };
 
+const applyConditionalRequest = (request: Request, response: Response): Response => {
+  if (request.method !== "GET") return response;
+  const etag = response.headers.get("etag");
+  const ifNoneMatch = request.headers.get("if-none-match");
+  const lastModified = response.headers.get("last-modified");
+  const ifModifiedSince = request.headers.get("if-modified-since");
+
+  let notModified = false;
+
+  if (etag && ifNoneMatch) {
+    const tags = ifNoneMatch.split(",").map((t) => t.trim());
+    if (tags.includes(etag) || tags.includes("*")) {
+      notModified = true;
+    }
+  }
+
+  if (!notModified && lastModified && ifModifiedSince) {
+    const sinceTime = Date.parse(ifModifiedSince);
+    const lastTime = Date.parse(lastModified);
+    if (!Number.isNaN(sinceTime) && !Number.isNaN(lastTime) && sinceTime >= lastTime) {
+      notModified = true;
+    }
+  }
+
+  if (!notModified) return response;
+
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  return new Response(null, { status: 304, headers });
+};
+
 const renderErrorPage = (
   status: number,
   title: string,
@@ -99,6 +130,48 @@ const renderErrorPage = (
   </body>
 </html>`,
     { status },
+  );
+};
+
+const renderOfflinePage = (requestId?: string): Response => {
+  const now = new Date();
+  const id = requestId ?? crypto.randomUUID();
+  return new HTMLResponse(
+    `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Offline | NFHN</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background: #f5f5f5;
+        color: #333;
+        max-width: 600px;
+        margin: 40px auto;
+        padding: 0 1em;
+        text-align: center;
+        line-height: 1.6;
+      }
+      a { color: inherit; text-decoration: none; border-bottom: 1px solid rgba(0,0,0,0.2); }
+      a:hover { border-bottom-color: rgba(0,0,0,0.5); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Offline</h1>
+      <p>We can't reach Hacker News right now. Please check your connection and try again.</p>
+      <p><a href="#" onclick="location.reload();return false;">Retry</a> · <a href="/">Go home</a></p>
+      <p style="font-size:0.9em; opacity:0.7;">Request ID: ${escape(id)}<br/>${
+      escape(
+        now.toUTCString(),
+      )
+    }</p>
+    </main>
+  </body>
+</html>`,
+    { status: 503 },
   );
 };
 
@@ -155,6 +228,7 @@ async function withProgrammableCache(
   ttlSeconds: number,
   swrSeconds: number,
   producer: () => Promise<Response>,
+  offlineFallback?: () => Response,
 ): Promise<Response> {
   const requestId = getRequestId(request);
   const cache = await caches.open(cacheName);
@@ -163,7 +237,7 @@ async function withProgrammableCache(
 
   // Fresh hit
   if (cached && cachedAge <= ttlSeconds) {
-    return cached;
+    return applyConditionalRequest(request, cached);
   }
 
   // Stale-but-serveable hit: return now and refresh in background
@@ -184,7 +258,7 @@ async function withProgrammableCache(
         console.error("Background revalidation failed:", err);
       });
 
-    return cached;
+    return applyConditionalRequest(request, cached);
   }
 
   // Miss or too stale: fetch fresh
@@ -194,6 +268,9 @@ async function withProgrammableCache(
     const response = await producer();
 
     if (!isCacheable(response)) {
+      if (offlineFallback && response.status >= 500) {
+        return offlineFallback();
+      }
       // Avoid caching errors; fall back to stale if available
       if (fallback) return fallback;
       return response;
@@ -209,10 +286,11 @@ async function withProgrammableCache(
       console.error("Failed to cache response:", err);
     });
 
-    return client;
+    return applyConditionalRequest(request, client);
   } catch (err) {
     console.error("Cache producer threw:", err);
-    if (fallback) return fallback;
+    if (offlineFallback) return offlineFallback();
+    if (fallback) return applyConditionalRequest(request, fallback);
     return renderErrorPage(
       500,
       "Something went wrong",
@@ -295,6 +373,7 @@ async function handleTop(
         );
       }
     },
+    () => renderOfflinePage(requestId),
   );
 }
 
@@ -347,6 +426,7 @@ async function handleAsk(
         );
       }
     },
+    () => renderOfflinePage(requestId),
   );
 }
 
@@ -399,6 +479,7 @@ async function handleShow(
         );
       }
     },
+    () => renderOfflinePage(requestId),
   );
 }
 
@@ -451,6 +532,7 @@ async function handleJobs(
         );
       }
     },
+    () => renderOfflinePage(requestId),
   );
 }
 
@@ -508,6 +590,7 @@ async function handleItem(request: Request, id: number): Promise<Response> {
         );
       }
     },
+    () => renderOfflinePage(requestId),
   );
 }
 
