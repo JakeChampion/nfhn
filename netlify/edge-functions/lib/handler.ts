@@ -20,6 +20,29 @@ const encoder = new TextEncoder();
 type FeedSlug = "top" | "ask" | "show" | "jobs";
 type FeedHandler = (request: Request, pageNumber: number) => Promise<Response>;
 
+const applySecurityHeaders = (headers: Headers): Headers => {
+  headers.set(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com",
+      "img-src 'self' data:",
+      "script-src 'none'",
+      "frame-ancestors 'none'",
+      "base-uri 'none'",
+      "form-action 'none'",
+    ].join("; "),
+  );
+  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+  );
+  return headers;
+};
+
 const getRequestId = (request: Request): string | undefined =>
   request.headers.get("x-nf-request-id") ?? undefined;
 
@@ -87,6 +110,7 @@ const renderErrorPage = (
   const now = new Date();
   const id = requestId ?? crypto.randomUUID();
 
+  const headers = applySecurityHeaders(new Headers());
   return new HTMLResponse(
     `<!DOCTYPE html>
 <html lang="en">
@@ -129,13 +153,14 @@ const renderErrorPage = (
     </main>
   </body>
 </html>`,
-    { status },
+    { status, headers },
   );
 };
 
 const renderOfflinePage = (requestId?: string): Response => {
   const now = new Date();
   const id = requestId ?? crypto.randomUUID();
+  const headers = applySecurityHeaders(new Headers());
   return new HTMLResponse(
     `<!DOCTYPE html>
 <html lang="en">
@@ -171,7 +196,7 @@ const renderOfflinePage = (requestId?: string): Response => {
     </main>
   </body>
 </html>`,
-    { status: 503 },
+    { status: 503, headers },
   );
 };
 
@@ -198,7 +223,7 @@ const prepareResponses = (
   ttlSeconds: number,
   swrSeconds: number,
 ): { client: Response; cacheable: Response } => {
-  const headers = new Headers(response.headers);
+  const headers = applySecurityHeaders(new Headers(response.headers));
   headers.set("Cache-Control", cacheControlValue(ttlSeconds, swrSeconds));
   headers.set("x-cached-at", Date.now().toString());
 
@@ -303,25 +328,25 @@ async function withProgrammableCache(
 const redirectToTop1 = (): Response =>
   new Response(null, {
     status: 301,
-    headers: { Location: "/top/1" },
+    headers: applySecurityHeaders(new Headers({ Location: "/top/1" })),
   });
 
 const redirectToAsk1 = (): Response =>
   new Response(null, {
     status: 301,
-    headers: { Location: "/ask/1" },
+    headers: applySecurityHeaders(new Headers({ Location: "/ask/1" })),
   });
 
 const redirectToShow1 = (): Response =>
   new Response(null, {
     status: 301,
-    headers: { Location: "/show/1" },
+    headers: applySecurityHeaders(new Headers({ Location: "/show/1" })),
   });
 
 const redirectToJobs1 = (): Response =>
   new Response(null, {
     status: 301,
-    headers: { Location: "/jobs/1" },
+    headers: applySecurityHeaders(new Headers({ Location: "/jobs/1" })),
   });
 
 async function handleTop(
