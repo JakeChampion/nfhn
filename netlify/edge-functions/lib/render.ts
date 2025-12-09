@@ -358,40 +358,52 @@ const shellPage = (
         margin: 0;
       }
       hr {
-        border: 0.5em solid rgba(0, 0, 0, 0.1);
-        margin: 2em 0;
+        border: none;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+        margin: 1.5em 0;
       }
       article {
-        padding-left: 1em;
+        padding-left: 0.5em;
       }
       small {
         display: block;
-        padding-top: 0.5em;
+        padding-top: 0.35em;
       }
       p {
         padding-block: 0.5em;
         margin: 0;
       }
-      nav a {
+      a {
         text-decoration: none;
         color: inherit;
       }
-      nav a:hover {
+      a:hover {
         text-decoration: underline;
       }
-      nav a:focus-visible {
+      a:focus-visible {
         outline: 2px solid #ff7a18;
         outline-offset: 3px;
         border-radius: 4px;
       }
-      .more-link:focus-visible {
-        outline: 2px solid #ff7a18;
-        outline-offset: 3px;
-        border-radius: 4px;
+      .nav-feeds {
+        display: flex;
+        gap: 0.75em;
+        margin-bottom: 1.5em;
+        font-size: 0.9em;
+      }
+      .nav-feeds a {
+        text-decoration: none;
+        color: inherit;
+        opacity: 0.7;
+      }
+      .nav-feeds a.active {
+        font-weight: 600;
+        opacity: 1;
+        text-decoration: underline;
       }
       .badge {
         display: inline-block;
-        padding: 0.2em 0.6em;
+        padding: 0.1em 0.4em;
         border-radius: 999px;
         font-size: 0.7em;
         text-transform: uppercase;
@@ -509,15 +521,33 @@ async function* streamComments(
   if (isNested) yield "</ul>";
 }
 
-export const article = (item: Item, canonicalUrl?: string): HTML =>
-  shellPage(
+export const article = (item: Item, canonicalUrl?: string): HTML => {
+  const activeFeed: FeedSlug = item.type === "ask"
+    ? "ask"
+    : item.type === "show"
+    ? "show"
+    : item.type === "job"
+    ? "jobs"
+    : "top";
+
+  return shellPage(
     `NFHN: ${item.title}`,
     html`
-      <nav aria-label="Primary">
-        <a href="/" aria-current="page">Home</a>
-      </nav>
-      <hr />
-      <main>
+      <main aria-label="Main content">
+        <nav class="nav-feeds" aria-label="Primary">
+          <a href="/top/1" class="${activeFeed === "top"
+            ? "active"
+            : ""}" aria-current="${activeFeed === "top" ? "page" : ""}">Top</a>
+          <a href="/ask/1" class="${activeFeed === "ask"
+            ? "active"
+            : ""}" aria-current="${activeFeed === "ask" ? "page" : ""}">Ask</a>
+          <a href="/show/1" class="${activeFeed === "show"
+            ? "active"
+            : ""}" aria-current="${activeFeed === "show" ? "page" : ""}">Show</a>
+          <a href="/jobs/1" class="${activeFeed === "jobs"
+            ? "active"
+            : ""}" aria-current="${activeFeed === "jobs" ? "page" : ""}">Jobs</a>
+        </nav>
         <article>
           <a href="${primaryHref(item)}">
             <span class="badge ${typeClass(item.type)}">${typeLabel(item.type)}</span>
@@ -547,3 +577,4 @@ export const article = (item: Item, canonicalUrl?: string): HTML =>
     canonicalUrl,
     `Hacker News discussion: ${item.title}`,
   );
+};
