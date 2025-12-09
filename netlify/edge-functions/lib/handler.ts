@@ -1,5 +1,4 @@
 // handler.ts
-import { contents } from "../handlers/icon.ts";
 import { escape, HTMLResponse } from "./html.ts";
 import { article, home } from "./render.ts";
 import {
@@ -12,13 +11,10 @@ import {
 } from "./hn.ts";
 
 const HTML_CACHE_NAME = "nfhn-html";
-const ASSET_CACHE_NAME = "nfhn-assets";
 const FEED_TTL_SECONDS = 30;
 const FEED_STALE_SECONDS = 300;
 const ITEM_TTL_SECONDS = 60;
 const ITEM_STALE_SECONDS = 600;
-const ICON_TTL_SECONDS = 86400;
-const ICON_STALE_SECONDS = 604800;
 
 type FeedSlug = "top" | "ask" | "show" | "jobs";
 type FeedHandler = (request: Request, pageNumber: number) => Promise<Response>;
@@ -411,24 +407,6 @@ function handleItem(request: Request, id: number): Promise<Response> {
   );
 }
 
-function handleIcon(request: Request): Promise<Response> {
-  return withProgrammableCache(
-    request,
-    ASSET_CACHE_NAME,
-    ICON_TTL_SECONDS,
-    ICON_STALE_SECONDS,
-    () =>
-      Promise.resolve(
-        new Response(contents, {
-          status: 200,
-          headers: {
-            "content-type": "image/svg+xml; charset=utf-8",
-          },
-        }),
-      ),
-  );
-}
-
 const feedRoutes: { slug: FeedSlug; pattern: RegExp; handler: FeedHandler }[] = [
   { slug: "top", pattern: /^\/top\/(\d+)$/, handler: handleTop },
   { slug: "ask", pattern: /^\/ask\/(\d+)$/, handler: handleAsk },
@@ -457,10 +435,6 @@ export default async function handler(
 
     if (path === "/jobs" || path === "/jobs/") {
       return redirectToJobs1();
-    }
-
-    if (path === "/icon.svg") {
-      return await handleIcon(request);
     }
 
     for (const route of feedRoutes) {
