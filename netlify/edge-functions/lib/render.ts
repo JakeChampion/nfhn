@@ -38,17 +38,24 @@ const tpl = html;
 const sharedStyles = (pageNumber = 1): HTML =>
   tpl`
     <style type="text/css">
+      :root {
+        --background: #f5f5f5;
+        --text-strong: #111827;
+        --text-primary: #1f2937;
+        --text-muted: #4b5563;
+        --text-secondary: #374151;
+      }
       * {
         box-sizing: border-box;
       }
       body {
         font-family: system-ui, sans-serif;
-        background-color: whitesmoke;
+        background-color: var(--background);
         margin: ${PAGE_MARGIN};
         max-width: ${PAGE_MAX_WIDTH};
         line-height: 1.6;
         font-size: 18px;
-        color: #444;
+        color: var(--text-strong);
         padding: ${PAGE_PADDING};
       }
       main {
@@ -168,22 +175,22 @@ const sharedStyles = (pageNumber = 1): HTML =>
       }
       .story-meta {
         font-size: 0.85em;
-        opacity: 0.8;
+        color: var(--text-muted);
       }
       .nav-feeds {
         display: flex;
         gap: 0.75em;
         margin-bottom: 1.5em;
         font-size: 0.9em;
+        color: var(--text-primary);
       }
       .nav-feeds a {
         text-decoration: none;
-        color: inherit;
-        opacity: 0.7;
+        color: var(--text-primary);
+        font-weight: 600;
       }
       .nav-feeds a.active {
-        font-weight: 600;
-        opacity: 1;
+        color: var(--text-strong);
         text-decoration: underline;
       }
       hr {
@@ -204,7 +211,7 @@ const sharedStyles = (pageNumber = 1): HTML =>
       }
       .meta-line {
         font-size: 0.9em;
-        opacity: 0.85;
+        color: var(--text-secondary);
       }
       details {
         background-color: whitesmoke;
