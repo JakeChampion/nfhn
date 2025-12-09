@@ -28,7 +28,7 @@ const applySecurityHeaders = (headers: Headers): Headers => {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data:",
-      "connect-src 'self' https://api.hnpwa.com",
+      "connect-src 'self'",
       "script-src 'self' 'unsafe-inline'",
       "frame-ancestors 'none'",
       "base-uri 'none'",
