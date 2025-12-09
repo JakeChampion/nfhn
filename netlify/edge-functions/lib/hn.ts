@@ -1,5 +1,7 @@
 // hn.ts
 const HN_API_BASE = "https://api.hnpwa.com/v0";
+const DEFAULT_TIMEOUT_MS = 4500;
+const MAX_RETRIES = 2;
 
 export interface HNAPIItem {
   id: number;
@@ -48,6 +50,45 @@ function extractDomain(url?: string): string | undefined {
 
 function now(): number {
   return Date.now();
+}
+
+function timeoutSignal(timeoutMs: number): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const clear = (): void => clearTimeout(timeout);
+  controller.signal.addEventListener("abort", clear);
+  return { signal: controller.signal, clear };
+}
+
+async function fetchJsonWithRetry<T>(
+  url: string,
+  label: string,
+  retries = MAX_RETRIES,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<T | null> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const { signal, clear } = timeoutSignal(timeoutMs);
+    try {
+      const res = await fetch(url, { signal });
+      if (!res.ok) {
+        console.error(`HN ${label} API error:`, res.status, url);
+        continue;
+      }
+      return (await res.json()) as T;
+    } catch (e) {
+      const isLast = attempt === retries;
+      console.error(
+        `HN ${label} fetch error (attempt ${attempt + 1}/${retries + 1}):`,
+        url,
+        e,
+      );
+      if (isLast) break;
+    }
+    finally {
+      clear();
+    }
+  }
+  return null;
 }
 
 export function formatTimeAgo(unixSeconds: number | undefined): string {
@@ -104,17 +145,10 @@ export function mapStoryToItem(raw: HNAPIItem, level = 0): Item {
 
 // Single item (with nested comments)
 export async function fetchItem(id: number): Promise<HNAPIItem | null> {
-  try {
-    const res = await fetch(`${HN_API_BASE}/item/${id}.json`);
-    if (!res.ok) {
-      console.error("HN item API error:", res.status, id);
-      return null;
-    }
-    return (await res.json()) as HNAPIItem;
-  } catch (e) {
-    console.error("HN item fetch error:", id, e);
-    return null;
-  }
+  return await fetchJsonWithRetry<HNAPIItem>(
+    `${HN_API_BASE}/item/${id}.json`,
+    "item",
+  );
 }
 
 async function fetchStoriesPageForFeed(
@@ -122,26 +156,18 @@ async function fetchStoriesPageForFeed(
   pageNumber: number,
   pageSize = 30,
 ): Promise<Item[]> {
-  try {
-    const res = await fetch(`${HN_API_BASE}/${feed}/${pageNumber}.json`);
-    if (!res.ok) {
-      console.error(`HN ${feed} API error:`, res.status, pageNumber);
-      return [];
-    }
-
-    const stories = (await res.json()) as HNAPIItem[];
-    if (!Array.isArray(stories) || !stories.length) {
-      return [];
-    }
-
-    const slice = stories.slice(0, pageSize);
-    return slice
-      .filter((s) => !!s && !s.deleted && !s.dead)
-      .map((s) => mapStoryToItem(s, 0));
-  } catch (e) {
-    console.error(`HN ${feed} fetch error:`, pageNumber, e);
+  const stories = await fetchJsonWithRetry<HNAPIItem[]>(
+    `${HN_API_BASE}/${feed}/${pageNumber}.json`,
+    feed,
+  );
+  if (!stories || !Array.isArray(stories) || !stories.length) {
     return [];
   }
+
+  const slice = stories.slice(0, pageSize);
+  return slice
+    .filter((s) => !!s && !s.deleted && !s.dead)
+    .map((s) => mapStoryToItem(s, 0));
 }
 
 // Top stories page (news)

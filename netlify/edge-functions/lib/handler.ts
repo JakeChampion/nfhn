@@ -1,6 +1,6 @@
 // handler.ts
 import { contents } from "../handlers/icon.ts";
-import { HTMLResponse } from "./html.ts";
+import { HTMLResponse, escape } from "./html.ts";
 import { home, article } from "./render.ts";
 import {
   fetchTopStoriesPage,
@@ -19,6 +19,51 @@ const ITEM_TTL_SECONDS = 60;
 const ITEM_STALE_SECONDS = 600;
 const ICON_TTL_SECONDS = 86400;
 const ICON_STALE_SECONDS = 604800;
+
+const renderErrorPage = (
+  status: number,
+  title: string,
+  description: string,
+): Response =>
+  new HTMLResponse(
+    `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escape(title)} | NFHN</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        background-color: whitesmoke;
+        margin: 40px auto;
+        max-width: 600px;
+        line-height: 1.6;
+        font-size: 18px;
+        padding: 0 1em;
+        color: #333;
+        text-align: center;
+      }
+      h1 { margin-bottom: 0.2em; }
+      p { margin-top: 0; }
+      a {
+        color: inherit;
+        text-decoration: none;
+        border-bottom: 1px solid rgba(0,0,0,0.2);
+      }
+      a:hover { border-bottom-color: rgba(0,0,0,0.5); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>${escape(title)}</h1>
+      <p>${escape(description)}</p>
+      <p><a href="/">Return to home</a></p>
+    </main>
+  </body>
+</html>`,
+    { status },
+  );
 
 const cacheControlValue = (ttlSeconds: number, swrSeconds: number): string => {
   const parts = [`public`, `max-age=${ttlSeconds}`];
@@ -130,7 +175,11 @@ async function withProgrammableCache(
   } catch (err) {
     console.error("Cache producer threw:", err);
     if (fallback) return fallback;
-    return new Response("Internal Server Error", { status: 500 });
+    return renderErrorPage(
+      500,
+      "Something went wrong",
+      "Please try again in a moment.",
+    );
   }
 }
 
@@ -163,7 +212,7 @@ async function handleTop(
   pageNumber: number,
 ): Promise<Response> {
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-    return new Response("Not Found", { status: 404 });
+    return renderErrorPage(404, "Page not found", "That page number is invalid.");
   }
 
   return withProgrammableCache(
@@ -175,12 +224,20 @@ async function handleTop(
       try {
         const results = await fetchTopStoriesPage(pageNumber);
         if (!results.length) {
-          return new Response("No such page", { status: 404 });
+          return renderErrorPage(
+            404,
+            "No stories found",
+            "We couldn't find that page of top stories.",
+          );
         }
         return new HTMLResponse(home(results, pageNumber, "top"));
       } catch (e) {
         console.error("Top stories fetch error:", e);
-        return new Response("Hacker News API error", { status: 502 });
+        return renderErrorPage(
+          502,
+          "Hacker News is unavailable",
+          "Please try again in a moment.",
+        );
       }
     },
   );
@@ -191,7 +248,7 @@ async function handleAsk(
   pageNumber: number,
 ): Promise<Response> {
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-    return new Response("Not Found", { status: 404 });
+    return renderErrorPage(404, "Page not found", "That page number is invalid.");
   }
 
   return withProgrammableCache(
@@ -203,12 +260,20 @@ async function handleAsk(
       try {
         const results = await fetchAskStoriesPage(pageNumber);
         if (!results.length) {
-          return new Response("No such page", { status: 404 });
+          return renderErrorPage(
+            404,
+            "No stories found",
+            "We couldn't find that page of Ask HN posts.",
+          );
         }
         return new HTMLResponse(home(results, pageNumber, "ask"));
       } catch (e) {
         console.error("Ask stories fetch error:", e);
-        return new Response("Hacker News API error", { status: 502 });
+        return renderErrorPage(
+          502,
+          "Hacker News is unavailable",
+          "Please try again in a moment.",
+        );
       }
     },
   );
@@ -219,7 +284,7 @@ async function handleShow(
   pageNumber: number,
 ): Promise<Response> {
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-    return new Response("Not Found", { status: 404 });
+    return renderErrorPage(404, "Page not found", "That page number is invalid.");
   }
 
   return withProgrammableCache(
@@ -231,12 +296,20 @@ async function handleShow(
       try {
         const results = await fetchShowStoriesPage(pageNumber);
         if (!results.length) {
-          return new Response("No such page", { status: 404 });
+          return renderErrorPage(
+            404,
+            "No stories found",
+            "We couldn't find that page of Show HN posts.",
+          );
         }
         return new HTMLResponse(home(results, pageNumber, "show"));
       } catch (e) {
         console.error("Show stories fetch error:", e);
-        return new Response("Hacker News API error", { status: 502 });
+        return renderErrorPage(
+          502,
+          "Hacker News is unavailable",
+          "Please try again in a moment.",
+        );
       }
     },
   );
@@ -247,7 +320,7 @@ async function handleJobs(
   pageNumber: number,
 ): Promise<Response> {
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-    return new Response("Not Found", { status: 404 });
+    return renderErrorPage(404, "Page not found", "That page number is invalid.");
   }
 
   return withProgrammableCache(
@@ -259,12 +332,20 @@ async function handleJobs(
       try {
         const results = await fetchJobsStoriesPage(pageNumber);
         if (!results.length) {
-          return new Response("No such page", { status: 404 });
+          return renderErrorPage(
+            404,
+            "No jobs found",
+            "We couldn't find that page of jobs.",
+          );
         }
         return new HTMLResponse(home(results, pageNumber, "jobs"));
       } catch (e) {
         console.error("Jobs stories fetch error:", e);
-        return new Response("Hacker News API error", { status: 502 });
+        return renderErrorPage(
+          502,
+          "Hacker News is unavailable",
+          "Please try again in a moment.",
+        );
       }
     },
   );
@@ -272,7 +353,11 @@ async function handleJobs(
 
 async function handleItem(request: Request, id: number): Promise<Response> {
   if (!Number.isFinite(id)) {
-    return new Response("Not Found", { status: 404 });
+    return renderErrorPage(
+      404,
+      "Item not found",
+      "That story ID looks invalid.",
+    );
   }
 
   return withProgrammableCache(
@@ -284,7 +369,11 @@ async function handleItem(request: Request, id: number): Promise<Response> {
       try {
         const raw = await fetchItem(id);
         if (!raw || raw.deleted || raw.dead) {
-          return new Response("No such page", { status: 404 });
+          return renderErrorPage(
+            404,
+            "Item not found",
+            "That story is unavailable.",
+          );
         }
 
         const story = mapStoryToItem(raw);
@@ -293,7 +382,11 @@ async function handleItem(request: Request, id: number): Promise<Response> {
         return new HTMLResponse(article(story));
       } catch (e) {
         console.error("Item fetch error:", e);
-        return new Response("Hacker News API error", { status: 502 });
+        return renderErrorPage(
+          502,
+          "Hacker News is unavailable",
+          "Please try again in a moment.",
+        );
       }
     },
   );
@@ -372,10 +465,18 @@ export default async function handler(
       return await handleItem(request, id);
     }
 
-    return new Response("Not Found", { status: 404 });
+    return renderErrorPage(
+      404,
+      "Page not found",
+      "We couldn't find what you're looking for.",
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("Unhandled error in edge function:", message);
-    return new Response("Internal Server Error", { status: 500 });
+    return renderErrorPage(
+      500,
+      "Something went wrong",
+      "Please try again in a moment.",
+    );
   }
 }
