@@ -1,5 +1,6 @@
 // render.ts
 import { escape, type HTML, html, unsafeHTML } from "./html.ts";
+import { feedConfigs, type FeedSlug } from "./feeds.ts";
 import { type HNAPIItem, type Item } from "./hn.ts";
 
 // Limits to keep edge execution bounded
@@ -47,8 +48,6 @@ function primaryHref(item: Item): string {
   // Link / Job (and anything else) go to external URL if present, otherwise item page
   return item.url ?? `/item/${item.id}`;
 }
-
-type FeedSlug = "top" | "ask" | "show" | "jobs";
 
 const tpl = html;
 
@@ -274,18 +273,11 @@ export const home = (
   <body>
     <main aria-label="Main content">
       <nav class="nav-feeds" aria-label="Primary">
-        <a href="/top/1" class="${feed === "top" ? "active" : ""}" aria-current="${
-    feed === "top" ? "page" : undefined
-  }">Top</a>
-        <a href="/ask/1" class="${feed === "ask" ? "active" : ""}" aria-current="${
-    feed === "ask" ? "page" : undefined
-  }">Ask</a>
-        <a href="/show/1" class="${feed === "show" ? "active" : ""}" aria-current="${
-    feed === "show" ? "page" : undefined
-  }">Show</a>
-        <a href="/jobs/1" class="${feed === "jobs" ? "active" : ""}" aria-current="${
-    feed === "jobs" ? "page" : undefined
-  }">Jobs</a>
+        ${feedConfigs.map((config) =>
+          tpl`<a href="/${config.slug}/1" class="${feed === config.slug ? "active" : ""}" aria-current="${
+            feed === config.slug ? "page" : undefined
+          }">${config.navLabel}</a>`
+        )}
       </nav>
       <ol>
         ${content.map((data: Item) => renderStory(data))}

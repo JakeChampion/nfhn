@@ -1,14 +1,8 @@
 // handler.ts
 import { escape, HTMLResponse } from "./html.ts";
 import { article, home } from "./render.ts";
-import {
-  fetchAskStoriesPage,
-  fetchItem,
-  fetchJobsStoriesPage,
-  fetchShowStoriesPage,
-  fetchTopStoriesPage,
-  mapStoryToItem,
-} from "./hn.ts";
+import { feedConfigs, type FeedConfig, type FeedSlug } from "./feeds.ts";
+import { fetchItem, mapStoryToItem } from "./hn.ts";
 
 const HTML_CACHE_NAME = "nfhn-html";
 const FEED_TTL_SECONDS = 30;
@@ -16,17 +10,6 @@ const FEED_STALE_SECONDS = 300;
 const ITEM_TTL_SECONDS = 60;
 const ITEM_STALE_SECONDS = 600;
 const encoder = new TextEncoder();
-
-type FeedSlug = "top" | "ask" | "show" | "jobs";
-type FeedConfig = {
-  slug: FeedSlug;
-  pattern: RegExp;
-  fetchPage: (pageNumber: number) => Promise<Item[]>;
-  emptyTitle: string;
-  emptyDescription: string;
-  canonicalPath: (pageNumber: number) => string;
-  logLabel: string;
-};
 
 const applySecurityHeaders = (headers: Headers): Headers => {
   headers.set(
@@ -334,10 +317,10 @@ async function withProgrammableCache(
   }
 }
 
-const redirectToTop1 = (): Response =>
+const redirectToFeed1 = (slug: FeedSlug): Response =>
   new Response(null, {
     status: 301,
-    headers: applySecurityHeaders(new Headers({ Location: "/top/1" })),
+    headers: applySecurityHeaders(new Headers({ Location: `/${slug}/1` })),
   });
 
 function handleFeed(
@@ -452,68 +435,23 @@ function handleItem(request: Request, id: number): Promise<Response> {
   );
 }
 
-const feedConfigs: FeedConfig[] = [
-  {
-    slug: "top",
-    pattern: /^\/top\/(\d+)$/,
-    fetchPage: fetchTopStoriesPage,
-    emptyTitle: "No stories found",
-    emptyDescription: "We couldn't find that page of top stories.",
-    canonicalPath: (pageNumber) => `/top/${pageNumber}`,
-    logLabel: "Top stories",
-  },
-  {
-    slug: "ask",
-    pattern: /^\/ask\/(\d+)$/,
-    fetchPage: fetchAskStoriesPage,
-    emptyTitle: "No stories found",
-    emptyDescription: "We couldn't find that page of Ask HN posts.",
-    canonicalPath: (pageNumber) => `/ask/${pageNumber}`,
-    logLabel: "Ask stories",
-  },
-  {
-    slug: "show",
-    pattern: /^\/show\/(\d+)$/,
-    fetchPage: fetchShowStoriesPage,
-    emptyTitle: "No stories found",
-    emptyDescription: "We couldn't find that page of Show HN posts.",
-    canonicalPath: (pageNumber) => `/show/${pageNumber}`,
-    logLabel: "Show stories",
-  },
-  {
-    slug: "jobs",
-    pattern: /^\/jobs\/(\d+)$/,
-    fetchPage: fetchJobsStoriesPage,
-    emptyTitle: "No jobs found",
-    emptyDescription: "We couldn't find that page of jobs.",
-    canonicalPath: (pageNumber) => `/jobs/${pageNumber}`,
-    logLabel: "Jobs stories",
-  },
-];
-
 export default async function handler(
   request: Request,
 ): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
+  const defaultFeedSlug: FeedSlug = feedConfigs[0]?.slug ?? "top";
 
   try {
-    if (path === "/" || path === "/top" || path === "/top/") {
-      return redirectToTop1();
-    }
-
-    for (const config of feedConfigs) {
-      if (path === `/${config.slug}` || path === `/${config.slug}/`) {
-        return new Response(null, {
-          status: 301,
-          headers: applySecurityHeaders(
-            new Headers({ Location: `/${config.slug}/1` }),
-          ),
-        });
-      }
+    if (path === "/") {
+      return redirectToFeed1(defaultFeedSlug);
     }
 
     for (const route of feedConfigs) {
+      if (path === `/${route.slug}` || path === `/${route.slug}/`) {
+        return redirectToFeed1(route.slug);
+      }
+
       const match = path.match(route.pattern);
       if (!match) continue;
       const pageNumber = parsePositiveInt(match[1]);
