@@ -18,7 +18,15 @@ const ITEM_STALE_SECONDS = 600;
 const encoder = new TextEncoder();
 
 type FeedSlug = "top" | "ask" | "show" | "jobs";
-type FeedHandler = (request: Request, pageNumber: number) => Promise<Response>;
+type FeedConfig = {
+  slug: FeedSlug;
+  pattern: RegExp;
+  fetchPage: (pageNumber: number) => Promise<Item[]>;
+  emptyTitle: string;
+  emptyDescription: string;
+  canonicalPath: (pageNumber: number) => string;
+  logLabel: string;
+};
 
 const applySecurityHeaders = (headers: Headers): Headers => {
   headers.set(
@@ -332,27 +340,10 @@ const redirectToTop1 = (): Response =>
     headers: applySecurityHeaders(new Headers({ Location: "/top/1" })),
   });
 
-const redirectToAsk1 = (): Response =>
-  new Response(null, {
-    status: 301,
-    headers: applySecurityHeaders(new Headers({ Location: "/ask/1" })),
-  });
-
-const redirectToShow1 = (): Response =>
-  new Response(null, {
-    status: 301,
-    headers: applySecurityHeaders(new Headers({ Location: "/show/1" })),
-  });
-
-const redirectToJobs1 = (): Response =>
-  new Response(null, {
-    status: 301,
-    headers: applySecurityHeaders(new Headers({ Location: "/jobs/1" })),
-  });
-
-function handleTop(
+function handleFeed(
   request: Request,
   pageNumber: number,
+  config: FeedConfig,
 ): Promise<Response> {
   const requestId = getRequestId(request);
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
@@ -373,183 +364,24 @@ function handleTop(
     FEED_STALE_SECONDS,
     async () => {
       try {
-        const results = await fetchTopStoriesPage(pageNumber);
+        const results = await config.fetchPage(pageNumber);
         if (!results.length) {
           return renderErrorPage(
             404,
-            "No stories found",
-            "We couldn't find that page of top stories.",
+            config.emptyTitle,
+            config.emptyDescription,
             requestId,
           );
         }
-        const canonical = computeCanonical(request, `/top/${pageNumber}`);
-        const response = new HTMLResponse(home(results, pageNumber, "top", canonical));
+        const canonical = computeCanonical(request, config.canonicalPath(pageNumber));
+        const response = new HTMLResponse(home(results, pageNumber, config.slug, canonical));
         const etag = await generateETag(results.map((r) => r.id));
         const lastModified = lastModifiedFromTimes(results.map((r) => r.time));
         if (etag) response.headers.set("ETag", etag);
         if (lastModified) response.headers.set("Last-Modified", lastModified);
         return response;
       } catch (e) {
-        console.error("Top stories fetch error:", e);
-        return renderErrorPage(
-          502,
-          "Hacker News is unavailable",
-          "Please try again in a moment.",
-          requestId,
-        );
-      }
-    },
-    () => renderOfflinePage(requestId),
-  );
-}
-
-function handleAsk(
-  request: Request,
-  pageNumber: number,
-): Promise<Response> {
-  const requestId = getRequestId(request);
-  if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-    return Promise.resolve(
-      renderErrorPage(
-        404,
-        "Page not found",
-        "That page number is invalid.",
-        requestId,
-      ),
-    );
-  }
-
-  return withProgrammableCache(
-    request,
-    HTML_CACHE_NAME,
-    FEED_TTL_SECONDS,
-    FEED_STALE_SECONDS,
-    async () => {
-      try {
-        const results = await fetchAskStoriesPage(pageNumber);
-        if (!results.length) {
-          return renderErrorPage(
-            404,
-            "No stories found",
-            "We couldn't find that page of Ask HN posts.",
-            requestId,
-          );
-        }
-        const canonical = computeCanonical(request, `/ask/${pageNumber}`);
-        const response = new HTMLResponse(home(results, pageNumber, "ask", canonical));
-        const etag = await generateETag(results.map((r) => r.id));
-        const lastModified = lastModifiedFromTimes(results.map((r) => r.time));
-        if (etag) response.headers.set("ETag", etag);
-        if (lastModified) response.headers.set("Last-Modified", lastModified);
-        return response;
-      } catch (e) {
-        console.error("Ask stories fetch error:", e);
-        return renderErrorPage(
-          502,
-          "Hacker News is unavailable",
-          "Please try again in a moment.",
-          requestId,
-        );
-      }
-    },
-    () => renderOfflinePage(requestId),
-  );
-}
-
-function handleShow(
-  request: Request,
-  pageNumber: number,
-): Promise<Response> {
-  const requestId = getRequestId(request);
-  if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-    return Promise.resolve(
-      renderErrorPage(
-        404,
-        "Page not found",
-        "That page number is invalid.",
-        requestId,
-      ),
-    );
-  }
-
-  return withProgrammableCache(
-    request,
-    HTML_CACHE_NAME,
-    FEED_TTL_SECONDS,
-    FEED_STALE_SECONDS,
-    async () => {
-      try {
-        const results = await fetchShowStoriesPage(pageNumber);
-        if (!results.length) {
-          return renderErrorPage(
-            404,
-            "No stories found",
-            "We couldn't find that page of Show HN posts.",
-            requestId,
-          );
-        }
-        const canonical = computeCanonical(request, `/show/${pageNumber}`);
-        const response = new HTMLResponse(home(results, pageNumber, "show", canonical));
-        const etag = await generateETag(results.map((r) => r.id));
-        const lastModified = lastModifiedFromTimes(results.map((r) => r.time));
-        if (etag) response.headers.set("ETag", etag);
-        if (lastModified) response.headers.set("Last-Modified", lastModified);
-        return response;
-      } catch (e) {
-        console.error("Show stories fetch error:", e);
-        return renderErrorPage(
-          502,
-          "Hacker News is unavailable",
-          "Please try again in a moment.",
-          requestId,
-        );
-      }
-    },
-    () => renderOfflinePage(requestId),
-  );
-}
-
-function handleJobs(
-  request: Request,
-  pageNumber: number,
-): Promise<Response> {
-  const requestId = getRequestId(request);
-  if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-    return Promise.resolve(
-      renderErrorPage(
-        404,
-        "Page not found",
-        "That page number is invalid.",
-        requestId,
-      ),
-    );
-  }
-
-  return withProgrammableCache(
-    request,
-    HTML_CACHE_NAME,
-    FEED_TTL_SECONDS,
-    FEED_STALE_SECONDS,
-    async () => {
-      try {
-        const results = await fetchJobsStoriesPage(pageNumber);
-        if (!results.length) {
-          return renderErrorPage(
-            404,
-            "No jobs found",
-            "We couldn't find that page of jobs.",
-            requestId,
-          );
-        }
-        const canonical = computeCanonical(request, `/jobs/${pageNumber}`);
-        const response = new HTMLResponse(home(results, pageNumber, "jobs", canonical));
-        const etag = await generateETag(results.map((r) => r.id));
-        const lastModified = lastModifiedFromTimes(results.map((r) => r.time));
-        if (etag) response.headers.set("ETag", etag);
-        if (lastModified) response.headers.set("Last-Modified", lastModified);
-        return response;
-      } catch (e) {
-        console.error("Jobs stories fetch error:", e);
+        console.error(`${config.logLabel} fetch error:`, e);
         return renderErrorPage(
           502,
           "Hacker News is unavailable",
@@ -620,11 +452,43 @@ function handleItem(request: Request, id: number): Promise<Response> {
   );
 }
 
-const feedRoutes: { slug: FeedSlug; pattern: RegExp; handler: FeedHandler }[] = [
-  { slug: "top", pattern: /^\/top\/(\d+)$/, handler: handleTop },
-  { slug: "ask", pattern: /^\/ask\/(\d+)$/, handler: handleAsk },
-  { slug: "show", pattern: /^\/show\/(\d+)$/, handler: handleShow },
-  { slug: "jobs", pattern: /^\/jobs\/(\d+)$/, handler: handleJobs },
+const feedConfigs: FeedConfig[] = [
+  {
+    slug: "top",
+    pattern: /^\/top\/(\d+)$/,
+    fetchPage: fetchTopStoriesPage,
+    emptyTitle: "No stories found",
+    emptyDescription: "We couldn't find that page of top stories.",
+    canonicalPath: (pageNumber) => `/top/${pageNumber}`,
+    logLabel: "Top stories",
+  },
+  {
+    slug: "ask",
+    pattern: /^\/ask\/(\d+)$/,
+    fetchPage: fetchAskStoriesPage,
+    emptyTitle: "No stories found",
+    emptyDescription: "We couldn't find that page of Ask HN posts.",
+    canonicalPath: (pageNumber) => `/ask/${pageNumber}`,
+    logLabel: "Ask stories",
+  },
+  {
+    slug: "show",
+    pattern: /^\/show\/(\d+)$/,
+    fetchPage: fetchShowStoriesPage,
+    emptyTitle: "No stories found",
+    emptyDescription: "We couldn't find that page of Show HN posts.",
+    canonicalPath: (pageNumber) => `/show/${pageNumber}`,
+    logLabel: "Show stories",
+  },
+  {
+    slug: "jobs",
+    pattern: /^\/jobs\/(\d+)$/,
+    fetchPage: fetchJobsStoriesPage,
+    emptyTitle: "No jobs found",
+    emptyDescription: "We couldn't find that page of jobs.",
+    canonicalPath: (pageNumber) => `/jobs/${pageNumber}`,
+    logLabel: "Jobs stories",
+  },
 ];
 
 export default async function handler(
@@ -638,19 +502,18 @@ export default async function handler(
       return redirectToTop1();
     }
 
-    if (path === "/ask" || path === "/ask/") {
-      return redirectToAsk1();
+    for (const config of feedConfigs) {
+      if (path === `/${config.slug}` || path === `/${config.slug}/`) {
+        return new Response(null, {
+          status: 301,
+          headers: applySecurityHeaders(
+            new Headers({ Location: `/${config.slug}/1` }),
+          ),
+        });
+      }
     }
 
-    if (path === "/show" || path === "/show/") {
-      return redirectToShow1();
-    }
-
-    if (path === "/jobs" || path === "/jobs/") {
-      return redirectToJobs1();
-    }
-
-    for (const route of feedRoutes) {
+    for (const route of feedConfigs) {
       const match = path.match(route.pattern);
       if (!match) continue;
       const pageNumber = parsePositiveInt(match[1]);
@@ -662,7 +525,7 @@ export default async function handler(
           getRequestId(request),
         );
       }
-      return await route.handler(request, pageNumber);
+      return await handleFeed(request, pageNumber, route);
     }
 
     const itemMatch = path.match(/^\/item\/(\d+)$/);
