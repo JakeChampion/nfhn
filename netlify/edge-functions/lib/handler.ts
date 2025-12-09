@@ -1,5 +1,6 @@
 // handler.ts
 import { escape, HTMLResponse } from "./html.ts";
+import { FEEDS } from "./feeds.ts";
 import { article, home } from "./render.ts";
 import { type FeedSlug, fetchItem, fetchStoriesPage, mapStoryToItem } from "./hn.ts";
 
@@ -317,33 +318,6 @@ async function withProgrammableCache(
     );
   }
 }
-
-const FEEDS: Array<{
-  slug: FeedSlug;
-  emptyTitle: string;
-  emptyDescription: string;
-}> = [
-  {
-    slug: "top",
-    emptyTitle: "No stories found",
-    emptyDescription: "We couldn't find that page of top stories.",
-  },
-  {
-    slug: "ask",
-    emptyTitle: "No stories found",
-    emptyDescription: "We couldn't find that page of Ask HN posts.",
-  },
-  {
-    slug: "show",
-    emptyTitle: "No stories found",
-    emptyDescription: "We couldn't find that page of Show HN posts.",
-  },
-  {
-    slug: "jobs",
-    emptyTitle: "No jobs found",
-    emptyDescription: "We couldn't find that page of jobs.",
-  },
-];
 
 function createFeedHandler({
   slug,

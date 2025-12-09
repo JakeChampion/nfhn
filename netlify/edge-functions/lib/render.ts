@@ -1,5 +1,6 @@
 // render.ts
 import { escape, type HTML, html, unsafeHTML } from "./html.ts";
+import { FEEDS } from "./feeds.ts";
 import { type FeedSlug, type HNAPIItem, type Item } from "./hn.ts";
 
 type StoryType = Item["type"];
@@ -36,6 +37,19 @@ const getTypeMeta = (type: StoryType): TypeMeta =>
   };
 
 const tpl = html;
+
+const renderNav = (activeFeed: FeedSlug): HTML =>
+  tpl`
+    <nav class="nav-feeds" aria-label="Primary">
+      ${FEEDS.map(({ slug, label }) =>
+        html`
+          <a href="/${slug}/1" class="${activeFeed === slug ? "active" : ""}" aria-current="${
+          activeFeed === slug ? "page" : undefined
+        }">${label}</a>
+        `
+      )}
+    </nav>
+  `;
 
 const turboScript = tpl`
 <script>
@@ -261,20 +275,7 @@ export const home = (
   </head>
   <body>
     <main aria-label="Main content">
-      <nav class="nav-feeds" aria-label="Primary">
-        <a href="/top/1" class="${feed === "top" ? "active" : ""}" aria-current="${
-    feed === "top" ? "page" : undefined
-  }">Top</a>
-        <a href="/ask/1" class="${feed === "ask" ? "active" : ""}" aria-current="${
-    feed === "ask" ? "page" : undefined
-  }">Ask</a>
-        <a href="/show/1" class="${feed === "show" ? "active" : ""}" aria-current="${
-    feed === "show" ? "page" : undefined
-  }">Show</a>
-        <a href="/jobs/1" class="${feed === "jobs" ? "active" : ""}" aria-current="${
-    feed === "jobs" ? "page" : undefined
-  }">Jobs</a>
-      </nav>
+      ${renderNav(feed)}
       <ol>
         ${content.map((data: Item) => renderStory(data))}
       </ol>
@@ -529,20 +530,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
     `NFHN: ${item.title}`,
     html`
       <main aria-label="Main content">
-        <nav class="nav-feeds" aria-label="Primary">
-          <a href="/top/1" class="${activeFeed === "top"
-            ? "active"
-            : ""}" aria-current="${activeFeed === "top" ? "page" : ""}">Top</a>
-          <a href="/ask/1" class="${activeFeed === "ask"
-            ? "active"
-            : ""}" aria-current="${activeFeed === "ask" ? "page" : ""}">Ask</a>
-          <a href="/show/1" class="${activeFeed === "show"
-            ? "active"
-            : ""}" aria-current="${activeFeed === "show" ? "page" : ""}">Show</a>
-          <a href="/jobs/1" class="${activeFeed === "jobs"
-            ? "active"
-            : ""}" aria-current="${activeFeed === "jobs" ? "page" : ""}">Jobs</a>
-        </nav>
+        ${renderNav(activeFeed)}
         <article>
           <a href="${meta.href(item)}">
             <span class="badge ${meta.badgeClass}">${meta.label}</span>
