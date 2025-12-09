@@ -90,6 +90,7 @@ const turboScript = tpl`
   function onIntent(e) {
     const a = e.target.closest("a[href]");
     if (!a) return;
+    console.log("warming", a.href, a.target);
     if (a.target && a.target !== "_self") return;
     if (a.hasAttribute("download")) return;
 
