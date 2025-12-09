@@ -1,25 +1,23 @@
 // hn.ts
-const HN_API_BASE = "https://hacker-news.firebaseio.com/v0";
-
-// Netlify programmable cache settings
-const HN_CACHE_NAME = "nfhn-hn-api";
-const TOP_IDS_TTL_SECONDS = 30; // 30s
-const ITEM_TTL_SECONDS = 60; // 60s
+const HN_API_BASE = "https://api.hnpwa.com/v0";
+const DEFAULT_TIMEOUT_MS = 4500;
+const MAX_RETRIES = 2;
 
 export interface HNAPIItem {
   id: number;
-  by?: string;
-  time?: number;
-  type: string;
   title?: string;
+  points?: number;
+  user?: string;
+  time?: number;
+  time_ago?: string;
+  comments_count?: number;
+  type: string; // "link" | "ask" | "show" | "job" | "comment"
   url?: string;
-  text?: string;
-  score?: number;
-  descendants?: number;
-  kids?: number[];
+  domain?: string;
+  content?: string;
+  comments?: HNAPIItem[];
   deleted?: boolean;
   dead?: boolean;
-  domain?: string;
 }
 
 export interface Item {
@@ -35,67 +33,9 @@ export interface Item {
   type: string;
   url?: string;
   domain?: string;
-  comments: Item[];
+  comments: HNAPIItem[]; // nested HNPWA comments tree
   level: number;
   comments_count: number;
-}
-
-async function getCache() {
-  return caches.open(HN_CACHE_NAME);
-}
-
-async function fetchJSONWithNetlifyCache<T>(
-  path: string,
-  ttlSeconds: number,
-): Promise<T | null> {
-  const url = `${HN_API_BASE}${path}`;
-  const cache = await getCache();
-  const request = new Request(url);
-
-  // 1. Cache first
-  const cached = await cache.match(request);
-  if (cached) {
-    try {
-      const text = await cached.text();
-      return JSON.parse(text) as T;
-    } catch (e) {
-      console.error("Cached JSON parse error:", path, e);
-    }
-  }
-
-  // 2. Network
-  const res = await fetch(request);
-  if (!res.ok) {
-    console.error("HN API error:", res.status, path);
-    return null;
-  }
-
-  const bodyText = await res.text();
-
-  // 3. Put into Netlify cache
-  try {
-    const headers = new Headers(res.headers);
-    headers.set("Cache-Control", `public, max-age=${ttlSeconds}`);
-    const cacheResponse = new Response(bodyText, {
-      status: res.status,
-      statusText: res.statusText,
-      headers,
-    });
-
-    cache.put(request, cacheResponse).catch((error) => {
-      console.error("Failed to put into Netlify cache:", path, error);
-    });
-  } catch (e) {
-    console.error("Error preparing response for cache:", path, e);
-  }
-
-  // 4. Parse JSON for this request
-  try {
-    return JSON.parse(bodyText) as T;
-  } catch (e) {
-    console.error("HN API JSON parse error:", path, e);
-    return null;
-  }
 }
 
 function extractDomain(url?: string): string | undefined {
@@ -110,6 +50,44 @@ function extractDomain(url?: string): string | undefined {
 
 function now(): number {
   return Date.now();
+}
+
+function timeoutSignal(timeoutMs: number): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const clear = (): void => clearTimeout(timeout);
+  controller.signal.addEventListener("abort", clear);
+  return { signal: controller.signal, clear };
+}
+
+async function fetchJsonWithRetry<T>(
+  url: string,
+  label: string,
+  retries = MAX_RETRIES,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<T | null> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const { signal, clear } = timeoutSignal(timeoutMs);
+    try {
+      const res = await fetch(url, { signal });
+      if (!res.ok) {
+        console.error(`HN ${label} API error:`, res.status, url);
+        continue;
+      }
+      return (await res.json()) as T;
+    } catch (e) {
+      const isLast = attempt === retries;
+      console.error(
+        `HN ${label} fetch error (attempt ${attempt + 1}/${retries + 1}):`,
+        url,
+        e,
+      );
+      if (isLast) break;
+    } finally {
+      clear();
+    }
+  }
+  return null;
 }
 
 export function formatTimeAgo(unixSeconds: number | undefined): string {
@@ -135,64 +113,89 @@ export function formatTimeAgo(unixSeconds: number | undefined): string {
   return `${years} year${years === 1 ? "" : "s"} ago`;
 }
 
-export function mapStoryToItem(
-  raw: HNAPIItem,
-  level = 0,
-): Item {
+// Map HNPWA item → internal Item (sans comments)
+export function mapStoryToItem(raw: HNAPIItem, level = 0): Item {
   const time = raw.time ?? 0;
+  const points = typeof raw.points === "number" ? raw.points : null;
+  const user = raw.user ?? null;
+  const content = raw.content ?? "";
+  const commentsCount = typeof raw.comments_count === "number" ? raw.comments_count : 0;
+  const domain = raw.domain ?? extractDomain(raw.url);
+
   return {
     id: raw.id,
     title: raw.title ?? "",
-    points: typeof raw.score === "number" ? raw.score : null,
-    user: raw.by ?? null,
+    points,
+    user,
     time,
-    time_ago: formatTimeAgo(time),
-    content: raw.text ?? "",
+    time_ago: raw.time_ago || formatTimeAgo(time),
+    content,
     deleted: raw.deleted,
     dead: raw.dead,
     type: raw.type,
     url: raw.url,
-    domain: extractDomain(raw.url),
-    comments: [], // comments are streamed separately now
+    domain,
+    comments: [],
     level,
-    comments_count:
-      typeof raw.descendants === "number" ? raw.descendants : 0,
+    comments_count: commentsCount,
   };
 }
 
-async function fetchTopIds(): Promise<number[] | null> {
-  return fetchJSONWithNetlifyCache<number[]>("/topstories.json", TOP_IDS_TTL_SECONDS);
-}
-
+// Single item (with nested comments)
 export async function fetchItem(id: number): Promise<HNAPIItem | null> {
-  return fetchJSONWithNetlifyCache<HNAPIItem>(
-    `/item/${id}.json`,
-    ITEM_TTL_SECONDS,
+  return await fetchJsonWithRetry<HNAPIItem>(
+    `${HN_API_BASE}/item/${id}.json`,
+    "item",
   );
 }
 
-export async function fetchTopStoriesPage(
+async function fetchStoriesPageForFeed(
+  feed: "news" | "ask" | "show" | "jobs",
   pageNumber: number,
   pageSize = 30,
 ): Promise<Item[]> {
-  const ids = await fetchTopIds();
-  if (!ids || !ids.length) {
+  const stories = await fetchJsonWithRetry<HNAPIItem[]>(
+    `${HN_API_BASE}/${feed}/${pageNumber}.json`,
+    feed,
+  );
+  if (!stories || !Array.isArray(stories) || !stories.length) {
     return [];
   }
 
-  const start = (pageNumber - 1) * pageSize;
-  const end = start + pageSize;
-  const slice = ids.slice(start, end);
-  if (!slice.length) {
-    return [];
-  }
-
-  const stories = await Promise.all(slice.map((id) => fetchItem(id)));
-
-  return stories
-    .filter(
-      (s): s is HNAPIItem =>
-        !!s && !s.deleted && !s.dead && s.type === "story",
-    )
+  const slice = stories.slice(0, pageSize);
+  return slice
+    .filter((s) => !!s && !s.deleted && !s.dead)
     .map((s) => mapStoryToItem(s, 0));
+}
+
+// Top stories page (news)
+export function fetchTopStoriesPage(
+  pageNumber: number,
+  pageSize = 30,
+): Promise<Item[]> {
+  return fetchStoriesPageForFeed("news", pageNumber, pageSize);
+}
+
+// Ask HN
+export function fetchAskStoriesPage(
+  pageNumber: number,
+  pageSize = 30,
+): Promise<Item[]> {
+  return fetchStoriesPageForFeed("ask", pageNumber, pageSize);
+}
+
+// Show HN
+export function fetchShowStoriesPage(
+  pageNumber: number,
+  pageSize = 30,
+): Promise<Item[]> {
+  return fetchStoriesPageForFeed("show", pageNumber, pageSize);
+}
+
+// Jobs
+export function fetchJobsStoriesPage(
+  pageNumber: number,
+  pageSize = 30,
+): Promise<Item[]> {
+  return fetchStoriesPageForFeed("jobs", pageNumber, pageSize);
 }

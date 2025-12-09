@@ -1,0 +1,14 @@
+{
+  "imports": {
+    "std/": "https://deno.land/std@0.224.0/"
+  },
+  "lint": {
+    "rules": {
+      "include": ["recommended"]
+    }
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 100
+  }
+}

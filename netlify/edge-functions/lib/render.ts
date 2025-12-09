@@ -1,33 +1,163 @@
 // render.ts
-import {
-  type HTML,
-  type HTMLValue,
-  html,
-  raw,
-  unsafeHTML,
-  escape,
-} from "./html.ts";
-import {
-  type Item,
-  type HNAPIItem,
-  fetchItem,
-  formatTimeAgo,
-} from "./hn.ts";
+import { escape, type HTML, html, unsafeHTML } from "./html.ts";
+import { type HNAPIItem, type Item } from "./hn.ts";
 
 // Limits to keep edge execution bounded
-const MAX_COMMENT_DEPTH = 10;
-const MAX_COMMENTS_TOTAL = 300;
+const MAX_COMMENT_DEPTH = Infinity;
+const MAX_COMMENTS_TOTAL = Infinity;
 
-export const home = (content: Item[], pageNumber: number): HTML => html`
+function typeLabel(type: string): string {
+  switch (type) {
+    case "ask":
+      return "Ask HN";
+    case "show":
+      return "Show HN";
+    case "job":
+      return "Job";
+    case "link":
+      return "Link";
+    case "comment":
+      return "Comment";
+    default:
+      return type;
+  }
+}
+
+function typeClass(type: string): string {
+  switch (type) {
+    case "ask":
+      return "badge-ask";
+    case "show":
+      return "badge-show";
+    case "job":
+      return "badge-job";
+    case "link":
+      return "badge-link";
+    default:
+      return "badge-default";
+  }
+}
+
+// Decide where the main story title link should go
+function primaryHref(item: Item): string {
+  // Ask / Show should always go to the item page (discussion/content)
+  if (item.type === "ask" || item.type === "show") {
+    return `/item/${item.id}`;
+  }
+  // Link / Job (and anything else) go to external URL if present, otherwise item page
+  return item.url ?? `/item/${item.id}`;
+}
+
+type FeedSlug = "top" | "ask" | "show" | "jobs";
+
+const tpl = html;
+
+const turboScript = tpl`
+  <script>
+    (() => {
+      if (window.__nfhnTurbo) return;
+      window.__nfhnTurbo = true;
+
+      const isSameOrigin = (url) => url.origin === location.origin;
+      const shouldIntercept = (event, anchor) => {
+        if (!anchor) return false;
+        if (anchor.target || anchor.hasAttribute("download")) return false;
+        const href = anchor.getAttribute("href");
+        if (!href || href.startsWith("mailto:") || href.startsWith("tel:")) return false;
+        if (event.defaultPrevented || event.button !== 0) return false;
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return false;
+        try {
+          const url = new URL(anchor.href);
+          if (!isSameOrigin(url)) return false;
+        } catch {
+          return false;
+        }
+        return true;
+      };
+
+      const parseDoc = (htmlText) => {
+        const doc = new DOMParser().parseFromString(htmlText, "text/html");
+        return { title: doc.title, body: doc.body };
+      };
+
+      const swap = ({ title, body }, url, replace = false) => {
+        if (title) document.title = title;
+        if (body) document.body.innerHTML = body.innerHTML;
+        if (replace) {
+          history.replaceState({}, title, url);
+        } else {
+          history.pushState({}, title, url);
+        }
+        window.scrollTo({ top: 0, behavior: "auto" });
+      };
+
+      const navigate = async (url, replace = false) => {
+        try {
+          const res = await fetch(url, { headers: { "X-Requested-With": "nfhn-turbo" } });
+          if (!res.ok) throw new Error("Navigation failed");
+          const text = await res.text();
+          const parsed = parseDoc(text);
+          swap(parsed, url, replace);
+        } catch (err) {
+          console.error("Turbo-lite navigation failed; falling back to full load.", err);
+          location.href = url;
+        }
+      };
+
+      document.addEventListener("click", (event) => {
+        const target = event.target;
+        const anchor = target instanceof Element ? target.closest("a") : null;
+        if (!shouldIntercept(event, anchor)) return;
+        event.preventDefault();
+        const url = anchor?.href;
+        if (url) navigate(url, false);
+      });
+
+      window.addEventListener("popstate", () => {
+        navigate(location.href, true);
+      });
+    })();
+  </script>
+`;
+
+const renderStory = (data: Item): HTML =>
+  html`
+    <li>
+      <a class="title" href="${primaryHref(data)}">
+        <span class="badge ${typeClass(data.type)}">${typeLabel(data.type)}</span>
+        <span class="story-title-text">${data.title}</span>
+        ${data.domain
+          ? html`
+            <span class="story-meta">(${data.domain})</span>
+          `
+          : ""}
+      </a>
+      <a class="comments" href="/item/${data.id}">
+        view ${data.comments_count > 0 ? data.comments_count + " comments" : "discussion"}
+      </a>
+    </li>
+  `;
+
+export const home = (
+  content: Item[],
+  pageNumber: number,
+  feed: FeedSlug = "top",
+  canonicalUrl?: string,
+): HTML =>
+  tpl`
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    ${canonicalUrl ? tpl`<link rel="canonical" href="${canonicalUrl}">` : ""}
+    <meta name="description" content="Hacker News ${feed} page ${pageNumber}: latest ${feed} stories.">
     <link rel="icon" type="image/svg+xml" href="/icon.svg">
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap">
     <style type="text/css">
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
         background-color: whitesmoke;
         margin: 40px auto;
         max-width: 650px;
@@ -89,49 +219,131 @@ export const home = (content: Item[], pageNumber: number): HTML => html`
         justify-content: center;
         align-content: center;
         flex-direction: column;
+        text-decoration: none;
+        color: inherit;
+      }
+      a:hover .story-title-text {
+        text-decoration: underline;
+      }
+      a:focus-visible {
+        outline: 2px solid #ff7a18;
+        outline-offset: 3px;
+        border-radius: 4px;
       }
       h1,h2,h3 {
         line-height: 1.2
+      }
+      .badge {
+        display: inline-block;
+        padding: 0.1em 0.4em;
+        border-radius: 999px;
+        font-size: 0.7em;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-right: 0.5em;
+        border: 1px solid rgba(0,0,0,0.1);
+        background: rgba(0,0,0,0.04);
+      }
+      .badge-link {
+        background: rgba(25, 118, 210, 0.08);
+        border-color: rgba(25, 118, 210, 0.25);
+      }
+      .badge-ask {
+        background: rgba(244, 67, 54, 0.08);
+        border-color: rgba(244, 67, 54, 0.25);
+      }
+      .badge-show {
+        background: rgba(67, 160, 71, 0.08);
+        border-color: rgba(67, 160, 71, 0.25);
+      }
+      .badge-job {
+        background: rgba(255, 160, 0, 0.08);
+        border-color: rgba(255, 160, 0, 0.25);
+      }
+      .badge-default {
+        background: rgba(0, 0, 0, 0.04);
+        border-color: rgba(0, 0, 0, 0.15);
+      }
+      .story-title-text {
+        font-weight: 500;
+      }
+      .story-meta {
+        font-size: 0.85em;
+        opacity: 0.8;
+      }
+      .nav-feeds {
+        display: flex;
+        gap: 0.75em;
+        margin-bottom: 1.5em;
+        font-size: 0.9em;
+      }
+      .nav-feeds a {
+        text-decoration: none;
+        color: inherit;
+        opacity: 0.7;
+      }
+      .nav-feeds a.active {
+        font-weight: 600;
+        opacity: 1;
+        text-decoration: underline;
       }
     </style>
     <title>NFHN: Page ${pageNumber}</title>
   </head>
   <body>
-    <main>
+    <main aria-label="Main content">
+      <nav class="nav-feeds" aria-label="Primary">
+        <a href="/top/1" class="${feed === "top" ? "active" : ""}" aria-current="${
+    feed === "top" ? "page" : undefined
+  }">Top</a>
+        <a href="/ask/1" class="${feed === "ask" ? "active" : ""}" aria-current="${
+    feed === "ask" ? "page" : undefined
+  }">Ask</a>
+        <a href="/show/1" class="${feed === "show" ? "active" : ""}" aria-current="${
+    feed === "show" ? "page" : undefined
+  }">Show</a>
+        <a href="/jobs/1" class="${feed === "jobs" ? "active" : ""}" aria-current="${
+    feed === "jobs" ? "page" : undefined
+  }">Jobs</a>
+      </nav>
       <ol>
-        ${content.map((data: Item) => html`
-          <li>
-            <a class="title" href="${data.url ?? `/item/${data.id}`}">
-              ${data.title}
-            </a>
-            <a class="comments" href="/item/${data.id}">
-              view ${data.comments_count > 0 ? data.comments_count + " comments" : "discussion"}
-            </a>
-          </li>
-        `)}
+        ${content.map((data: Item) => renderStory(data))}
       </ol>
-      <a href="/top/${pageNumber + 1}" style="text-align: center;">More</a>
+      <a href="/${feed}/${
+    pageNumber + 1
+  }" class="more-link" style="text-align: center; display:block; margin-top:1.5em;">More</a>
     </main>
+    ${turboScript}
   </body>
 </html>
 `;
 
 // Shell page for article
-const shellPage = (title: string, body: HTML): HTML =>
+const shellPage = (
+  title: string,
+  body: HTML,
+  canonicalUrl?: string,
+  description?: string,
+): HTML =>
   (async function* (): AsyncGenerator<string> {
-    yield* html`
+    yield* tpl`
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    ${canonicalUrl ? tpl`<link rel="canonical" href="${canonicalUrl}" />` : ""}
+    ${description ? tpl`<meta name="description" content="${description}" />` : ""}
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="preconnect" href="https://api.hnpwa.com" crossorigin />
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap" />
     <style type="text/css">
       * {
         box-sizing: border-box;
       }
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
           Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
           "Segoe UI Symbol";
         background-color: whitesmoke;
@@ -190,6 +402,59 @@ const shellPage = (title: string, body: HTML): HTML =>
         padding-block: 0.5em;
         margin: 0;
       }
+      nav a {
+        text-decoration: none;
+        color: inherit;
+      }
+      nav a:hover {
+        text-decoration: underline;
+      }
+      nav a:focus-visible {
+        outline: 2px solid #ff7a18;
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
+      .more-link:focus-visible {
+        outline: 2px solid #ff7a18;
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
+      .badge {
+        display: inline-block;
+        padding: 0.2em 0.6em;
+        border-radius: 999px;
+        font-size: 0.7em;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-right: 0.5em;
+        border: 1px solid rgba(0,0,0,0.1);
+        background: rgba(0,0,0,0.04);
+        vertical-align: middle;
+      }
+      .badge-link {
+        background: rgba(25, 118, 210, 0.08);
+        border-color: rgba(25, 118, 210, 0.25);
+      }
+      .badge-ask {
+        background: rgba(244, 67, 54, 0.08);
+        border-color: rgba(244, 67, 54, 0.25);
+      }
+      .badge-show {
+        background: rgba(67, 160, 71, 0.08);
+        border-color: rgba(67, 160, 71, 0.25);
+      }
+      .badge-job {
+        background: rgba(255, 160, 0, 0.08);
+        border-color: rgba(255, 160, 0, 0.25);
+      }
+      .badge-default {
+        background: rgba(0, 0, 0, 0.04);
+        border-color: rgba(0, 0, 0, 0.15);
+      }
+      .meta-line {
+        font-size: 0.9em;
+        opacity: 0.85;
+      }
     </style>
     <title>${title}</title>
   </head>
@@ -199,15 +464,15 @@ const shellPage = (title: string, body: HTML): HTML =>
     yield* body;
 
     yield* html`
-  </body>
-</html>
+      </body>
+      </html>
     `;
   })();
 
-// Streaming comments section
-const commentsSection = (rootIds: number[] | undefined): HTML =>
+// Streaming comments section over nested HNPWA comments
+const commentsSection = (rootComments: HNAPIItem[] | undefined): HTML =>
   (async function* (): AsyncGenerator<string> {
-    if (!rootIds || rootIds.length === 0) {
+    if (!rootComments || rootComments.length === 0) {
       yield "<p>No comments yet.</p>";
       return;
     }
@@ -215,62 +480,62 @@ const commentsSection = (rootIds: number[] | undefined): HTML =>
     yield '<section aria-label="Comments">';
 
     const state = { remaining: MAX_COMMENTS_TOTAL };
-    for await (const chunk of streamComments(rootIds, 0, state)) {
+    for await (const chunk of streamComments(rootComments, 0, state)) {
       yield chunk;
     }
 
     yield "</section>";
   })();
 
-// Core streaming comment renderer: fetch & render on the fly
 async function* streamComments(
-  ids: number[],
+  comments: HNAPIItem[],
   level: number,
   state: { remaining: number },
 ): AsyncGenerator<string> {
-  if (!ids.length || state.remaining <= 0 || level >= MAX_COMMENT_DEPTH) {
+  if (!comments.length || state.remaining <= 0 || level >= MAX_COMMENT_DEPTH) {
     return;
   }
 
   const isNested = level >= 1;
   if (isNested) yield "<ul>";
 
-  for (const id of ids) {
+  for (const comment of comments) {
     if (state.remaining <= 0) break;
-
-    const rawComment = await fetchItem(id);
-    if (!rawComment) continue;
-    if (rawComment.deleted || rawComment.dead) continue;
-    if (rawComment.type !== "comment") continue;
+    if (comment.deleted || comment.dead || comment.type !== "comment") {
+      continue;
+    }
 
     state.remaining -= 1;
 
-    const time_ago = formatTimeAgo(rawComment.time ?? 0);
-    const user = rawComment.by ?? "[deleted]";
-    const content = rawComment.text ?? "";
+    const time_ago = comment.time_ago ?? "";
+    const user = comment.user ?? "[deleted]";
+    const content = comment.content ?? "";
 
     if (isNested) yield "<li>";
 
-    // Render a single comment block
-    yield `<details ${level === 0 ? "open" : ""} id="${rawComment.id}">`;
-    yield `<summary><span>${escape(user)} - <a href="#${
-      rawComment.id
-    }">${escape(time_ago)}</a></span></summary>`;
-    // HN comment text is already HTML (e.g. <p>...</p>), so don't escape
+    const isRoot = level === 0;
+    yield `<details ${isRoot ? "open" : ""} id="${comment.id}" aria-expanded="${
+      isRoot ? "true" : "false"
+    }">`;
+    yield `<summary aria-label="Comment by ${escape(user)}, posted ${escape(time_ago)}"><span>${
+      escape(user)
+    } - <a href="#${comment.id}">${escape(time_ago)}</a></span></summary>`;
+    // HNPWA comment content is already HTML
     yield `<div>${content}</div>`;
 
-    // Children streamed recursively
     if (
-      rawComment.kids &&
-      rawComment.kids.length &&
+      comment.comments &&
+      comment.comments.length &&
       state.remaining > 0 &&
       level + 1 < MAX_COMMENT_DEPTH
     ) {
-      for await (const chunk of streamComments(
-        rawComment.kids,
-        level + 1,
-        state,
-      )) {
+      for await (
+        const chunk of streamComments(
+          comment.comments,
+          level + 1,
+          state,
+        )
+      ) {
         yield chunk;
       }
     }
@@ -283,25 +548,41 @@ async function* streamComments(
   if (isNested) yield "</ul>";
 }
 
-export const article = (item: Item, rootCommentIds: number[]): HTML =>
-  shellPage(`NFHN: ${item.title}`, html`
-    <nav>
-      <a href="/">Home</a>
-    </nav>
-    <hr />
-    <main>
-      <article>
-        <a href="${item.url ?? "#"}">
-          <h1>${item.title}</h1>
-          <small>${item.domain ?? ""}</small>
-        </a>
-        <p>
-          ${item.points ?? 0} points by
-          ${item.user ?? "[deleted]"} ${item.time_ago}
-        </p>
-        <hr />
-        ${unsafeHTML(item.content || "")}
-        ${commentsSection(rootCommentIds)}
-      </article>
-    </main>
-  `);
+export const article = (item: Item, canonicalUrl?: string): HTML =>
+  shellPage(
+    `NFHN: ${item.title}`,
+    html`
+      <nav aria-label="Primary">
+        <a href="/" aria-current="page">Home</a>
+      </nav>
+      <hr />
+      <main>
+        <article>
+          <a href="${primaryHref(item)}">
+            <span class="badge ${typeClass(item.type)}">${typeLabel(item.type)}</span>
+            <h1 style="display:inline-block; margin-left:0.4em;">${item.title}</h1>
+            ${item.domain
+              ? html`
+                <small>${item.domain}</small>
+              `
+              : ""}
+          </a>
+          ${// Job with no comments: hide points/comments line, just show "posted X ago"
+          item.type === "job" && item.comments_count === 0
+            ? html`
+              <p class="meta-line">posted ${item.time_ago}</p>
+            `
+            : html`
+              <p class="meta-line">
+                ${item.points ?? 0} points by ${item.user ?? "[deleted]"} ${item.time_ago}
+              </p>
+            `}
+          <hr />
+          ${unsafeHTML(item.content || "")} ${commentsSection(item.comments)}
+        </article>
+      </main>
+      ${turboScript}
+    `,
+    canonicalUrl,
+    `Hacker News discussion: ${item.title}`,
+  );

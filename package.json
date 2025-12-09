@@ -3,10 +3,6 @@
   "version": "1.0.0",
   "description": "You can view the deployed version at <https://nfhn.netlify.app/>",
   "main": "index.js",
-  "scripts": {
-    "test": "deno test --allow-net --allow-env tests/",
-    "test:watch": "deno test --allow-net --allow-env --watch tests/"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/JakeChampion/nfhn.git"
@@ -14,17 +10,21 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "bugs": {
     "url": "https://github.com/JakeChampion/nfhn/issues"
   },
   "homepage": "https://github.com/JakeChampion/nfhn#readme",
   "dependencies": {
-    "@netlify/edge-functions": "^3.0.2",
-    "elysia": "^1.1.23",
-    "supports-color": "*"
+    "@netlify/edge-functions": "^3.0.2"
   },
-  "devDependencies": {
-    "@types/node": "^24.10.1"
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": "deno fmt"
+  },
+  "scripts": {
+    "test": "deno test --allow-net --allow-env tests/",
+    "test:watch": "deno test --allow-net --allow-env --watch tests/",
+    "lint": "deno lint netlify/edge-functions tests",
+    "fmt": "deno fmt netlify/edge-functions tests"
   }
 }

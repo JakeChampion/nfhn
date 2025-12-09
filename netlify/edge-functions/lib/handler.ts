@@ -1,193 +1,631 @@
 // handler.ts
-import { contents } from "../handlers/icon.ts";
-import { HTMLResponse } from "./html.ts";
-import { home, article } from "./render.ts";
+import { escape, HTMLResponse } from "./html.ts";
+import { article, home } from "./render.ts";
 import {
-  fetchTopStoriesPage,
+  fetchAskStoriesPage,
   fetchItem,
+  fetchJobsStoriesPage,
+  fetchShowStoriesPage,
+  fetchTopStoriesPage,
   mapStoryToItem,
 } from "./hn.ts";
 
 const HTML_CACHE_NAME = "nfhn-html";
-const ASSET_CACHE_NAME = "nfhn-assets";
+const FEED_TTL_SECONDS = 30;
+const FEED_STALE_SECONDS = 300;
+const ITEM_TTL_SECONDS = 60;
+const ITEM_STALE_SECONDS = 600;
+const encoder = new TextEncoder();
 
-/**
- * Generic programmable cache wrapper.
- *
- * - Checks cache first (keyed by the incoming Request).
- * - If miss, calls `producer` to create a Response.
- * - For successful (2xx) responses, tees the body:
- *   - one stream to the client
- *   - one stream into Netlify's programmable cache
- * - Adds/overrides Cache-Control with `max-age=ttlSeconds`.
- */
+type FeedSlug = "top" | "ask" | "show" | "jobs";
+type FeedHandler = (request: Request, pageNumber: number) => Promise<Response>;
+
+const applySecurityHeaders = (headers: Headers): Headers => {
+  headers.set(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com",
+      "img-src 'self' data:",
+      "connect-src 'self'",
+      "script-src 'self' 'unsafe-inline'",
+      "frame-ancestors 'none'",
+      "base-uri 'none'",
+      "form-action 'none'",
+    ].join("; "),
+  );
+  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+  );
+  return headers;
+};
+
+const getRequestId = (request: Request): string | undefined =>
+  request.headers.get("x-nf-request-id") ?? undefined;
+
+const computeCanonical = (request: Request, pathname: string): string =>
+  new URL(pathname, request.url).toString();
+
+const lastModifiedFromTimes = (times: number[]): string | undefined => {
+  const finiteTimes = times.filter((t) => Number.isFinite(t) && t > 0);
+  if (!finiteTimes.length) return undefined;
+  const max = Math.max(...finiteTimes);
+  return new Date(max * 1000).toUTCString();
+};
+
+const generateETag = async (parts: Array<string | number>): Promise<string> => {
+  const data = encoder.encode(parts.join("|"));
+  const hash = await crypto.subtle.digest("SHA-1", data);
+  const bytes = Array.from(new Uint8Array(hash));
+  const hex = bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `"${hex}"`;
+};
+
+const parsePositiveInt = (value: string): number | null => {
+  const num = Number.parseInt(value, 10);
+  if (!Number.isFinite(num) || num < 1) return null;
+  return num;
+};
+
+const applyConditionalRequest = (request: Request, response: Response): Response => {
+  if (request.method !== "GET") return response;
+  const etag = response.headers.get("etag");
+  const ifNoneMatch = request.headers.get("if-none-match");
+  const lastModified = response.headers.get("last-modified");
+  const ifModifiedSince = request.headers.get("if-modified-since");
+
+  let notModified = false;
+
+  if (etag && ifNoneMatch) {
+    const tags = ifNoneMatch.split(",").map((t) => t.trim());
+    if (tags.includes(etag) || tags.includes("*")) {
+      notModified = true;
+    }
+  }
+
+  if (!notModified && lastModified && ifModifiedSince) {
+    const sinceTime = Date.parse(ifModifiedSince);
+    const lastTime = Date.parse(lastModified);
+    if (!Number.isNaN(sinceTime) && !Number.isNaN(lastTime) && sinceTime >= lastTime) {
+      notModified = true;
+    }
+  }
+
+  if (!notModified) return response;
+
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  return new Response(null, { status: 304, headers });
+};
+
+const renderErrorPage = (
+  status: number,
+  title: string,
+  description: string,
+  requestId?: string,
+): Response => {
+  const now = new Date();
+  const id = requestId ?? crypto.randomUUID();
+
+  const headers = applySecurityHeaders(new Headers());
+  return new HTMLResponse(
+    `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>${escape(title)} | NFHN</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        background-color: whitesmoke;
+        margin: 40px auto;
+        max-width: 600px;
+        line-height: 1.6;
+        font-size: 18px;
+        padding: 0 1em;
+        color: #333;
+        text-align: center;
+      }
+      h1 { margin-bottom: 0.2em; }
+      p { margin-top: 0; }
+      a {
+        color: inherit;
+        text-decoration: none;
+        border-bottom: 1px solid rgba(0,0,0,0.2);
+      }
+      a:hover { border-bottom-color: rgba(0,0,0,0.5); }
+    </style>
+  </head>
+  <body>
+    <main aria-live="polite">
+      <h1>${escape(title)}</h1>
+      <p>${escape(description)}</p>
+      <p><a href="/">Return to home</a> &middot; <a href="#" onclick="location.reload();return false;">Retry</a></p>
+      <p style="font-size:0.9em; opacity:0.7;">Request ID: ${escape(id)}<br/>${
+      escape(
+        now.toUTCString(),
+      )
+    }</p>
+    </main>
+  </body>
+</html>`,
+    { status, headers },
+  );
+};
+
+const renderOfflinePage = (requestId?: string): Response => {
+  const now = new Date();
+  const id = requestId ?? crypto.randomUUID();
+  const headers = applySecurityHeaders(new Headers());
+  return new HTMLResponse(
+    `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Offline | NFHN</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background: #f5f5f5;
+        color: #333;
+        max-width: 600px;
+        margin: 40px auto;
+        padding: 0 1em;
+        text-align: center;
+        line-height: 1.6;
+      }
+      a { color: inherit; text-decoration: none; border-bottom: 1px solid rgba(0,0,0,0.2); }
+      a:hover { border-bottom-color: rgba(0,0,0,0.5); }
+    </style>
+  </head>
+  <body>
+    <main aria-live="polite">
+      <h1>Offline</h1>
+      <p>We can't reach Hacker News right now. Please check your connection and try again.</p>
+      <p><a href="#" onclick="location.reload();return false;">Retry</a> · <a href="/">Go home</a></p>
+      <p style="font-size:0.9em; opacity:0.7;">Request ID: ${escape(id)}<br/>${
+      escape(
+        now.toUTCString(),
+      )
+    }</p>
+    </main>
+  </body>
+</html>`,
+    { status: 503, headers },
+  );
+};
+
+const cacheControlValue = (ttlSeconds: number, swrSeconds: number): string => {
+  const parts = [`public`, `max-age=${ttlSeconds}`];
+  if (swrSeconds > 0) parts.push(`stale-while-revalidate=${swrSeconds}`);
+  return parts.join(", ");
+};
+
+const isCacheable = (response: Response): boolean =>
+  response.status >= 200 && response.status < 300;
+
+const ageSeconds = (response: Response): number => {
+  const cachedAt = Number.parseInt(
+    response.headers.get("x-cached-at") ?? "",
+    10,
+  );
+  if (!Number.isFinite(cachedAt)) return Infinity;
+  return (Date.now() - cachedAt) / 1000;
+};
+
+const prepareResponses = (
+  response: Response,
+  ttlSeconds: number,
+  swrSeconds: number,
+): { client: Response; cacheable: Response } => {
+  const headers = applySecurityHeaders(new Headers(response.headers));
+  headers.set("Cache-Control", cacheControlValue(ttlSeconds, swrSeconds));
+  headers.set("x-cached-at", Date.now().toString());
+
+  const init: ResponseInit = {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  };
+
+  if (!response.body) {
+    const cacheable = new Response(null, init);
+    const client = new Response(null, init);
+    return { client, cacheable };
+  }
+
+  const [bodyForClient, bodyForCache] = response.body.tee();
+
+  return {
+    client: new Response(bodyForClient, init),
+    cacheable: new Response(bodyForCache, init),
+  };
+};
+
 async function withProgrammableCache(
   request: Request,
   cacheName: string,
   ttlSeconds: number,
+  swrSeconds: number,
   producer: () => Promise<Response>,
+  offlineFallback?: () => Response,
 ): Promise<Response> {
+  const requestId = getRequestId(request);
   const cache = await caches.open(cacheName);
-
-  // 1. Cache-first
   const cached = await cache.match(request);
-  if (cached) {
-    return cached;
+  const cachedAge = cached ? ageSeconds(cached) : Infinity;
+
+  // Fresh hit
+  if (cached && cachedAge <= ttlSeconds) {
+    return applyConditionalRequest(request, cached);
   }
 
-  // 2. Produce the response
-  const response = await producer();
+  // Stale-but-serveable hit: return now and refresh in background
+  if (cached && cachedAge <= ttlSeconds + swrSeconds) {
+    producer()
+      .then((response) => {
+        if (!isCacheable(response)) return;
+        const { cacheable } = prepareResponses(
+          response,
+          ttlSeconds,
+          swrSeconds,
+        );
+        cache.put(request, cacheable).catch((err) => {
+          console.error("Failed to update cache in background:", err);
+        });
+      })
+      .catch((err) => {
+        console.error("Background revalidation failed:", err);
+      });
 
-  // Only cache "successful" responses
-  if (response.status < 200 || response.status >= 300) {
-    return response;
+    return applyConditionalRequest(request, cached);
   }
 
-  const originalBody = response.body;
+  // Miss or too stale: fetch fresh
+  const fallback = cached ?? null;
 
-  // Normalise headers + set TTL
-  const headers = new Headers(response.headers);
-  headers.set("Cache-Control", `public, max-age=${ttlSeconds}`);
+  try {
+    const response = await producer();
 
-  // No body: just cache a simple empty response
-  if (!originalBody) {
-    const cacheable = new Response(null, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
+    if (!isCacheable(response)) {
+      if (offlineFallback && response.status >= 500) {
+        return offlineFallback();
+      }
+      // Avoid caching errors; fall back to stale if available
+      if (fallback) return fallback;
+      return response;
+    }
+
+    const { client, cacheable } = prepareResponses(
+      response,
+      ttlSeconds,
+      swrSeconds,
+    );
 
     cache.put(request, cacheable).catch((err) => {
-      console.error("Failed to cache (no-body) response:", err);
+      console.error("Failed to cache response:", err);
     });
 
-    return new Response(null, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
+    return applyConditionalRequest(request, client);
+  } catch (err) {
+    console.error("Cache producer threw:", err);
+    if (offlineFallback) return offlineFallback();
+    if (fallback) return applyConditionalRequest(request, fallback);
+    return renderErrorPage(
+      500,
+      "Something went wrong",
+      "Please try again in a moment.",
+      requestId,
+    );
   }
-
-  // 3. Tee the body so we can stream to client AND cache
-  const [bodyForClient, bodyForCache] = originalBody.tee();
-
-  const responseForClient = new Response(bodyForClient, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-
-  const responseForCache = new Response(bodyForCache, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-
-  cache.put(request, responseForCache).catch((err) => {
-    console.error("Failed to cache streaming response:", err);
-  });
-
-  return responseForClient;
 }
 
 const redirectToTop1 = (): Response =>
   new Response(null, {
     status: 301,
-    headers: { Location: "/top/1" },
+    headers: applySecurityHeaders(new Headers({ Location: "/top/1" })),
   });
 
-async function handleTop(
+const redirectToAsk1 = (): Response =>
+  new Response(null, {
+    status: 301,
+    headers: applySecurityHeaders(new Headers({ Location: "/ask/1" })),
+  });
+
+const redirectToShow1 = (): Response =>
+  new Response(null, {
+    status: 301,
+    headers: applySecurityHeaders(new Headers({ Location: "/show/1" })),
+  });
+
+const redirectToJobs1 = (): Response =>
+  new Response(null, {
+    status: 301,
+    headers: applySecurityHeaders(new Headers({ Location: "/jobs/1" })),
+  });
+
+function handleTop(
   request: Request,
   pageNumber: number,
 ): Promise<Response> {
+  const requestId = getRequestId(request);
   if (!Number.isFinite(pageNumber) || pageNumber < 1) {
-    return new Response("Not Found (invalid page number)", { status: 404 });
+    return Promise.resolve(
+      renderErrorPage(
+        404,
+        "Page not found",
+        "That page number is invalid.",
+        requestId,
+      ),
+    );
   }
 
   return withProgrammableCache(
     request,
     HTML_CACHE_NAME,
-    30,
+    FEED_TTL_SECONDS,
+    FEED_STALE_SECONDS,
     async () => {
       try {
         const results = await fetchTopStoriesPage(pageNumber);
-
-        if (!results || results.length === 0) {
-          // Fetch from the API directly to check what's happening (bypass cache)
-          const url = `https://api.hnpwa.com/v0/news/${pageNumber}.json`;
-          const debugFetch = await fetch(url);
-          const debugText = await debugFetch.text();
-
-          return new Response(
-            `No stories returned for page ${pageNumber} (length = 0)\n\n` +
-              `Fetched: ${url}\n` +
-              `Status: ${debugFetch.status} ${debugFetch.statusText}\n\n` +
-              `Raw body:\n${debugText.slice(0, 1000)}...`,
-            { status: 502 },
+        if (!results.length) {
+          return renderErrorPage(
+            404,
+            "No stories found",
+            "We couldn't find that page of top stories.",
+            requestId,
           );
         }
-
-        return new HTMLResponse(home(results, pageNumber));
+        const canonical = computeCanonical(request, `/top/${pageNumber}`);
+        const response = new HTMLResponse(home(results, pageNumber, "top", canonical));
+        const etag = await generateETag(results.map((r) => r.id));
+        const lastModified = lastModifiedFromTimes(results.map((r) => r.time));
+        if (etag) response.headers.set("ETag", etag);
+        if (lastModified) response.headers.set("Last-Modified", lastModified);
+        return response;
       } catch (e) {
-        const err = e as Error;
-        console.error("Top stories fetch error:", err);
-
-        const body =
-          "Hacker News API error while fetching top stories.\n\n" +
-          `Message: ${err.message ?? String(err)}\n\n` +
-          (err.stack ? `Stack:\n${err.stack}` : "");
-
-        return new Response(body, { status: 502 });
+        console.error("Top stories fetch error:", e);
+        return renderErrorPage(
+          502,
+          "Hacker News is unavailable",
+          "Please try again in a moment.",
+          requestId,
+        );
       }
     },
+    () => renderOfflinePage(requestId),
   );
 }
 
-async function handleItem(request: Request, id: number): Promise<Response> {
-  if (!Number.isFinite(id)) {
-    return new Response("Not Found", { status: 404 });
+function handleAsk(
+  request: Request,
+  pageNumber: number,
+): Promise<Response> {
+  const requestId = getRequestId(request);
+  if (!Number.isFinite(pageNumber) || pageNumber < 1) {
+    return Promise.resolve(
+      renderErrorPage(
+        404,
+        "Page not found",
+        "That page number is invalid.",
+        requestId,
+      ),
+    );
   }
 
   return withProgrammableCache(
     request,
     HTML_CACHE_NAME,
-    60, // TTL for item pages (seconds)
+    FEED_TTL_SECONDS,
+    FEED_STALE_SECONDS,
+    async () => {
+      try {
+        const results = await fetchAskStoriesPage(pageNumber);
+        if (!results.length) {
+          return renderErrorPage(
+            404,
+            "No stories found",
+            "We couldn't find that page of Ask HN posts.",
+            requestId,
+          );
+        }
+        const canonical = computeCanonical(request, `/ask/${pageNumber}`);
+        const response = new HTMLResponse(home(results, pageNumber, "ask", canonical));
+        const etag = await generateETag(results.map((r) => r.id));
+        const lastModified = lastModifiedFromTimes(results.map((r) => r.time));
+        if (etag) response.headers.set("ETag", etag);
+        if (lastModified) response.headers.set("Last-Modified", lastModified);
+        return response;
+      } catch (e) {
+        console.error("Ask stories fetch error:", e);
+        return renderErrorPage(
+          502,
+          "Hacker News is unavailable",
+          "Please try again in a moment.",
+          requestId,
+        );
+      }
+    },
+    () => renderOfflinePage(requestId),
+  );
+}
+
+function handleShow(
+  request: Request,
+  pageNumber: number,
+): Promise<Response> {
+  const requestId = getRequestId(request);
+  if (!Number.isFinite(pageNumber) || pageNumber < 1) {
+    return Promise.resolve(
+      renderErrorPage(
+        404,
+        "Page not found",
+        "That page number is invalid.",
+        requestId,
+      ),
+    );
+  }
+
+  return withProgrammableCache(
+    request,
+    HTML_CACHE_NAME,
+    FEED_TTL_SECONDS,
+    FEED_STALE_SECONDS,
+    async () => {
+      try {
+        const results = await fetchShowStoriesPage(pageNumber);
+        if (!results.length) {
+          return renderErrorPage(
+            404,
+            "No stories found",
+            "We couldn't find that page of Show HN posts.",
+            requestId,
+          );
+        }
+        const canonical = computeCanonical(request, `/show/${pageNumber}`);
+        const response = new HTMLResponse(home(results, pageNumber, "show", canonical));
+        const etag = await generateETag(results.map((r) => r.id));
+        const lastModified = lastModifiedFromTimes(results.map((r) => r.time));
+        if (etag) response.headers.set("ETag", etag);
+        if (lastModified) response.headers.set("Last-Modified", lastModified);
+        return response;
+      } catch (e) {
+        console.error("Show stories fetch error:", e);
+        return renderErrorPage(
+          502,
+          "Hacker News is unavailable",
+          "Please try again in a moment.",
+          requestId,
+        );
+      }
+    },
+    () => renderOfflinePage(requestId),
+  );
+}
+
+function handleJobs(
+  request: Request,
+  pageNumber: number,
+): Promise<Response> {
+  const requestId = getRequestId(request);
+  if (!Number.isFinite(pageNumber) || pageNumber < 1) {
+    return Promise.resolve(
+      renderErrorPage(
+        404,
+        "Page not found",
+        "That page number is invalid.",
+        requestId,
+      ),
+    );
+  }
+
+  return withProgrammableCache(
+    request,
+    HTML_CACHE_NAME,
+    FEED_TTL_SECONDS,
+    FEED_STALE_SECONDS,
+    async () => {
+      try {
+        const results = await fetchJobsStoriesPage(pageNumber);
+        if (!results.length) {
+          return renderErrorPage(
+            404,
+            "No jobs found",
+            "We couldn't find that page of jobs.",
+            requestId,
+          );
+        }
+        const canonical = computeCanonical(request, `/jobs/${pageNumber}`);
+        const response = new HTMLResponse(home(results, pageNumber, "jobs", canonical));
+        const etag = await generateETag(results.map((r) => r.id));
+        const lastModified = lastModifiedFromTimes(results.map((r) => r.time));
+        if (etag) response.headers.set("ETag", etag);
+        if (lastModified) response.headers.set("Last-Modified", lastModified);
+        return response;
+      } catch (e) {
+        console.error("Jobs stories fetch error:", e);
+        return renderErrorPage(
+          502,
+          "Hacker News is unavailable",
+          "Please try again in a moment.",
+          requestId,
+        );
+      }
+    },
+    () => renderOfflinePage(requestId),
+  );
+}
+
+function handleItem(request: Request, id: number): Promise<Response> {
+  const requestId = getRequestId(request);
+  if (!Number.isFinite(id)) {
+    return Promise.resolve(
+      renderErrorPage(
+        404,
+        "Item not found",
+        "That story ID looks invalid.",
+        requestId,
+      ),
+    );
+  }
+
+  return withProgrammableCache(
+    request,
+    HTML_CACHE_NAME,
+    ITEM_TTL_SECONDS,
+    ITEM_STALE_SECONDS,
     async () => {
       try {
         const raw = await fetchItem(id);
         if (!raw || raw.deleted || raw.dead) {
-          return new Response("No such page", { status: 404 });
+          return renderErrorPage(
+            404,
+            "Item not found",
+            "That story is unavailable.",
+            requestId,
+          );
         }
 
         const story = mapStoryToItem(raw);
-        const rootCommentIds = raw.kids ?? [];
+        story.comments = raw.comments ?? [];
 
-        return new HTMLResponse(article(story, rootCommentIds));
+        const canonical = computeCanonical(request, `/item/${id}`);
+        const response = new HTMLResponse(article(story, canonical));
+        const etag = await generateETag([
+          story.id,
+          story.time,
+          story.comments_count,
+        ]);
+        const lastModified = lastModifiedFromTimes([story.time]);
+        if (etag) response.headers.set("ETag", etag);
+        if (lastModified) response.headers.set("Last-Modified", lastModified);
+        return response;
       } catch (e) {
         console.error("Item fetch error:", e);
-        return new Response("Hacker News API error", { status: 502 });
+        return renderErrorPage(
+          502,
+          "Hacker News is unavailable",
+          "Please try again in a moment.",
+          requestId,
+        );
       }
     },
+    () => renderOfflinePage(requestId),
   );
 }
 
-async function handleIcon(request: Request): Promise<Response> {
-  return withProgrammableCache(
-    request,
-    ASSET_CACHE_NAME,
-    86400, // 1 day for the icon
-    async () => {
-      return new Response(contents, {
-        status: 200,
-        headers: {
-          "content-type": "image/svg+xml; charset=utf-8",
-          // This will be overridden with Cache-Control by the helper,
-          // but you can keep other headers here if needed.
-        },
-      });
-    },
-  );
-}
+const feedRoutes: { slug: FeedSlug; pattern: RegExp; handler: FeedHandler }[] = [
+  { slug: "top", pattern: /^\/top\/(\d+)$/, handler: handleTop },
+  { slug: "ask", pattern: /^\/ask\/(\d+)$/, handler: handleAsk },
+  { slug: "show", pattern: /^\/show\/(\d+)$/, handler: handleShow },
+  { slug: "jobs", pattern: /^\/jobs\/(\d+)$/, handler: handleJobs },
+];
 
 export default async function handler(
   request: Request,
@@ -200,26 +638,61 @@ export default async function handler(
       return redirectToTop1();
     }
 
-    if (path === "/icon.svg") {
-      return await handleIcon(request);
+    if (path === "/ask" || path === "/ask/") {
+      return redirectToAsk1();
     }
 
-    const topMatch = path.match(/^\/top\/(\d+)$/);
-    if (topMatch) {
-      const pageNumber = Number.parseInt(topMatch[1], 10);
-      return await handleTop(request, pageNumber);
+    if (path === "/show" || path === "/show/") {
+      return redirectToShow1();
+    }
+
+    if (path === "/jobs" || path === "/jobs/") {
+      return redirectToJobs1();
+    }
+
+    for (const route of feedRoutes) {
+      const match = path.match(route.pattern);
+      if (!match) continue;
+      const pageNumber = parsePositiveInt(match[1]);
+      if (pageNumber === null) {
+        return renderErrorPage(
+          404,
+          "Page not found",
+          "That page number is invalid.",
+          getRequestId(request),
+        );
+      }
+      return await route.handler(request, pageNumber);
     }
 
     const itemMatch = path.match(/^\/item\/(\d+)$/);
     if (itemMatch) {
-      const id = Number.parseInt(itemMatch[1], 10);
+      const id = parsePositiveInt(itemMatch[1]);
+      if (id === null) {
+        return renderErrorPage(
+          404,
+          "Item not found",
+          "That story ID looks invalid.",
+          getRequestId(request),
+        );
+      }
       return await handleItem(request, id);
     }
 
-    return new Response("Not Found", { status: 404 });
+    return renderErrorPage(
+      404,
+      "Page not found",
+      "We couldn't find what you're looking for.",
+      getRequestId(request),
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("Unhandled error in edge function:", message);
-    return new Response("Internal Server Error", { status: 500 });
+    return renderErrorPage(
+      500,
+      "Something went wrong",
+      "Please try again in a moment.",
+      getRequestId(request),
+    );
   }
 }
