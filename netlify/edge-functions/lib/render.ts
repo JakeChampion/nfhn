@@ -396,7 +396,7 @@ const renderComment = (comment: HNAPIItem, level: number): HTML => {
   const children = (comment.comments ?? []).filter(isRenderableComment);
 
   const details = html`
-    <details id="${comment.id}">
+    <details open id="${comment.id}">
       <summary aria-label="Comment by ${user}, posted ${time_ago}">
         <span>${user} - <a href="#${comment.id}">${time_ago}</a></span>
       </summary>
