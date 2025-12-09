@@ -447,74 +447,47 @@ const shellPage = (
   })();
 
 // Streaming comments section over nested HNPWA comments
-const commentsSection = (rootComments: HNAPIItem[] | undefined): HTML =>
-  (async function* (): AsyncGenerator<string> {
-    if (!rootComments || rootComments.length === 0) {
-      yield "<p>No comments yet.</p>";
-      return;
-    }
+const isRenderableComment = (comment: HNAPIItem): boolean =>
+  comment.type === "comment" && !comment.deleted && !comment.dead;
 
-    yield '<section aria-label="Comments">';
+const renderComment = (comment: HNAPIItem, level: number): HTML => {
+  if (!isRenderableComment(comment)) return html``;
 
-    for await (const chunk of streamComments(rootComments, 0)) {
-      yield chunk;
-    }
+  const time_ago = comment.time_ago ?? "";
+  const user = comment.user ?? "[deleted]";
+  const content = unsafeHTML(comment.content ?? "");
+  const isRoot = level === 0;
+  const children = (comment.comments ?? []).filter(isRenderableComment);
 
-    yield "</section>";
-  })();
-
-async function* streamComments(
-  comments: HNAPIItem[],
-  level: number,
-): AsyncGenerator<string> {
-  if (!comments.length) {
-    return;
-  }
-
-  const isNested = level >= 1;
-  if (isNested) yield "<ul>";
-
-  for (const comment of comments) {
-    if (comment.deleted || comment.dead || comment.type !== "comment") {
-      continue;
-    }
-    const time_ago = comment.time_ago ?? "";
-    const user = comment.user ?? "[deleted]";
-    const content = comment.content ?? "";
-
-    if (isNested) yield "<li>";
-
-    const isRoot = level === 0;
-    yield `<details ${isRoot ? "open" : ""} id="${comment.id}" aria-expanded="${
+  const details = html`
+    <details ${isRoot ? "open" : ""} id="${comment.id}" aria-expanded="${
       isRoot ? "true" : "false"
-    }">`;
-    yield `<summary aria-label="Comment by ${escape(user)}, posted ${escape(time_ago)}"><span>${
-      escape(user)
-    } - <a href="#${comment.id}">${escape(time_ago)}</a></span></summary>`;
-    // HNPWA comment content is already HTML
-    yield `<div>${content}</div>`;
+    }">
+      <summary aria-label="Comment by ${user}, posted ${time_ago}"><span>${user} - <a href="#${
+      comment.id
+    }">${time_ago}</a></span></summary>
+      <div>${content}</div>
+      ${children.length
+        ? html`<ul>${children.map((child) => renderComment(child, level + 1))}</ul>`
+        : ""}
+    </details>
+  `;
 
-    if (
-      comment.comments &&
-      comment.comments.length
-    ) {
-      for await (
-        const chunk of streamComments(
-          comment.comments,
-          level + 1,
-        )
-      ) {
-        yield chunk;
-      }
-    }
+  return level >= 1 ? html`<li>${details}</li>` : details;
+};
 
-    yield "</details>";
-
-    if (isNested) yield "</li>";
+const commentsSection = (rootComments: HNAPIItem[] | undefined): HTML => {
+  const visibleComments = (rootComments ?? []).filter(isRenderableComment);
+  if (visibleComments.length === 0) {
+    return html`<p>No comments yet.</p>`;
   }
 
-  if (isNested) yield "</ul>";
-}
+  return html`
+    <section aria-label="Comments">
+      ${visibleComments.map((comment) => renderComment(comment, 0))}
+    </section>
+  `;
+};
 
 export const article = (item: Item, canonicalUrl?: string): HTML => {
   const activeFeed: FeedSlug = item.type === "ask"
