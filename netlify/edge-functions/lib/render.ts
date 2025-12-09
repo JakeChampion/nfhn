@@ -1,5 +1,5 @@
 // render.ts
-import { escape, type HTML, html, unsafeHTML } from "./html.ts";
+import { type HTML, html, unsafeHTML } from "./html.ts";
 import { FEEDS } from "./feeds.ts";
 import { type FeedSlug, type HNAPIItem, type Item, type ItemType } from "./hn.ts";
 
@@ -34,6 +34,199 @@ const PAGE_PADDING = "0 10px";
 const PAGE_MARGIN = "40px auto";
 
 const tpl = html;
+
+const sharedStyles = (pageNumber = 1): HTML =>
+  tpl`
+    <style type="text/css">
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: system-ui, sans-serif;
+        background-color: whitesmoke;
+        margin: ${PAGE_MARGIN};
+        max-width: ${PAGE_MAX_WIDTH};
+        line-height: 1.6;
+        font-size: 18px;
+        color: #444;
+        padding: ${PAGE_PADDING};
+      }
+      main {
+        display: block;
+      }
+      h1,
+      h2,
+      h3 {
+        line-height: 1.2;
+        font-size: x-large;
+        margin: 0;
+      }
+      ul {
+        list-style: none;
+        padding-left: 0;
+      }
+      article ul {
+        padding-left: 1em;
+      }
+      ol {
+        list-style-type: none;
+        counter-reset: section;
+        counter-set: section ${pageNumber === 1 ? 0 : (pageNumber - 1) * 30};
+        padding: 0;
+      }
+      ol > li {
+        position: relative;
+        display: grid;
+        grid-template-columns: 0fr 1fr;
+        grid-template-areas:
+          ". main"
+          ". footer"
+          ". .";
+        gap: 1em;
+        margin-bottom: 1em;
+      }
+      ol > li:before {
+        counter-increment: section;
+        content: counter(section);
+        font-size: 1.6em;
+        position: absolute;
+      }
+      ol > li:after {
+        content: "";
+        background: black;
+        position: absolute;
+        bottom: 0;
+        left: 3em;
+        width: calc(100% - 3em);
+        height: 1px;
+      }
+      ol > li > * {
+        margin-left: 2em;
+      }
+      .title {
+        grid-area: main;
+      }
+      .comments {
+        grid-area: footer;
+      }
+      .title,
+      .comments {
+        display: flex;
+        justify-content: center;
+        align-content: center;
+        flex-direction: column;
+      }
+      a {
+        text-decoration: none;
+        color: inherit;
+      }
+      article a:hover {
+        text-decoration: underline;
+      }
+      a:hover .story-title-text {
+        text-decoration: underline;
+      }
+      a:focus-visible {
+        outline: 2px solid #ff7a18;
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
+      .badge {
+        display: inline-block;
+        padding: 0.1em 0.4em;
+        border-radius: 999px;
+        font-size: 0.7em;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-right: 0.5em;
+        border: 1px solid rgba(0,0,0,0.1);
+        background: rgba(0,0,0,0.04);
+        vertical-align: middle;
+      }
+      .badge-link {
+        background: rgba(25, 118, 210, 0.08);
+        border-color: rgba(25, 118, 210, 0.25);
+      }
+      .badge-ask {
+        background: rgba(244, 67, 54, 0.08);
+        border-color: rgba(244, 67, 54, 0.25);
+      }
+      .badge-show {
+        background: rgba(67, 160, 71, 0.08);
+        border-color: rgba(67, 160, 71, 0.25);
+      }
+      .badge-job {
+        background: rgba(255, 160, 0, 0.08);
+        border-color: rgba(255, 160, 0, 0.25);
+      }
+      .badge-default {
+        background: rgba(0, 0, 0, 0.04);
+        border-color: rgba(0, 0, 0, 0.15);
+      }
+      .story-title-text {
+        font-weight: 500;
+      }
+      .story-meta {
+        font-size: 0.85em;
+        opacity: 0.8;
+      }
+      .nav-feeds {
+        display: flex;
+        gap: 0.75em;
+        margin-bottom: 1.5em;
+        font-size: 0.9em;
+      }
+      .nav-feeds a {
+        text-decoration: none;
+        color: inherit;
+        opacity: 0.7;
+      }
+      .nav-feeds a.active {
+        font-weight: 600;
+        opacity: 1;
+        text-decoration: underline;
+      }
+      hr {
+        border: none;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+        margin: 1.5em 0;
+      }
+      article {
+        padding-left: 0.5em;
+      }
+      small {
+        display: block;
+        padding-top: 0.35em;
+      }
+      p {
+        padding-block: 0.5em;
+        margin: 0;
+      }
+      .meta-line {
+        font-size: 0.9em;
+        opacity: 0.85;
+      }
+      details {
+        background-color: whitesmoke;
+        margin: 40px auto;
+        max-width: 650px;
+        line-height: 1.6;
+        font-size: 18px;
+        color: #444;
+      }
+      summary {
+        font-weight: bold;
+        margin: -.5em -.5em 0;
+        padding: .5em;
+      }
+      details[open] summary {
+        border-bottom: 1px solid #aaa;
+      }
+      pre {
+        white-space: pre-wrap;
+      }
+    </style>
+  `;
 
 const renderNav = (activeFeed: FeedSlug): HTML =>
   tpl`
@@ -135,139 +328,7 @@ export const home = (
     ${canonicalUrl ? tpl`<link rel="canonical" href="${canonicalUrl}">` : ""}
     <meta name="description" content="Hacker News ${feed} page ${pageNumber}: latest ${feed} stories.">
     <link rel="icon" type="image/svg+xml" href="/icon.svg">
-    <style type="text/css">
-      body {
-        font-family: system-ui, sans-serif;
-        background-color: whitesmoke;
-        margin: ${PAGE_MARGIN};
-        max-width: ${PAGE_MAX_WIDTH};
-        line-height: 1.6;
-        font-size: 18px;
-        padding: ${PAGE_PADDING};
-        box-sizing: border-box;
-      }
-      main {
-        display: block;
-      }
-      ul {
-        list-style: none;
-        padding-left: 0;
-      }
-      ol {
-        list-style-type: none;
-        counter-reset: section;
-        counter-set: section ${pageNumber === 1 ? 0 : (pageNumber - 1) * 30};
-        padding: 0;
-      }
-      li {
-        position: relative;
-        display: grid;
-        grid-template-columns: 0fr 1fr;
-        grid-template-areas:
-          ". main"
-          ". footer"
-          ". .";
-        gap: 1em;
-        margin-bottom: 1em;
-      }
-      li:before {
-        counter-increment: section;
-        content: counter(section);
-        font-size: 1.6em;
-        position: absolute;
-      }
-      li:after {
-        content: "";
-        background: black;
-        position: absolute;
-        bottom: 0;
-        left: 3em;
-        width: calc(100% - 3em);
-        height: 1px;
-      }
-      li > * {
-        margin-left: 2em;
-      }
-      .title {
-        grid-area: main;
-      }
-      .comments {
-        grid-area: footer;
-      }
-      a {
-        display: flex;
-        justify-content: center;
-        align-content: center;
-        flex-direction: column;
-        text-decoration: none;
-        color: inherit;
-      }
-      a:hover .story-title-text {
-        text-decoration: underline;
-      }
-      a:focus-visible {
-        outline: 2px solid #ff7a18;
-        outline-offset: 3px;
-        border-radius: 4px;
-      }
-      h1,h2,h3 {
-        line-height: 1.2
-      }
-      .badge {
-        display: inline-block;
-        padding: 0.1em 0.4em;
-        border-radius: 999px;
-        font-size: 0.7em;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-right: 0.5em;
-        border: 1px solid rgba(0,0,0,0.1);
-        background: rgba(0,0,0,0.04);
-      }
-      .badge-link {
-        background: rgba(25, 118, 210, 0.08);
-        border-color: rgba(25, 118, 210, 0.25);
-      }
-      .badge-ask {
-        background: rgba(244, 67, 54, 0.08);
-        border-color: rgba(244, 67, 54, 0.25);
-      }
-      .badge-show {
-        background: rgba(67, 160, 71, 0.08);
-        border-color: rgba(67, 160, 71, 0.25);
-      }
-      .badge-job {
-        background: rgba(255, 160, 0, 0.08);
-        border-color: rgba(255, 160, 0, 0.25);
-      }
-      .badge-default {
-        background: rgba(0, 0, 0, 0.04);
-        border-color: rgba(0, 0, 0, 0.15);
-      }
-      .story-title-text {
-        font-weight: 500;
-      }
-      .story-meta {
-        font-size: 0.85em;
-        opacity: 0.8;
-      }
-      .nav-feeds {
-        display: flex;
-        gap: 0.75em;
-        margin-bottom: 1.5em;
-        font-size: 0.9em;
-      }
-      .nav-feeds a {
-        text-decoration: none;
-        color: inherit;
-        opacity: 0.7;
-      }
-      .nav-feeds a.active {
-        font-weight: 600;
-        opacity: 1;
-        text-decoration: underline;
-      }
-    </style>
+    ${sharedStyles(pageNumber)}
     <title>NFHN: Page ${pageNumber}</title>
   </head>
   <body>
@@ -302,134 +363,7 @@ const shellPage = (
     ${canonicalUrl ? tpl`<link rel="canonical" href="${canonicalUrl}" />` : ""}
     ${description ? tpl`<meta name="description" content="${description}" />` : ""}
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    <style type="text/css">
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        font-family: system-ui, sans-serif;
-        background-color: whitesmoke;
-        margin: ${PAGE_MARGIN};
-        max-width: ${PAGE_MAX_WIDTH};
-        line-height: 1.6;
-        font-size: 18px;
-        color: #444;
-        padding: ${PAGE_PADDING};
-      }
-      main {
-        display: block;
-      }
-      details {
-        background-color: whitesmoke;
-        margin: 40px auto;
-        max-width: 650px;
-        line-height: 1.6;
-        font-size: 18px;
-        color: #444;
-      }
-      summary {
-        font-weight: bold;
-        margin: -.5em -.5em 0;
-        padding: .5em;
-      }
-      details[open] summary {
-        border-bottom: 1px solid #aaa;
-      }
-      pre {
-        white-space: pre-wrap;
-      }
-      ul {
-        padding-left: 1em;
-        list-style: none;
-      }
-      h1,
-      h2,
-      h3 {
-        line-height: 1.2;
-        font-size: x-large;
-        margin: 0;
-      }
-      hr {
-        border: none;
-        border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-        margin: 1.5em 0;
-      }
-      article {
-        padding-left: 0.5em;
-      }
-      small {
-        display: block;
-        padding-top: 0.35em;
-      }
-      p {
-        padding-block: 0.5em;
-        margin: 0;
-      }
-      a {
-        text-decoration: none;
-        color: inherit;
-      }
-      a:hover {
-        text-decoration: underline;
-      }
-      a:focus-visible {
-        outline: 2px solid #ff7a18;
-        outline-offset: 3px;
-        border-radius: 4px;
-      }
-      .nav-feeds {
-        display: flex;
-        gap: 0.75em;
-        margin-bottom: 1.5em;
-        font-size: 0.9em;
-      }
-      .nav-feeds a {
-        text-decoration: none;
-        color: inherit;
-        opacity: 0.7;
-      }
-      .nav-feeds a.active {
-        font-weight: 600;
-        opacity: 1;
-        text-decoration: underline;
-      }
-      .badge {
-        display: inline-block;
-        padding: 0.1em 0.4em;
-        border-radius: 999px;
-        font-size: 0.7em;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-right: 0.5em;
-        border: 1px solid rgba(0,0,0,0.1);
-        background: rgba(0,0,0,0.04);
-        vertical-align: middle;
-      }
-      .badge-link {
-        background: rgba(25, 118, 210, 0.08);
-        border-color: rgba(25, 118, 210, 0.25);
-      }
-      .badge-ask {
-        background: rgba(244, 67, 54, 0.08);
-        border-color: rgba(244, 67, 54, 0.25);
-      }
-      .badge-show {
-        background: rgba(67, 160, 71, 0.08);
-        border-color: rgba(67, 160, 71, 0.25);
-      }
-      .badge-job {
-        background: rgba(255, 160, 0, 0.08);
-        border-color: rgba(255, 160, 0, 0.25);
-      }
-      .badge-default {
-        background: rgba(0, 0, 0, 0.04);
-        border-color: rgba(0, 0, 0, 0.15);
-      }
-      .meta-line {
-        font-size: 0.9em;
-        opacity: 0.85;
-      }
-    </style>
+    ${sharedStyles()}
     <title>${title}</title>
   </head>
   <body>
