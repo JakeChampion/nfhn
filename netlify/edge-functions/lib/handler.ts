@@ -13,68 +13,125 @@ import {
 
 const HTML_CACHE_NAME = "nfhn-html";
 const ASSET_CACHE_NAME = "nfhn-assets";
+const FEED_TTL_SECONDS = 30;
+const FEED_STALE_SECONDS = 300;
+const ITEM_TTL_SECONDS = 60;
+const ITEM_STALE_SECONDS = 600;
+const ICON_TTL_SECONDS = 86400;
+const ICON_STALE_SECONDS = 604800;
+
+const cacheControlValue = (ttlSeconds: number, swrSeconds: number): string => {
+  const parts = [`public`, `max-age=${ttlSeconds}`];
+  if (swrSeconds > 0) parts.push(`stale-while-revalidate=${swrSeconds}`);
+  return parts.join(", ");
+};
+
+const isCacheable = (response: Response): boolean =>
+  response.status >= 200 && response.status < 300;
+
+const ageSeconds = (response: Response): number => {
+  const cachedAt = Number.parseInt(
+    response.headers.get("x-cached-at") ?? "",
+    10,
+  );
+  if (!Number.isFinite(cachedAt)) return Infinity;
+  return (Date.now() - cachedAt) / 1000;
+};
+
+const prepareResponses = (
+  response: Response,
+  ttlSeconds: number,
+  swrSeconds: number,
+): { client: Response; cacheable: Response } => {
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", cacheControlValue(ttlSeconds, swrSeconds));
+  headers.set("x-cached-at", Date.now().toString());
+
+  const init: ResponseInit = {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  };
+
+  if (!response.body) {
+    const cacheable = new Response(null, init);
+    const client = new Response(null, init);
+    return { client, cacheable };
+  }
+
+  const [bodyForClient, bodyForCache] = response.body.tee();
+
+  return {
+    client: new Response(bodyForClient, init),
+    cacheable: new Response(bodyForCache, init),
+  };
+};
 
 async function withProgrammableCache(
   request: Request,
   cacheName: string,
   ttlSeconds: number,
+  swrSeconds: number,
   producer: () => Promise<Response>,
 ): Promise<Response> {
   const cache = await caches.open(cacheName);
-
-  // 1. Cache-first
   const cached = await cache.match(request);
-  if (cached) return cached;
+  const cachedAge = cached ? ageSeconds(cached) : Infinity;
 
-  // 2. Produce fresh
-  const response = await producer();
-
-  // Only cache "successful" responses
-  if (response.status < 200 || response.status >= 300) {
-    return response;
+  // Fresh hit
+  if (cached && cachedAge <= ttlSeconds) {
+    return cached;
   }
 
-  const originalBody = response.body;
-  const headers = new Headers(response.headers);
-  headers.set("Cache-Control", `public, max-age=${ttlSeconds}`);
+  // Stale-but-serveable hit: return now and refresh in background
+  if (cached && cachedAge <= ttlSeconds + swrSeconds) {
+    producer()
+      .then((response) => {
+        if (!isCacheable(response)) return;
+        const { cacheable } = prepareResponses(
+          response,
+          ttlSeconds,
+          swrSeconds,
+        );
+        cache.put(request, cacheable).catch((err) => {
+          console.error("Failed to update cache in background:", err);
+        });
+      })
+      .catch((err) => {
+        console.error("Background revalidation failed:", err);
+      });
 
-  if (!originalBody) {
-    const cacheable = new Response(null, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
+    return cached;
+  }
+
+  // Miss or too stale: fetch fresh
+  const fallback = cached ?? null;
+
+  try {
+    const response = await producer();
+
+    if (!isCacheable(response)) {
+      // Avoid caching errors; fall back to stale if available
+      if (fallback) return fallback;
+      return response;
+    }
+
+    const { client, cacheable } = prepareResponses(
+      response,
+      ttlSeconds,
+      swrSeconds,
+    );
 
     cache.put(request, cacheable).catch((err) => {
-      console.error("Failed to cache (no-body) response:", err);
+      console.error("Failed to cache response:", err);
     });
 
-    return new Response(null, {
-      status: response.status,
-      statusText: response.statusText,
-      headers,
-    });
+    return client;
+  } catch (err) {
+    console.error("Cache producer threw:", err);
+    if (fallback) return fallback;
+    return new Response("Internal Server Error", { status: 500 });
   }
-
-  const [bodyForClient, bodyForCache] = originalBody.tee();
-
-  const responseForClient = new Response(bodyForClient, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-
-  const responseForCache = new Response(bodyForCache, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
-
-  cache.put(request, responseForCache).catch((err) => {
-    console.error("Failed to cache streaming response:", err);
-  });
-
-  return responseForClient;
 }
 
 const redirectToTop1 = (): Response =>
@@ -112,7 +169,8 @@ async function handleTop(
   return withProgrammableCache(
     request,
     HTML_CACHE_NAME,
-    30,
+    FEED_TTL_SECONDS,
+    FEED_STALE_SECONDS,
     async () => {
       try {
         const results = await fetchTopStoriesPage(pageNumber);
@@ -139,7 +197,8 @@ async function handleAsk(
   return withProgrammableCache(
     request,
     HTML_CACHE_NAME,
-    30,
+    FEED_TTL_SECONDS,
+    FEED_STALE_SECONDS,
     async () => {
       try {
         const results = await fetchAskStoriesPage(pageNumber);
@@ -166,7 +225,8 @@ async function handleShow(
   return withProgrammableCache(
     request,
     HTML_CACHE_NAME,
-    30,
+    FEED_TTL_SECONDS,
+    FEED_STALE_SECONDS,
     async () => {
       try {
         const results = await fetchShowStoriesPage(pageNumber);
@@ -193,7 +253,8 @@ async function handleJobs(
   return withProgrammableCache(
     request,
     HTML_CACHE_NAME,
-    30,
+    FEED_TTL_SECONDS,
+    FEED_STALE_SECONDS,
     async () => {
       try {
         const results = await fetchJobsStoriesPage(pageNumber);
@@ -217,7 +278,8 @@ async function handleItem(request: Request, id: number): Promise<Response> {
   return withProgrammableCache(
     request,
     HTML_CACHE_NAME,
-    60,
+    ITEM_TTL_SECONDS,
+    ITEM_STALE_SECONDS,
     async () => {
       try {
         const raw = await fetchItem(id);
@@ -241,7 +303,8 @@ async function handleIcon(request: Request): Promise<Response> {
   return withProgrammableCache(
     request,
     ASSET_CACHE_NAME,
-    86400,
+    ICON_TTL_SECONDS,
+    ICON_STALE_SECONDS,
     async () =>
       new Response(contents, {
         status: 200,
