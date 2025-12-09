@@ -135,14 +135,18 @@ async function handleItem(request: Request, id: number): Promise<Response> {
     async () => {
       try {
         const raw = await fetchItem(id);
-        if (!raw || raw.deleted || raw.dead) {
+        if (!raw || raw.deleted || raw.dead || raw.type !== "story") {
           return new Response("No such page", { status: 404 });
         }
 
-        const story = mapStoryToItem(raw);
-        const rootCommentIds = raw.kids ?? [];
+        // Map top-level story fields into your internal Item shape
+        const story = mapStoryToItem(raw) as any;
 
-        return new HTMLResponse(article(story, rootCommentIds));
+        // Attach the HNPWA comments tree so render.ts can walk it
+        // (render.ts will cast this back to HNAPIItem[])
+        story.comments = raw.comments ?? [];
+
+        return new HTMLResponse(article(story));
       } catch (e) {
         console.error("Item fetch error:", e);
         return new Response("Hacker News API error", { status: 502 });
