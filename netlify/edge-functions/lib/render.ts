@@ -29,6 +29,10 @@ const TYPE_META: Record<ItemType, TypeMeta> = {
 
 const getTypeMeta = (type: StoryType): TypeMeta => TYPE_META[type];
 
+const PAGE_MAX_WIDTH = "80ch";
+const PAGE_PADDING = "0 10px";
+const PAGE_MARGIN = "40px auto";
+
 const tpl = html;
 
 const renderNav = (activeFeed: FeedSlug): HTML =>
@@ -135,11 +139,11 @@ export const home = (
       body {
         font-family: system-ui, sans-serif;
         background-color: whitesmoke;
-        margin: 40px auto;
-        max-width: 80ch;
+        margin: ${PAGE_MARGIN};
+        max-width: ${PAGE_MAX_WIDTH};
         line-height: 1.6;
         font-size: 18px;
-        padding: 0 10px;
+        padding: ${PAGE_PADDING};
         box-sizing: border-box;
       }
       main {
@@ -305,12 +309,12 @@ const shellPage = (
       body {
         font-family: system-ui, sans-serif;
         background-color: whitesmoke;
-        margin: 40px auto;
-        max-width: 80ch;
+        margin: ${PAGE_MARGIN};
+        max-width: ${PAGE_MAX_WIDTH};
         line-height: 1.6;
         font-size: 18px;
         color: #444;
-        padding: 0 10px;
+        padding: ${PAGE_PADDING};
       }
       main {
         display: block;
