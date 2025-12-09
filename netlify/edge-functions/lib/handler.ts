@@ -254,8 +254,7 @@ async function withProgrammableCache(
   const cached = await cache.match(request);
   const cachedAge = cached ? ageSeconds(cached) : Infinity;
 
-  const serveFresh = (response: Response): Response =>
-    applyConditionalRequest(request, response);
+  const serveFresh = (response: Response): Response => applyConditionalRequest(request, response);
 
   const revalidateInBackground = (): void => {
     producer()

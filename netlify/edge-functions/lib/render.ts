@@ -231,13 +231,15 @@ const sharedStyles = (pageNumber = 1): HTML =>
 const renderNav = (activeFeed: FeedSlug): HTML =>
   tpl`
     <nav class="nav-feeds" aria-label="Primary">
-      ${FEEDS.map(({ slug, label }) =>
-        html`
-          <a href="/${slug}/1" class="${activeFeed === slug ? "active" : ""}" aria-current="${
-          activeFeed === slug ? "page" : undefined
-        }">${label}</a>
-        `
-      )}
+      ${
+    FEEDS.map(({ slug, label }) =>
+      html`
+        <a href="/${slug}/1" class="${activeFeed === slug
+          ? "active"
+          : ""}" aria-current="${activeFeed === slug ? "page" : undefined}">${label}</a>
+      `
+    )
+  }
     </nav>
   `;
 
@@ -382,7 +384,11 @@ const isRenderableComment = (comment: HNAPIItem): boolean =>
   comment.type === "comment" && !comment.deleted && !comment.dead;
 
 const renderComment = (comment: HNAPIItem, level: number): HTML => {
-  if (!isRenderableComment(comment)) return html``;
+  if (!isRenderableComment(comment)) {
+    return html`
+
+    `;
+  }
 
   const time_ago = comment.time_ago ?? "";
   const user = comment.user ?? "[deleted]";
@@ -391,26 +397,34 @@ const renderComment = (comment: HNAPIItem, level: number): HTML => {
   const children = (comment.comments ?? []).filter(isRenderableComment);
 
   const details = html`
-    <details ${isRoot ? "open" : ""} id="${comment.id}" aria-expanded="${
-      isRoot ? "true" : "false"
-    }">
-      <summary aria-label="Comment by ${user}, posted ${time_ago}"><span>${user} - <a href="#${
-      comment.id
-    }">${time_ago}</a></span></summary>
+    <details ${isRoot ? "open" : ""} id="${comment.id}" aria-expanded="${isRoot
+      ? "true"
+      : "false"}">
+      <summary aria-label="Comment by ${user}, posted ${time_ago}">
+        <span>${user} - <a href="#${comment.id}">${time_ago}</a></span>
+      </summary>
       <div>${content}</div>
       ${children.length
-        ? html`<ul>${children.map((child) => renderComment(child, level + 1))}</ul>`
+        ? html`
+          <ul>${children.map((child) => renderComment(child, level + 1))}</ul>
+        `
         : ""}
     </details>
   `;
 
-  return level >= 1 ? html`<li>${details}</li>` : details;
+  return level >= 1
+    ? html`
+      <li>${details}</li>
+    `
+    : details;
 };
 
 const commentsSection = (rootComments: HNAPIItem[] | undefined): HTML => {
   const visibleComments = (rootComments ?? []).filter(isRenderableComment);
   if (visibleComments.length === 0) {
-    return html`<p>No comments yet.</p>`;
+    return html`
+      <p>No comments yet.</p>
+    `;
   }
 
   return html`
