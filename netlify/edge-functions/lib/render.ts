@@ -66,7 +66,6 @@ const turboScript = tpl`
 
   function warm(url) {
     const u = new URL(url, location.href);
-    console.log("Warming", u.origin, u.href, location.origin);
     if (u.origin !== location.origin) return;
 
     const href = u.toString();
@@ -86,6 +85,7 @@ const turboScript = tpl`
 
     link.href = href;
     document.head.appendChild(link);
+    console.debug("Warming link:", link.rel, link.href);
   }
 
   function onIntent(e) {
