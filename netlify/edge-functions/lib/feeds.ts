@@ -7,6 +7,7 @@ import {
 } from "./hn.ts";
 
 export type FeedSlug = "top" | "ask" | "show" | "jobs";
+export type StoryTypeMeta = { label: string; className: string };
 
 export type FeedConfig = {
   slug: FeedSlug;
@@ -61,3 +62,19 @@ export const feedConfigs: FeedConfig[] = [
     logLabel: "Jobs stories",
   },
 ];
+
+const defaultTypeMeta: StoryTypeMeta = {
+  label: "Link",
+  className: "badge-default",
+};
+
+const TYPE_META: Record<string, StoryTypeMeta> = {
+  ask: { label: "Ask HN", className: "badge-ask" },
+  show: { label: "Show HN", className: "badge-show" },
+  job: { label: "Job", className: "badge-job" },
+  link: { label: "Link", className: "badge-link" },
+  comment: { label: "Comment", className: "badge-default" },
+};
+
+export const getTypeMeta = (type: string): StoryTypeMeta =>
+  TYPE_META[type] ?? { ...defaultTypeMeta, label: type };

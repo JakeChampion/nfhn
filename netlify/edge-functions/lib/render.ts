@@ -1,43 +1,11 @@
 // render.ts
 import { escape, type HTML, html, unsafeHTML } from "./html.ts";
-import { feedConfigs, type FeedSlug } from "./feeds.ts";
+import { feedConfigs, getTypeMeta, type FeedSlug } from "./feeds.ts";
 import { type HNAPIItem, type Item } from "./hn.ts";
 
 // Limits to keep edge execution bounded
 const MAX_COMMENT_DEPTH = Infinity;
 const MAX_COMMENTS_TOTAL = Infinity;
-
-function typeLabel(type: string): string {
-  switch (type) {
-    case "ask":
-      return "Ask HN";
-    case "show":
-      return "Show HN";
-    case "job":
-      return "Job";
-    case "link":
-      return "Link";
-    case "comment":
-      return "Comment";
-    default:
-      return type;
-  }
-}
-
-function typeClass(type: string): string {
-  switch (type) {
-    case "ask":
-      return "badge-ask";
-    case "show":
-      return "badge-show";
-    case "job":
-      return "badge-job";
-    case "link":
-      return "badge-link";
-    default:
-      return "badge-default";
-  }
-}
 
 // Decide where the main story title link should go
 function primaryHref(item: Item): string {
@@ -106,7 +74,10 @@ const renderStory = (data: Item): HTML =>
   html`
     <li>
       <a class="title" href="${primaryHref(data)}">
-        <span class="badge ${typeClass(data.type)}">${typeLabel(data.type)}</span>
+        ${(() => {
+          const typeMeta = getTypeMeta(data.type);
+          return tpl`<span class="badge ${typeMeta.className}">${typeMeta.label}</span>`;
+        })()}
         <span class="story-title-text">${data.title}</span>
         ${data.domain
           ? html`
@@ -527,7 +498,10 @@ export const article = (item: Item, canonicalUrl?: string): HTML =>
       <main>
         <article>
           <a href="${primaryHref(item)}">
-            <span class="badge ${typeClass(item.type)}">${typeLabel(item.type)}</span>
+            ${(() => {
+              const typeMeta = getTypeMeta(item.type);
+              return tpl`<span class="badge ${typeMeta.className}">${typeMeta.label}</span>`;
+            })()}
             <h1 style="display:inline-block; margin-left:0.4em;">${item.title}</h1>
             ${item.domain
               ? html`
