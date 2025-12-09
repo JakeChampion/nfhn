@@ -17,7 +17,6 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
           cache: 'npm'
 
       - name: Setup Deno
@@ -28,19 +27,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify installations
-        run: |
-          node --version
-          npm --version
-          deno --version
-
       - name: Run tests
-        run: npm test
+        run: npm run lint && npm test
 
-      - name: Test coverage (optional)
-        run: deno test --allow-net --allow-env --coverage=coverage tests/
-        continue-on-error: true
-
-      - name: Generate coverage report (optional)
-        run: deno coverage coverage --lcov > coverage.lcov
-        continue-on-error: true
