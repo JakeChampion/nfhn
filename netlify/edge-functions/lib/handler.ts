@@ -1,12 +1,7 @@
 // handler.ts
 import { escape, HTMLResponse } from "./html.ts";
 import { article, home } from "./render.ts";
-import {
-  fetchItem,
-  fetchStoriesPage,
-  mapStoryToItem,
-  type FeedSlug,
-} from "./hn.ts";
+import { type FeedSlug, fetchItem, fetchStoriesPage, mapStoryToItem } from "./hn.ts";
 
 const HTML_CACHE_NAME = "nfhn-html";
 const FEED_TTL_SECONDS = 30;
@@ -410,12 +405,13 @@ function createFeedHandler({
   };
 }
 
-const feedRoutes: { slug: FeedSlug; pattern: RegExp; handler: FeedHandler }[] =
-  FEEDS.map(({ slug, emptyTitle, emptyDescription }) => ({
-    slug,
-    pattern: new RegExp(`^/${slug}/(\\d+)$`),
-    handler: createFeedHandler({ slug, emptyTitle, emptyDescription }),
-  }));
+const feedRoutes: { slug: FeedSlug; pattern: RegExp; handler: FeedHandler }[] = FEEDS.map((
+  { slug, emptyTitle, emptyDescription },
+) => ({
+  slug,
+  pattern: new RegExp(`^/${slug}/(\\d+)$`),
+  handler: createFeedHandler({ slug, emptyTitle, emptyDescription }),
+}));
 
 const redirectToFirst = (slug: FeedSlug): Response =>
   new Response(null, {
@@ -454,6 +450,14 @@ function handleItem(request: Request, id: number): Promise<Response> {
         }
 
         const story = mapStoryToItem(raw);
+        if (!story) {
+          return renderErrorPage(
+            404,
+            "Item not found",
+            "That story is unavailable.",
+            requestId,
+          );
+        }
         story.comments = raw.comments ?? [];
 
         const canonical = computeCanonical(request, `/item/${id}`);

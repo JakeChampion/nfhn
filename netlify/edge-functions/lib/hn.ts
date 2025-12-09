@@ -46,6 +46,8 @@ export interface Item {
   comments_count: number;
 }
 
+export type StoryItem = Item & { url?: string };
+
 function extractDomain(url?: string): string | undefined {
   if (!url) return undefined;
   try {
@@ -123,7 +125,9 @@ export function formatTimeAgo(unixSeconds: number | undefined): string {
 }
 
 // Map HNPWA item → internal Item (sans comments)
-export function mapStoryToItem(raw: HNAPIItem, level = 0): Item {
+export function mapStoryToItem(raw: HNAPIItem, level = 0): Item | null {
+  if (!raw || typeof raw.id !== "number" || !raw.type) return null;
+
   const time = raw.time ?? 0;
   const points = typeof raw.points === "number" ? raw.points : null;
   const user = raw.user ?? null;
@@ -162,7 +166,7 @@ async function fetchStoriesPageForFeed(
   feed: FeedSlug,
   pageNumber: number,
   pageSize = 30,
-): Promise<Item[]> {
+): Promise<StoryItem[]> {
   const stories = await fetchJsonWithRetry<HNAPIItem[]>(
     `${HN_API_BASE}/${FEED_ENDPOINTS[feed]}/${pageNumber}.json`,
     feed,
@@ -174,13 +178,14 @@ async function fetchStoriesPageForFeed(
   const slice = stories.slice(0, pageSize);
   return slice
     .filter((s) => !!s && !s.deleted && !s.dead)
-    .map((s) => mapStoryToItem(s, 0));
+    .map((s) => mapStoryToItem(s, 0))
+    .filter((s): s is StoryItem => !!s);
 }
 
 export function fetchStoriesPage(
   feed: FeedSlug,
   pageNumber: number,
   pageSize = 30,
-): Promise<Item[]> {
+): Promise<StoryItem[]> {
   return fetchStoriesPageForFeed(feed, pageNumber, pageSize);
 }

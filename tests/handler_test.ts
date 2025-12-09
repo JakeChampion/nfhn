@@ -365,7 +365,6 @@ Deno.test("serves stale responses, revalidates, and honors conditional requests"
     try {
       const fresh = await handler(new Request("https://nfhn.test/top/1"));
       const freshBody = await fresh.text();
-      const freshEtag = fresh.headers.get("etag");
 
       assertStringIncludes(freshBody, "Cached Story");
       assertEquals(counts.get(topStoriesUrl) ?? 0, 1);

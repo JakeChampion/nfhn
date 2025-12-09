@@ -2,10 +2,6 @@
 import { escape, type HTML, html, unsafeHTML } from "./html.ts";
 import { type FeedSlug, type HNAPIItem, type Item } from "./hn.ts";
 
-// Limits to keep edge execution bounded
-const MAX_COMMENT_DEPTH = Infinity;
-const MAX_COMMENTS_TOTAL = Infinity;
-
 function typeLabel(type: string): string {
   switch (type) {
     case "ask":
@@ -453,8 +449,7 @@ const commentsSection = (rootComments: HNAPIItem[] | undefined): HTML =>
 
     yield '<section aria-label="Comments">';
 
-    const state = { remaining: MAX_COMMENTS_TOTAL };
-    for await (const chunk of streamComments(rootComments, 0, state)) {
+    for await (const chunk of streamComments(rootComments, 0)) {
       yield chunk;
     }
 
@@ -464,9 +459,8 @@ const commentsSection = (rootComments: HNAPIItem[] | undefined): HTML =>
 async function* streamComments(
   comments: HNAPIItem[],
   level: number,
-  state: { remaining: number },
 ): AsyncGenerator<string> {
-  if (!comments.length || state.remaining <= 0 || level >= MAX_COMMENT_DEPTH) {
+  if (!comments.length) {
     return;
   }
 
@@ -474,13 +468,9 @@ async function* streamComments(
   if (isNested) yield "<ul>";
 
   for (const comment of comments) {
-    if (state.remaining <= 0) break;
     if (comment.deleted || comment.dead || comment.type !== "comment") {
       continue;
     }
-
-    state.remaining -= 1;
-
     const time_ago = comment.time_ago ?? "";
     const user = comment.user ?? "[deleted]";
     const content = comment.content ?? "";
@@ -499,15 +489,12 @@ async function* streamComments(
 
     if (
       comment.comments &&
-      comment.comments.length &&
-      state.remaining > 0 &&
-      level + 1 < MAX_COMMENT_DEPTH
+      comment.comments.length
     ) {
       for await (
         const chunk of streamComments(
           comment.comments,
           level + 1,
-          state,
         )
       ) {
         yield chunk;
