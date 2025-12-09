@@ -214,20 +214,53 @@ const sharedStyles = (pageNumber = 1): HTML =>
         color: var(--text-secondary);
       }
       details {
-        background-color: whitesmoke;
+        background-color: var(--background);
         margin: 40px auto;
         max-width: 650px;
         line-height: 1.6;
         font-size: 18px;
-        color: #444;
+        color: var(--text-primary);
       }
       summary {
         font-weight: bold;
         margin: -.5em -.5em 0;
-        padding: .5em;
+        padding: .75em;
+        display: flex;
+        align-items: center;
+        gap: 0.5em;
+        min-height: 48px;
       }
       details[open] summary {
         border-bottom: 1px solid #aaa;
+      }
+      .comment-meta {
+        display: flex;
+        align-items: center;
+        gap: 0.5em;
+        flex-wrap: wrap;
+      }
+      .comment-user {
+        font-weight: 700;
+        color: var(--text-strong);
+      }
+      .comment-permalink {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.45em 0.7em;
+        min-height: 44px;
+        min-width: 44px;
+        border-radius: 8px;
+        text-decoration: none;
+        color: var(--text-primary);
+        background-color: rgba(0, 0, 0, 0.02);
+      }
+      .comment-permalink:hover {
+        text-decoration: underline;
+      }
+      .comment-permalink:focus-visible {
+        outline: 2px solid #ff7a18;
+        outline-offset: 3px;
       }
       pre {
         white-space: pre-wrap;
@@ -405,7 +438,10 @@ const renderComment = (comment: HNAPIItem, level: number): HTML => {
   const details = html`
     <details open id="${comment.id}">
       <summary aria-label="Comment by ${user}, posted ${time_ago}">
-        <span>${user} - <a href="#${comment.id}">${time_ago}</a></span>
+        <span class="comment-meta">
+          <span class="comment-user">${user}</span>
+          <a class="comment-permalink" href="#${comment.id}">${time_ago}</a>
+        </span>
       </summary>
       <div>${content}</div>
       ${children.length
