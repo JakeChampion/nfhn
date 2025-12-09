@@ -66,6 +66,7 @@ const turboScript = tpl`
 
   function warm(url) {
     const u = new URL(url, location.href);
+    console.log("Warming", u.origin, u.href, location.origin);
     if (u.origin !== location.origin) return;
 
     const href = u.toString();
@@ -90,7 +91,6 @@ const turboScript = tpl`
   function onIntent(e) {
     const a = e.target.closest("a[href]");
     if (!a) return;
-    console.log("warming", a.href, a.target);
     if (a.target && a.target !== "_self") return;
     if (a.hasAttribute("download")) return;
 
