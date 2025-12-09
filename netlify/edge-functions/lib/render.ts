@@ -58,11 +58,28 @@ function primaryHref(item: Item): string {
 
 type FeedSlug = "top" | "ask" | "show" | "jobs";
 
+const renderStory = (data: Item): HTML => html`
+  <li>
+    <a class="title" href="${primaryHref(data)}">
+      <span class="badge ${typeClass(data.type)}">${typeLabel(data.type)}</span>
+      <span class="story-title-text">${data.title}</span>
+      ${data.domain
+        ? html`<span class="story-meta">(${data.domain})</span>`
+        : ""}
+    </a>
+    <a class="comments" href="/item/${data.id}">
+      view ${data.comments_count > 0 ? data.comments_count + " comments" : "discussion"}
+    </a>
+  </li>
+`;
+
 export const home = (
   content: Item[],
   pageNumber: number,
   feed: FeedSlug = "top",
-): HTML => html`
+): HTML =>
+  (async function* (): AsyncGenerator<string> {
+    yield* html`
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -208,26 +225,20 @@ export const home = (
         <a href="/jobs/1" class="${feed === "jobs" ? "active" : ""}">Jobs</a>
       </nav>
       <ol>
-        ${content.map((data: Item) => html`
-          <li>
-            <a class="title" href="${primaryHref(data)}">
-              <span class="badge ${typeClass(data.type)}">${typeLabel(data.type)}</span>
-              <span class="story-title-text">${data.title}</span>
-              ${data.domain
-                ? html`<span class="story-meta">(${data.domain})</span>`
-                : ""}
-            </a>
-            <a class="comments" href="/item/${data.id}">
-              view ${data.comments_count > 0 ? data.comments_count + " comments" : "discussion"}
-            </a>
-          </li>
-        `)}
+    `;
+
+    for (const data of content) {
+      yield* renderStory(data);
+    }
+
+    yield* html`
       </ol>
       <a href="/${feed}/${pageNumber + 1}" style="text-align: center; display:block; margin-top:1.5em;">More</a>
     </main>
   </body>
 </html>
-`;
+    `;
+  })();
 
 // Shell page for article
 const shellPage = (title: string, body: HTML): HTML =>
