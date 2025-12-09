@@ -1,37 +1,37 @@
 // hn.ts
 const HN_API_BASE = "https://api.hnpwa.com/v0";
 
-// Netlify programmable cache settings
+// Netlify programmable cache settings (still used by HTML, not here)
 const HN_CACHE_NAME = "nfhn-hn-api";
 const TOP_IDS_TTL_SECONDS = 30; // 30s
 const ITEM_TTL_SECONDS = 60; // 60s
 
-// HNPWA + legacy HN item shape (superset to keep things flexible)
+// Shape returned by api.hnpwa.com
 export interface HNAPIItem {
   id: number;
 
-  // Legacy HN fields (firebase API)
-  by?: string;
-  time?: number;
-  type: string;
+  // HNPWA fields
   title?: string;
+  points?: number;
+  user?: string;
+  time?: number;
+  time_ago?: string;
+  comments_count?: number;
+  type: string; // "link" | "ask" | "show" | "job" | "comment"
   url?: string;
+  domain?: string;
+  content?: string;
+
+  comments?: HNAPIItem[];
+
+  // Legacy / firebase-like fields kept for compatibility
+  by?: string;
   text?: string;
   score?: number;
   descendants?: number;
   kids?: number[];
   deleted?: boolean;
   dead?: boolean;
-  domain?: string;
-
-  // HNPWA fields
-  user?: string;
-  points?: number;
-  time_ago?: string;
-  content?: string;
-  comments?: HNAPIItem[];
-  level?: number;
-  comments_count?: number;
 }
 
 export interface Item {
@@ -47,67 +47,9 @@ export interface Item {
   type: string;
   url?: string;
   domain?: string;
-  comments: Item[];
+  comments: Item[] | HNAPIItem[]; // we store the HNPWA comment tree here
   level: number;
   comments_count: number;
-}
-
-async function getCache() {
-  return caches.open(HN_CACHE_NAME);
-}
-
-async function fetchJSONWithNetlifyCache<T>(
-  path: string,
-  ttlSeconds: number,
-): Promise<T | null> {
-  const url = `${HN_API_BASE}${path}`;
-  const cache = await getCache();
-  const request = new Request(url);
-
-  // 1. Cache first
-  const cached = await cache.match(request);
-  if (cached) {
-    try {
-      const text = await cached.text();
-      return JSON.parse(text) as T;
-    } catch (e) {
-      console.error("Cached JSON parse error:", path, e);
-    }
-  }
-
-  // 2. Network
-  const res = await fetch(request);
-  if (!res.ok) {
-    console.error("HN API error:", res.status, path);
-    return null;
-  }
-
-  const bodyText = await res.text();
-
-  // 3. Put into Netlify cache
-  try {
-    const headers = new Headers(res.headers);
-    headers.set("Cache-Control", `public, max-age=${ttlSeconds}`);
-    const cacheResponse = new Response(bodyText, {
-      status: res.status,
-      statusText: res.statusText,
-      headers,
-    });
-
-    cache.put(request, cacheResponse).catch((error) => {
-      console.error("Failed to put into Netlify cache:", path, error);
-    });
-  } catch (e) {
-    console.error("Error preparing response for cache:", path, e);
-  }
-
-  // 4. Parse JSON for this request
-  try {
-    return JSON.parse(bodyText) as T;
-  } catch (e) {
-    console.error("HN API JSON parse error:", path, e);
-    return null;
-  }
 }
 
 function extractDomain(url?: string): string | undefined {
@@ -147,7 +89,7 @@ export function formatTimeAgo(unixSeconds: number | undefined): string {
   return `${years} year${years === 1 ? "" : "s"} ago`;
 }
 
-// Map either HNPWA items or legacy HN items into your internal Item
+// Map HNPWA (or legacy-ish) item to your internal Item
 export function mapStoryToItem(raw: HNAPIItem, level = 0): Item {
   const time = raw.time ?? 0;
 
@@ -177,7 +119,7 @@ export function mapStoryToItem(raw: HNAPIItem, level = 0): Item {
     points,
     user,
     time,
-    // Prefer HNPWA's precomputed label if present, otherwise compute
+    // Prefer HNPWA's precomputed label if present
     time_ago: raw.time_ago || formatTimeAgo(time),
     content,
     deleted: raw.deleted,
@@ -185,41 +127,60 @@ export function mapStoryToItem(raw: HNAPIItem, level = 0): Item {
     type: raw.type,
     url: raw.url,
     domain,
-    comments: [], // comments are streamed / fetched separately
+    // We fill this later for the top-level story, but for the mapping
+    // itself we default to an empty array.
+    comments: [],
     level,
     comments_count: commentsCount,
   };
 }
 
-// Single item (with comments) from HNPWA
+// Simple direct fetch for a single item (with nested comments)
 export async function fetchItem(id: number): Promise<HNAPIItem | null> {
-  return fetchJSONWithNetlifyCache<HNAPIItem>(
-    `/item/${id}.json`,
-    ITEM_TTL_SECONDS,
-  );
+  try {
+    const res = await fetch(`${HN_API_BASE}/item/${id}.json`);
+    if (!res.ok) {
+      console.error("HN item API error:", res.status, id);
+      return null;
+    }
+
+    const data = (await res.json()) as HNAPIItem;
+    return data;
+  } catch (e) {
+    console.error("HN item fetch error:", id, e);
+    return null;
+  }
 }
 
-// Top stories page from HNPWA
+// Fetch a page of top stories from HNPWA
 export async function fetchTopStoriesPage(
   pageNumber: number,
   pageSize = 30,
 ): Promise<Item[]> {
-  // HNPWA is already paginated: /news/1.json, /news/2.json, ...
-  const stories = await fetchJSONWithNetlifyCache<HNAPIItem[]>(
-    `/news/${pageNumber}.json`,
-    TOP_IDS_TTL_SECONDS,
-  );
+  try {
+    const res = await fetch(`${HN_API_BASE}/news/${pageNumber}.json`);
 
-  if (!stories || !stories.length) {
+    if (!res.ok) {
+      console.error("HN news API error:", res.status, pageNumber);
+      return [];
+    }
+
+    const stories = (await res.json()) as HNAPIItem[];
+
+    if (!Array.isArray(stories) || !stories.length) {
+      return [];
+    }
+
+    const slice = stories.slice(0, pageSize);
+
+    return slice
+      .filter(
+        (s): s is HNAPIItem =>
+          !!s && !s.deleted && !s.dead, // keep all non-deleted, non-dead items regardless of type
+      )
+      .map((s) => mapStoryToItem(s, 0));
+  } catch (e) {
+    console.error("HN news fetch error:", pageNumber, e);
     return [];
   }
-
-  const slice = stories.slice(0, pageSize);
-
-  return slice
-    .filter(
-      (s): s is HNAPIItem =>
-        !!s && !s.deleted && !s.dead && s.type === "story",
-    )
-    .map((s) => mapStoryToItem(s, 0));
 }
