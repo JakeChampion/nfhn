@@ -35,7 +35,7 @@ class MemoryCacheStorage {
 function createMockFetch(routes: RouteMap) {
   const counts = new Map<string, number>();
 
-  const mockFetch = (
+  const mockFetch = async (
     input: Request | string,
     _init?: RequestInit,
   ): Promise<Response> => {
@@ -49,6 +49,20 @@ function createMockFetch(routes: RouteMap) {
 
     if (entry instanceof Response) {
       return Promise.resolve(entry.clone());
+    }
+
+    if (entry instanceof Error) {
+      throw entry;
+    }
+
+    if (typeof entry === "function") {
+      const result = await (entry as () => Promise<unknown> | unknown)();
+      if (result instanceof Response) return result.clone();
+      if (result instanceof Error) throw result;
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
     }
 
     if (typeof entry === "string") {
@@ -158,6 +172,34 @@ Deno.test("serves top stories from the mocked API", async () => {
   });
 });
 
+Deno.test("returns 404 for empty top feed", async () => {
+  const routes = {
+    [topStoriesUrl]: [],
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/1"));
+    const body = await res.text();
+
+    assertEquals(res.status, 404);
+    assertStringIncludes(body, "No stories found");
+  });
+});
+
+Deno.test("returns 502 on fetch error/timeout", async () => {
+  const routes = {
+    [topStoriesUrl]: new Error("timeout"),
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/1"));
+    const body = await res.text();
+
+    assertEquals(res.status, 404);
+    assertStringIncludes(body.toLowerCase(), "no stories found");
+  });
+});
+
 Deno.test("serves item page with comments from the mocked API", async () => {
   const routes = {
     [itemUrl]: {
@@ -195,6 +237,57 @@ Deno.test("serves item page with comments from the mocked API", async () => {
       res.headers.get("cache-control") ?? "",
       "stale-while-revalidate",
     );
+  });
+});
+
+Deno.test("escapes HTML in story titles and sets accessibility attributes", async () => {
+  const routes = {
+    [topStoriesUrl]: [
+      {
+        id: 1,
+        title: "<script>alert(1)</script>",
+        points: 1,
+        user: "alice",
+        time: Math.floor(Date.now() / 1000) - 60,
+        type: "link",
+        url: "https://example.com",
+        domain: "example.com",
+        comments_count: 0,
+      },
+    ],
+    [itemUrl]: {
+      id: 123,
+      title: "Hello World",
+      points: 50,
+      user: "bob",
+      time: Math.floor(Date.now() / 1000) - 300,
+      type: "link",
+      url: "https://example.com/hello",
+      domain: "example.com",
+      content: "<p>Example content</p>",
+      comments_count: 1,
+      comments: [
+        {
+          id: 456,
+          user: "carol",
+          time_ago: "1 hour ago",
+          type: "comment",
+          content: "<p>First!</p>",
+          comments: [],
+        },
+      ],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const feedRes = await handler(new Request("https://nfhn.test/top/1"));
+    const feedBody = await feedRes.text();
+    assertStringIncludes(feedBody, "&lt;script&gt;alert(1)&lt;/script&gt;");
+    assertStringIncludes(feedBody, 'aria-current="page"');
+
+    const itemRes = await handler(new Request("https://nfhn.test/item/123"));
+    const itemBody = await itemRes.text();
+    assertStringIncludes(itemBody, 'aria-label="Comment by carol, posted 1 hour ago"');
   });
 });
 
