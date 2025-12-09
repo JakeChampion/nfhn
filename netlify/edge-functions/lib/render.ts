@@ -53,71 +53,55 @@ type FeedSlug = "top" | "ask" | "show" | "jobs";
 const tpl = html;
 
 const turboScript = tpl`
-  <script>
-    (() => {
-      if (window.__nfhnTurbo) return;
-      window.__nfhnTurbo = true;
+<script>
+(() => {
+  const used = new Set();
 
-      const isSameOrigin = (url) => url.origin === location.origin;
-      const shouldIntercept = (event, anchor) => {
-        if (!anchor) return false;
-        if (anchor.target || anchor.hasAttribute("download")) return false;
-        const href = anchor.getAttribute("href");
-        if (!href || href.startsWith("mailto:") || href.startsWith("tel:")) return false;
-        if (event.defaultPrevented || event.button !== 0) return false;
-        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return false;
-        try {
-          const url = new URL(anchor.href);
-          if (!isSameOrigin(url)) return false;
-        } catch {
-          return false;
-        }
-        return true;
-      };
+  function supportsRel(rel) {
+    const link = document.createElement("link");
+    return !!(link.relList && link.relList.supports && link.relList.supports(rel));
+  }
 
-      const parseDoc = (htmlText) => {
-        const doc = new DOMParser().parseFromString(htmlText, "text/html");
-        return { title: doc.title, body: doc.body };
-      };
+  const canPrerender = supportsRel("prerender");
+  const canPrefetch = supportsRel("prefetch");
 
-      const swap = ({ title, body }, url, replace = false) => {
-        if (title) document.title = title;
-        if (body) document.body.innerHTML = body.innerHTML;
-        if (replace) {
-          history.replaceState({}, title, url);
-        } else {
-          history.pushState({}, title, url);
-        }
-        window.scrollTo({ top: 0, behavior: "auto" });
-      };
+  function warm(url) {
+    const u = new URL(url, location.href);
+    if (u.origin !== location.origin) return;
 
-      const navigate = async (url, replace = false) => {
-        try {
-          const res = await fetch(url, { headers: { "X-Requested-With": "nfhn-turbo" } });
-          if (!res.ok) throw new Error("Navigation failed");
-          const text = await res.text();
-          const parsed = parseDoc(text);
-          swap(parsed, url, replace);
-        } catch (err) {
-          console.error("Turbo-lite navigation failed; falling back to full load.", err);
-          location.href = url;
-        }
-      };
+    const href = u.toString();
+    if (used.has(href)) return;
+    used.add(href);
 
-      document.addEventListener("click", (event) => {
-        const target = event.target;
-        const anchor = target instanceof Element ? target.closest("a") : null;
-        if (!shouldIntercept(event, anchor)) return;
-        event.preventDefault();
-        const url = anchor?.href;
-        if (url) navigate(url, false);
-      });
+    const link = document.createElement("link");
+    if (canPrerender) {
+      link.rel = "prerender";
+    } else if (canPrefetch) {
+      link.rel = "prefetch";
+      link.as = "document"; // hint, safe to omit if you like
+    } else {
+      // No supported rel, give up quietly.
+      return;
+    }
 
-      window.addEventListener("popstate", () => {
-        navigate(location.href, true);
-      });
-    })();
-  </script>
+    link.href = href;
+    document.head.appendChild(link);
+  }
+
+  function onIntent(e) {
+    const a = e.target.closest("a[href]");
+    if (!a) return;
+    if (a.target && a.target !== "_self") return;
+    if (a.hasAttribute("download")) return;
+
+    warm(a.href);
+  }
+
+  // Hover (desktop) + first touch (mobile)
+  document.addEventListener("mouseover", onIntent, { passive: true });
+  document.addEventListener("touchstart", onIntent, { passive: true });
+})();
+</script>
 `;
 
 const renderStory = (data: Item): HTML =>
