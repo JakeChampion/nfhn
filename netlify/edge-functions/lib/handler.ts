@@ -28,7 +28,8 @@ const applySecurityHeaders = (headers: Headers): Headers => {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data:",
-      "script-src 'none'",
+      "connect-src 'self' https://api.hnpwa.com",
+      "script-src 'self' 'unsafe-inline'",
       "frame-ancestors 'none'",
       "base-uri 'none'",
       "form-action 'none'",
@@ -349,7 +350,7 @@ const redirectToJobs1 = (): Response =>
     headers: applySecurityHeaders(new Headers({ Location: "/jobs/1" })),
   });
 
-async function handleTop(
+function handleTop(
   request: Request,
   pageNumber: number,
 ): Promise<Response> {
@@ -402,7 +403,7 @@ async function handleTop(
   );
 }
 
-async function handleAsk(
+function handleAsk(
   request: Request,
   pageNumber: number,
 ): Promise<Response> {
@@ -455,7 +456,7 @@ async function handleAsk(
   );
 }
 
-async function handleShow(
+function handleShow(
   request: Request,
   pageNumber: number,
 ): Promise<Response> {
@@ -508,7 +509,7 @@ async function handleShow(
   );
 }
 
-async function handleJobs(
+function handleJobs(
   request: Request,
   pageNumber: number,
 ): Promise<Response> {
@@ -561,7 +562,7 @@ async function handleJobs(
   );
 }
 
-async function handleItem(request: Request, id: number): Promise<Response> {
+function handleItem(request: Request, id: number): Promise<Response> {
   const requestId = getRequestId(request);
   if (!Number.isFinite(id)) {
     return Promise.resolve(

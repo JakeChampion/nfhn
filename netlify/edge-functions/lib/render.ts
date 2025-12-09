@@ -3,8 +3,8 @@ import { escape, type HTML, html, unsafeHTML } from "./html.ts";
 import { type HNAPIItem, type Item } from "./hn.ts";
 
 // Limits to keep edge execution bounded
-const MAX_COMMENT_DEPTH = 10;
-const MAX_COMMENTS_TOTAL = 300;
+const MAX_COMMENT_DEPTH = Infinity;
+const MAX_COMMENTS_TOTAL = Infinity;
 
 function typeLabel(type: string): string {
   switch (type) {
