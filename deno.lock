@@ -39,10 +39,7 @@
   "workspace": {
     "packageJson": {
       "dependencies": [
-        "npm:@netlify/edge-functions@^3.0.2",
-        "npm:@types/node@^24.10.1",
-        "npm:elysia@^1.1.23",
-        "npm:supports-color@*"
+        "npm:@netlify/edge-functions@^3.0.2"
       ]
     }
   }

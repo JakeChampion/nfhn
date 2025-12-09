@@ -15,9 +15,28 @@ const FEED_TTL_SECONDS = 30;
 const FEED_STALE_SECONDS = 300;
 const ITEM_TTL_SECONDS = 60;
 const ITEM_STALE_SECONDS = 600;
+const encoder = new TextEncoder();
 
 type FeedSlug = "top" | "ask" | "show" | "jobs";
 type FeedHandler = (request: Request, pageNumber: number) => Promise<Response>;
+
+const computeCanonical = (request: Request, pathname: string): string =>
+  new URL(pathname, request.url).toString();
+
+const lastModifiedFromTimes = (times: number[]): string | undefined => {
+  const finiteTimes = times.filter((t) => Number.isFinite(t) && t > 0);
+  if (!finiteTimes.length) return undefined;
+  const max = Math.max(...finiteTimes);
+  return new Date(max * 1000).toUTCString();
+};
+
+const generateETag = async (parts: Array<string | number>): Promise<string> => {
+  const data = encoder.encode(parts.join("|"));
+  const hash = await crypto.subtle.digest("SHA-1", data);
+  const bytes = Array.from(new Uint8Array(hash));
+  const hex = bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `"${hex}"`;
+};
 
 const parsePositiveInt = (value: string): number | null => {
   const num = Number.parseInt(value, 10);
@@ -212,7 +231,7 @@ const redirectToJobs1 = (): Response =>
     headers: { Location: "/jobs/1" },
   });
 
-function handleTop(
+async function handleTop(
   request: Request,
   pageNumber: number,
 ): Promise<Response> {
@@ -237,7 +256,13 @@ function handleTop(
             "We couldn't find that page of top stories.",
           );
         }
-        return new HTMLResponse(home(results, pageNumber, "top"));
+        const canonical = computeCanonical(request, `/top/${pageNumber}`);
+        const response = new HTMLResponse(home(results, pageNumber, "top", canonical));
+        const etag = await generateETag(results.map((r) => r.id));
+        const lastModified = lastModifiedFromTimes(results.map((r) => r.time));
+        if (etag) response.headers.set("ETag", etag);
+        if (lastModified) response.headers.set("Last-Modified", lastModified);
+        return response;
       } catch (e) {
         console.error("Top stories fetch error:", e);
         return renderErrorPage(
@@ -250,7 +275,7 @@ function handleTop(
   );
 }
 
-function handleAsk(
+async function handleAsk(
   request: Request,
   pageNumber: number,
 ): Promise<Response> {
@@ -275,7 +300,13 @@ function handleAsk(
             "We couldn't find that page of Ask HN posts.",
           );
         }
-        return new HTMLResponse(home(results, pageNumber, "ask"));
+        const canonical = computeCanonical(request, `/ask/${pageNumber}`);
+        const response = new HTMLResponse(home(results, pageNumber, "ask", canonical));
+        const etag = await generateETag(results.map((r) => r.id));
+        const lastModified = lastModifiedFromTimes(results.map((r) => r.time));
+        if (etag) response.headers.set("ETag", etag);
+        if (lastModified) response.headers.set("Last-Modified", lastModified);
+        return response;
       } catch (e) {
         console.error("Ask stories fetch error:", e);
         return renderErrorPage(
@@ -288,7 +319,7 @@ function handleAsk(
   );
 }
 
-function handleShow(
+async function handleShow(
   request: Request,
   pageNumber: number,
 ): Promise<Response> {
@@ -313,7 +344,13 @@ function handleShow(
             "We couldn't find that page of Show HN posts.",
           );
         }
-        return new HTMLResponse(home(results, pageNumber, "show"));
+        const canonical = computeCanonical(request, `/show/${pageNumber}`);
+        const response = new HTMLResponse(home(results, pageNumber, "show", canonical));
+        const etag = await generateETag(results.map((r) => r.id));
+        const lastModified = lastModifiedFromTimes(results.map((r) => r.time));
+        if (etag) response.headers.set("ETag", etag);
+        if (lastModified) response.headers.set("Last-Modified", lastModified);
+        return response;
       } catch (e) {
         console.error("Show stories fetch error:", e);
         return renderErrorPage(
@@ -326,7 +363,7 @@ function handleShow(
   );
 }
 
-function handleJobs(
+async function handleJobs(
   request: Request,
   pageNumber: number,
 ): Promise<Response> {
@@ -351,7 +388,13 @@ function handleJobs(
             "We couldn't find that page of jobs.",
           );
         }
-        return new HTMLResponse(home(results, pageNumber, "jobs"));
+        const canonical = computeCanonical(request, `/jobs/${pageNumber}`);
+        const response = new HTMLResponse(home(results, pageNumber, "jobs", canonical));
+        const etag = await generateETag(results.map((r) => r.id));
+        const lastModified = lastModifiedFromTimes(results.map((r) => r.time));
+        if (etag) response.headers.set("ETag", etag);
+        if (lastModified) response.headers.set("Last-Modified", lastModified);
+        return response;
       } catch (e) {
         console.error("Jobs stories fetch error:", e);
         return renderErrorPage(
@@ -364,7 +407,7 @@ function handleJobs(
   );
 }
 
-function handleItem(request: Request, id: number): Promise<Response> {
+async function handleItem(request: Request, id: number): Promise<Response> {
   if (!Number.isFinite(id)) {
     return Promise.resolve(
       renderErrorPage(
@@ -394,7 +437,17 @@ function handleItem(request: Request, id: number): Promise<Response> {
         const story = mapStoryToItem(raw);
         story.comments = raw.comments ?? [];
 
-        return new HTMLResponse(article(story));
+        const canonical = computeCanonical(request, `/item/${id}`);
+        const response = new HTMLResponse(article(story, canonical));
+        const etag = await generateETag([
+          story.id,
+          story.time,
+          story.comments_count,
+        ]);
+        const lastModified = lastModifiedFromTimes([story.time]);
+        if (etag) response.headers.set("ETag", etag);
+        if (lastModified) response.headers.set("Last-Modified", lastModified);
+        return response;
       } catch (e) {
         console.error("Item fetch error:", e);
         return renderErrorPage(

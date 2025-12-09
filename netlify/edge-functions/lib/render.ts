@@ -74,6 +74,7 @@ export const home = (
   content: Item[],
   pageNumber: number,
   feed: FeedSlug = "top",
+  canonicalUrl?: string,
 ): HTML =>
   tpl`
 <!DOCTYPE html>
@@ -81,10 +82,14 @@ export const home = (
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    ${canonicalUrl ? tpl`<link rel="canonical" href="${canonicalUrl}">` : ""}
+    <meta name="description" content="Hacker News ${feed} page ${pageNumber}: latest ${feed} stories.">
     <link rel="icon" type="image/svg+xml" href="/icon.svg">
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap">
     <style type="text/css">
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
         background-color: whitesmoke;
         margin: 40px auto;
         max-width: 650px;
@@ -232,7 +237,12 @@ export const home = (
 `;
 
 // Shell page for article
-const shellPage = (title: string, body: HTML): HTML =>
+const shellPage = (
+  title: string,
+  body: HTML,
+  canonicalUrl?: string,
+  description?: string,
+): HTML =>
   (async function* (): AsyncGenerator<string> {
     yield* tpl`
 <!DOCTYPE html>
@@ -240,13 +250,17 @@ const shellPage = (title: string, body: HTML): HTML =>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    ${canonicalUrl ? tpl`<link rel="canonical" href="${canonicalUrl}" />` : ""}
+    ${description ? tpl`<meta name="description" content="${description}" />` : ""}
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap" />
     <style type="text/css">
       * {
         box-sizing: border-box;
       }
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
           Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
           "Segoe UI Symbol";
         background-color: whitesmoke;
@@ -438,7 +452,7 @@ async function* streamComments(
   if (isNested) yield "</ul>";
 }
 
-export const article = (item: Item): HTML =>
+export const article = (item: Item, canonicalUrl?: string): HTML =>
   shellPage(
     `NFHN: ${item.title}`,
     html`
@@ -472,4 +486,6 @@ export const article = (item: Item): HTML =>
         </article>
       </main>
     `,
+    canonicalUrl,
+    `Hacker News discussion: ${item.title}`,
   );
