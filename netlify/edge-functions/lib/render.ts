@@ -10,7 +10,6 @@ import {
 import {
   type Item,
   type HNAPIItem,
-  fetchItem,
   formatTimeAgo,
 } from "./hn.ts";
 
@@ -204,10 +203,10 @@ const shellPage = (title: string, body: HTML): HTML =>
     `;
   })();
 
-// Streaming comments section
-const commentsSection = (rootIds: number[] | undefined): HTML =>
+// Streaming comments section — now works with nested HNPWA comment objects
+const commentsSection = (rootComments: HNAPIItem[] | undefined): HTML =>
   (async function* (): AsyncGenerator<string> {
-    if (!rootIds || rootIds.length === 0) {
+    if (!rootComments || rootComments.length === 0) {
       yield "<p>No comments yet.</p>";
       return;
     }
@@ -215,59 +214,59 @@ const commentsSection = (rootIds: number[] | undefined): HTML =>
     yield '<section aria-label="Comments">';
 
     const state = { remaining: MAX_COMMENTS_TOTAL };
-    for await (const chunk of streamComments(rootIds, 0, state)) {
+    for await (const chunk of streamComments(rootComments, 0, state)) {
       yield chunk;
     }
 
     yield "</section>";
   })();
 
-// Core streaming comment renderer: fetch & render on the fly
+// Core streaming comment renderer: walk nested comments tree
 async function* streamComments(
-  ids: number[],
+  comments: HNAPIItem[],
   level: number,
   state: { remaining: number },
 ): AsyncGenerator<string> {
-  if (!ids.length || state.remaining <= 0 || level >= MAX_COMMENT_DEPTH) {
+  if (!comments.length || state.remaining <= 0 || level >= MAX_COMMENT_DEPTH) {
     return;
   }
 
   const isNested = level >= 1;
   if (isNested) yield "<ul>";
 
-  for (const id of ids) {
+  for (const comment of comments) {
     if (state.remaining <= 0) break;
 
-    const rawComment = await fetchItem(id);
-    if (!rawComment) continue;
-    if (rawComment.deleted || rawComment.dead) continue;
-    if (rawComment.type !== "comment") continue;
+    if (comment.deleted || comment.dead || comment.type !== "comment") {
+      continue;
+    }
 
     state.remaining -= 1;
 
-    const time_ago = formatTimeAgo(rawComment.time ?? 0);
-    const user = rawComment.by ?? "[deleted]";
-    const content = rawComment.text ?? "";
+    const time_ago =
+      comment.time_ago || formatTimeAgo(comment.time ?? 0);
+    const user = comment.user ?? "[deleted]";
+    const content = comment.content ?? "";
 
     if (isNested) yield "<li>";
 
     // Render a single comment block
-    yield `<details ${level === 0 ? "open" : ""} id="${rawComment.id}">`;
+    yield `<details ${level === 0 ? "open" : ""} id="${comment.id}">`;
     yield `<summary><span>${escape(user)} - <a href="#${
-      rawComment.id
+      comment.id
     }">${escape(time_ago)}</a></span></summary>`;
-    // HN comment text is already HTML (e.g. <p>...</p>), so don't escape
+    // HNPWA comment content is already HTML (e.g. <p>...</p>), so don't escape
     yield `<div>${content}</div>`;
 
     // Children streamed recursively
     if (
-      rawComment.kids &&
-      rawComment.kids.length &&
+      comment.comments &&
+      comment.comments.length &&
       state.remaining > 0 &&
       level + 1 < MAX_COMMENT_DEPTH
     ) {
       for await (const chunk of streamComments(
-        rawComment.kids,
+        comment.comments as HNAPIItem[],
         level + 1,
         state,
       )) {
@@ -283,7 +282,8 @@ async function* streamComments(
   if (isNested) yield "</ul>";
 }
 
-export const article = (item: Item, rootCommentIds: number[]): HTML =>
+// Note: second arg is now unnecessary because item.comments already holds the tree
+export const article = (item: Item): HTML =>
   shellPage(`NFHN: ${item.title}`, html`
     <nav>
       <a href="/">Home</a>
@@ -301,7 +301,7 @@ export const article = (item: Item, rootCommentIds: number[]): HTML =>
         </p>
         <hr />
         ${unsafeHTML(item.content || "")}
-        ${commentsSection(rootCommentIds)}
+        ${commentsSection(item.comments as unknown as HNAPIItem[])}
       </article>
     </main>
   `);
