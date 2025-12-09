@@ -1,5 +1,5 @@
 import handler from "../netlify/edge-functions/lib/handler.ts";
-import { assertEquals, assertStringIncludes } from "std/testing/asserts.ts";
+import { assert, assertEquals, assertStringIncludes } from "std/testing/asserts.ts";
 
 type RouteMap = Record<string, unknown>;
 
@@ -140,6 +140,9 @@ async function withMockedEnv(
 }
 
 const topStoriesUrl = "https://api.hnpwa.com/v0/news/1.json";
+const askStoriesUrl = "https://api.hnpwa.com/v0/ask/1.json";
+const showStoriesUrl = "https://api.hnpwa.com/v0/show/1.json";
+const jobsStoriesUrl = "https://api.hnpwa.com/v0/jobs/1.json";
 const itemUrl = "https://api.hnpwa.com/v0/item/123.json";
 
 Deno.test("serves top stories from the mocked API", async () => {
@@ -169,6 +172,196 @@ Deno.test("serves top stories from the mocked API", async () => {
       res.headers.get("cache-control") ?? "",
       "stale-while-revalidate",
     );
+  });
+});
+
+Deno.test("filters deleted and dead comments from item page", async () => {
+  const routes = {
+    [itemUrl]: {
+      id: 123,
+      title: "Hello World",
+      points: 50,
+      user: "bob",
+      time: Math.floor(Date.now() / 1000) - 300,
+      type: "link",
+      url: "https://example.com/hello",
+      domain: "example.com",
+      content: "<p>Example content</p>",
+      comments_count: 3,
+      comments: [
+        {
+          id: 456,
+          user: "carol",
+          time_ago: "1 hour ago",
+          type: "comment",
+          content: "<p>Visible comment</p>",
+          comments: [],
+        },
+        {
+          id: 789,
+          user: "ghost",
+          time_ago: "1 hour ago",
+          type: "comment",
+          dead: true,
+          content: "<p>DEAD-COMMENT</p>",
+          comments: [],
+        },
+        {
+          id: 101112,
+          user: "gone",
+          time_ago: "1 hour ago",
+          type: "comment",
+          deleted: true,
+          content: "<p>DELETED-COMMENT</p>",
+          comments: [],
+        },
+      ],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/123"));
+    const body = await res.text();
+
+    assertEquals(res.status, 200);
+    assertStringIncludes(body, "Visible comment");
+    assert(!body.includes("DEAD-COMMENT"), "Dead comments should not render");
+    assert(!body.includes("DELETED-COMMENT"), "Deleted comments should not render");
+  });
+});
+
+Deno.test("serves stale top feed and revalidates in background", async () => {
+  let call = 0;
+  const routes = {
+    [topStoriesUrl]: () => {
+      call++;
+      return [
+        {
+          id: call,
+          title: call === 1 ? "Top First" : "Top Second",
+          points: 99,
+          user: "alice",
+          time: Math.floor(Date.now() / 1000) - 120,
+          type: "link",
+          url: "https://example.com/top-story",
+          domain: "example.com",
+          comments_count: 3,
+        },
+      ];
+    },
+  };
+
+  await withMockedEnv(routes, async ({ counts }) => {
+    const originalNow = Date.now;
+    const baseNow = 1_700_000_000_000;
+
+    try {
+      (Date as unknown as { now: () => number }).now = () => baseNow;
+      const firstRes = await handler(new Request("https://nfhn.test/top/1"));
+      const cacheControl = firstRes.headers.get("cache-control") ?? "";
+      await firstRes.text();
+
+      const ttlSeconds = Number.parseInt((cacheControl.match(/max-age=(\d+)/)?.[1]) ?? "", 10) ||
+        30;
+      const swrSeconds =
+        Number.parseInt((cacheControl.match(/stale-while-revalidate=(\d+)/)?.[1]) ?? "", 10) ||
+        300;
+
+      assertEquals(counts.get(topStoriesUrl), 1);
+
+      const staleNow = baseNow + (ttlSeconds + 1) * 1000;
+      (Date as unknown as { now: () => number }).now = () => staleNow;
+
+      const res = await handler(new Request("https://nfhn.test/top/1"));
+      const body = await res.text();
+
+      assertEquals(res.status, 200);
+      assertStringIncludes(body, "Top First"); // Served cached
+      assert(!body.includes("Top Second"), "Revalidated content should not be served immediately");
+      assertEquals(counts.get(topStoriesUrl), 2);
+
+      // Ensure we're still within the SWR window so revalidation is expected
+      assert(staleNow - baseNow < (ttlSeconds + swrSeconds) * 1000);
+    } finally {
+      (Date as unknown as { now: () => number }).now = originalNow;
+    }
+  });
+});
+
+Deno.test("serves ask stories from the mocked API", async () => {
+  const routes = {
+    [askStoriesUrl]: [
+      {
+        id: 11,
+        title: "Ask Story",
+        points: 12,
+        user: "asker",
+        time: Math.floor(Date.now() / 1000) - 200,
+        type: "ask",
+        comments_count: 5,
+      },
+    ],
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/ask/1"));
+    const body = await res.text();
+
+    assertEquals(res.status, 200);
+    assertStringIncludes(body, "Ask Story");
+  });
+});
+
+Deno.test("serves show stories from the mocked API", async () => {
+  const routes = {
+    [showStoriesUrl]: [
+      {
+        id: 21,
+        title: "Show Story",
+        points: 15,
+        user: "showoff",
+        time: Math.floor(Date.now() / 1000) - 180,
+        type: "show",
+        url: "https://example.com/show-story",
+        domain: "example.com",
+        comments_count: 4,
+      },
+    ],
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/show/1"));
+    const body = await res.text();
+
+    assertEquals(res.status, 200);
+    assertStringIncludes(body, "Show Story");
+    assertStringIncludes(body, "(example.com)");
+  });
+});
+
+Deno.test("serves jobs from the mocked API", async () => {
+  const routes = {
+    [jobsStoriesUrl]: [
+      {
+        id: 31,
+        title: "Job Posting",
+        points: 0,
+        user: "hr",
+        time: Math.floor(Date.now() / 1000) - 90,
+        type: "job",
+        url: "https://example.com/job",
+        domain: "example.com",
+        comments_count: 0,
+      },
+    ],
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/jobs/1"));
+    const body = await res.text();
+
+    assertEquals(res.status, 200);
+    assertStringIncludes(body, "Job Posting");
   });
 });
 
