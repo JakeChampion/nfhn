@@ -157,6 +157,11 @@ export const home = (
       a:hover .story-title-text {
         text-decoration: underline;
       }
+      a:focus-visible {
+        outline: 2px solid #ff7a18;
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
       h1,h2,h3 {
         line-height: 1.2
       }
@@ -218,12 +223,20 @@ export const home = (
     <title>NFHN: Page ${pageNumber}</title>
   </head>
   <body>
-    <main>
-      <nav class="nav-feeds">
-        <a href="/top/1" class="${feed === "top" ? "active" : ""}">Top</a>
-        <a href="/ask/1" class="${feed === "ask" ? "active" : ""}">Ask</a>
-        <a href="/show/1" class="${feed === "show" ? "active" : ""}">Show</a>
-        <a href="/jobs/1" class="${feed === "jobs" ? "active" : ""}">Jobs</a>
+    <main aria-label="Main content">
+      <nav class="nav-feeds" aria-label="Primary">
+        <a href="/top/1" class="${feed === "top" ? "active" : ""}" aria-current="${
+    feed === "top" ? "page" : undefined
+  }">Top</a>
+        <a href="/ask/1" class="${feed === "ask" ? "active" : ""}" aria-current="${
+    feed === "ask" ? "page" : undefined
+  }">Ask</a>
+        <a href="/show/1" class="${feed === "show" ? "active" : ""}" aria-current="${
+    feed === "show" ? "page" : undefined
+  }">Show</a>
+        <a href="/jobs/1" class="${feed === "jobs" ? "active" : ""}" aria-current="${
+    feed === "jobs" ? "page" : undefined
+  }">Jobs</a>
       </nav>
       <ol>
         ${content.map((data: Item) => renderStory(data))}
@@ -326,6 +339,11 @@ const shellPage = (
       nav a:hover {
         text-decoration: underline;
       }
+      nav a:focus-visible {
+        outline: 2px solid #ff7a18;
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
       .badge {
         display: inline-block;
         padding: 0.2em 0.6em;
@@ -421,9 +439,9 @@ async function* streamComments(
     if (isNested) yield "<li>";
 
     yield `<details ${level === 0 ? "open" : ""} id="${comment.id}">`;
-    yield `<summary><span>${escape(user)} - <a href="#${comment.id}">${
-      escape(time_ago)
-    }</a></span></summary>`;
+    yield `<summary aria-label="Comment by ${escape(user)}, posted ${escape(time_ago)}"><span>${
+      escape(user)
+    } - <a href="#${comment.id}">${escape(time_ago)}</a></span></summary>`;
     // HNPWA comment content is already HTML
     yield `<div>${content}</div>`;
 
@@ -456,8 +474,8 @@ export const article = (item: Item, canonicalUrl?: string): HTML =>
   shellPage(
     `NFHN: ${item.title}`,
     html`
-      <nav>
-        <a href="/">Home</a>
+      <nav aria-label="Primary">
+        <a href="/" aria-current="page">Home</a>
       </nav>
       <hr />
       <main>
