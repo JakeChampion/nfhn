@@ -6,6 +6,7 @@ export default handler;
 
 export const config: Config = {
   method: ["GET"],
-  pattern: "/((?!icon\\.svg).*)",
+  path: "/*",
+  excludedPath: '/icon.svg',
   //cache: "manual",
 };
