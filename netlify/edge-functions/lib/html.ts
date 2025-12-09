@@ -58,8 +58,8 @@ export async function* flattenValue(
   if (value == null || value === false) return;
 
   if (typeof value === "function") {
-    const result = value();
-    yield* flattenValue(await result);
+    const result = await value();
+    yield* flattenValue(result);
     return;
   }
 
@@ -100,7 +100,7 @@ export async function* flattenValue(
 
 export function html(
   strings: TemplateStringsArray,
-  ...values: HTMLValue[],
+  ...values: HTMLValue[]
 ): HTML {
   return (async function* (): AsyncGenerator<string> {
     for (let i = 0; i < strings.length; i++) {
