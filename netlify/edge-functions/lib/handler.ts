@@ -141,7 +141,7 @@ const renderErrorPage = (
     </style>
   </head>
   <body>
-    <main>
+    <main aria-live="polite">
       <h1>${escape(title)}</h1>
       <p>${escape(description)}</p>
       <p><a href="/">Return to home</a> &middot; <a href="#" onclick="location.reload();return false;">Retry</a></p>
@@ -184,7 +184,7 @@ const renderOfflinePage = (requestId?: string): Response => {
     </style>
   </head>
   <body>
-    <main>
+    <main aria-live="polite">
       <h1>Offline</h1>
       <p>We can't reach Hacker News right now. Please check your connection and try again.</p>
       <p><a href="#" onclick="location.reload();return false;">Retry</a> · <a href="/">Go home</a></p>

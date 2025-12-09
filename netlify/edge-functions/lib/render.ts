@@ -243,7 +243,7 @@ export const home = (
       </ol>
       <a href="/${feed}/${
     pageNumber + 1
-  }" style="text-align: center; display:block; margin-top:1.5em;">More</a>
+  }" class="more-link" style="text-align: center; display:block; margin-top:1.5em;">More</a>
     </main>
   </body>
 </html>
@@ -345,6 +345,11 @@ const shellPage = (
         outline-offset: 3px;
         border-radius: 4px;
       }
+      .more-link:focus-visible {
+        outline: 2px solid #ff7a18;
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
       .badge {
         display: inline-block;
         padding: 0.2em 0.6em;
@@ -439,7 +444,10 @@ async function* streamComments(
 
     if (isNested) yield "<li>";
 
-    yield `<details ${level === 0 ? "open" : ""} id="${comment.id}">`;
+    const isRoot = level === 0;
+    yield `<details ${isRoot ? "open" : ""} id="${comment.id}" aria-expanded="${
+      isRoot ? "true" : "false"
+    }">`;
     yield `<summary aria-label="Comment by ${escape(user)}, posted ${escape(time_ago)}"><span>${
       escape(user)
     } - <a href="#${comment.id}">${escape(time_ago)}</a></span></summary>`;
