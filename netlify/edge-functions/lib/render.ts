@@ -52,6 +52,74 @@ type FeedSlug = "top" | "ask" | "show" | "jobs";
 
 const tpl = html;
 
+const turboScript = tpl`
+  <script>
+    (() => {
+      if (window.__nfhnTurbo) return;
+      window.__nfhnTurbo = true;
+
+      const isSameOrigin = (url) => url.origin === location.origin;
+      const shouldIntercept = (event, anchor) => {
+        if (!anchor) return false;
+        if (anchor.target || anchor.hasAttribute("download")) return false;
+        const href = anchor.getAttribute("href");
+        if (!href || href.startsWith("mailto:") || href.startsWith("tel:")) return false;
+        if (event.defaultPrevented || event.button !== 0) return false;
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return false;
+        try {
+          const url = new URL(anchor.href);
+          if (!isSameOrigin(url)) return false;
+        } catch {
+          return false;
+        }
+        return true;
+      };
+
+      const parseDoc = (htmlText) => {
+        const doc = new DOMParser().parseFromString(htmlText, "text/html");
+        return { title: doc.title, body: doc.body };
+      };
+
+      const swap = ({ title, body }, url, replace = false) => {
+        if (title) document.title = title;
+        if (body) document.body.innerHTML = body.innerHTML;
+        if (replace) {
+          history.replaceState({}, title, url);
+        } else {
+          history.pushState({}, title, url);
+        }
+        window.scrollTo({ top: 0, behavior: "auto" });
+      };
+
+      const navigate = async (url, replace = false) => {
+        try {
+          const res = await fetch(url, { headers: { "X-Requested-With": "nfhn-turbo" } });
+          if (!res.ok) throw new Error("Navigation failed");
+          const text = await res.text();
+          const parsed = parseDoc(text);
+          swap(parsed, url, replace);
+        } catch (err) {
+          console.error("Turbo-lite navigation failed; falling back to full load.", err);
+          location.href = url;
+        }
+      };
+
+      document.addEventListener("click", (event) => {
+        const target = event.target;
+        const anchor = target instanceof Element ? target.closest("a") : null;
+        if (!shouldIntercept(event, anchor)) return;
+        event.preventDefault();
+        const url = anchor?.href;
+        if (url) navigate(url, false);
+      });
+
+      window.addEventListener("popstate", () => {
+        navigate(location.href, true);
+      });
+    })();
+  </script>
+`;
+
 const renderStory = (data: Item): HTML =>
   html`
     <li>
@@ -245,6 +313,7 @@ export const home = (
     pageNumber + 1
   }" class="more-link" style="text-align: center; display:block; margin-top:1.5em;">More</a>
     </main>
+    ${turboScript}
   </body>
 </html>
 `;
@@ -512,6 +581,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML =>
           ${unsafeHTML(item.content || "")} ${commentsSection(item.comments)}
         </article>
       </main>
+      ${turboScript}
     `,
     canonicalUrl,
     `Hacker News discussion: ${item.title}`,
