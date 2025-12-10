@@ -1,18 +1,11 @@
 // top.ts - Top stories feed
 import type { Config, Context } from "@netlify/edge-functions";
-import { handleFeed, parsePositiveInt, redirect } from "./lib/handlers.ts";
+import { handleFeed, handleNotFound, parsePositiveInt } from "./lib/handlers.ts";
 
 export default (request: Request, context: Context) => {
-  const page = context.params.page;
-  
-  // Bare /top or /top/ redirects to /top/1
-  if (!page) {
-    return redirect("/top/1");
-  }
-  
-  const pageNumber = parsePositiveInt(page);
+  const pageNumber = parsePositiveInt(context.params.page);
   if (pageNumber === null) {
-    return redirect("/top/1");
+    return handleNotFound(request);
   }
   
   return handleFeed(
@@ -26,6 +19,6 @@ export default (request: Request, context: Context) => {
 
 export const config: Config = {
   method: ["GET"],
-  path: ["/top", "/top/:page"],
+  path: "/top/:page",
   cache: "manual",
 };

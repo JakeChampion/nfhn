@@ -1,18 +1,11 @@
 // newest.ts - Newest stories feed
 import type { Config, Context } from "@netlify/edge-functions";
-import { handleFeed, parsePositiveInt, redirect } from "./lib/handlers.ts";
+import { handleFeed, handleNotFound, parsePositiveInt } from "./lib/handlers.ts";
 
 export default (request: Request, context: Context) => {
-  const page = context.params.page;
-  
-  // Bare /newest or /newest/ redirects to /newest/1
-  if (!page) {
-    return redirect("/newest/1");
-  }
-  
-  const pageNumber = parsePositiveInt(page);
+  const pageNumber = parsePositiveInt(context.params.page);
   if (pageNumber === null) {
-    return redirect("/newest/1");
+    return handleNotFound(request);
   }
   
   return handleFeed(
@@ -26,6 +19,6 @@ export default (request: Request, context: Context) => {
 
 export const config: Config = {
   method: ["GET"],
-  path: ["/newest", "/newest/:page"],
+  path: "/newest/:page",
   cache: "manual",
 };
