@@ -6,35 +6,35 @@ You can view the deployed version at <https://nfhn.netlify.app/>
 
 This is a website which displays HackerNews content and is running completely in a Netlify Edge Function.
 
-The implementation uses `Elysia` to handle routing and `@worker-tools/html` for rendering templates.
+There’s no framework here: `netlify/edge-functions/lib/handler.ts` handles routing/endpoints directly
+and renders HTML via a tiny streaming templating helper (`html.ts` + `render.ts`).
+
+## Quickstart
+
+- Install [Deno](https://deno.land/manual/getting_started/installation) (used for dev, tests, and tooling).
+- Clone and install npm deps (only needed for scripts): `npm install`
+- Run the test suite: `npm test`
+- Lint/format: `npm run lint` and `npm run fmt`
 
 ## Testing
 
-The project includes comprehensive integration tests for all routes. Tests are written using Deno's native test framework.
+The project includes integration-style tests that cover all routes. Tests are written with Deno's
+built-in test runner and use mocked fetch/cache APIs (no external services required).
 
 ### Running Tests Locally
 
 ```bash
-# Install Deno if not already installed
-curl -fsSL https://deno.land/install.sh | sh
-
-# Run all tests
+# Run all tests via npm script
 npm test
 
 # Or run directly with Deno
 deno test --allow-net --allow-env tests/
 
-# Run in watch mode
+# Watch mode
 npm run test:watch
 ```
 
-See [tests/README.test.md](tests/README.test.md) for detailed test documentation.
-
 ### Continuous Integration
 
-Tests run automatically on every push and pull request via GitHub Actions. The workflow:
-- Sets up Deno environment
-- Runs all integration tests
-- Generates coverage reports (optional)
-
-Check the [Tests workflow](.github/workflows/test.yml) for configuration details.
+GitHub Actions (`.github/workflows/test.yml`) sets up Node+Deno, installs npm dependencies, and runs
+`npm run lint && npm test` on every push/PR.

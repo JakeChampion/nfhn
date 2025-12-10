@@ -2,3 +2,6 @@
 .netlify
 netlify/.DS_Store
 node_modules
+coverage
+.coverage
+coverage_profile

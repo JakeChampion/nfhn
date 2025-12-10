@@ -1,11 +1,75 @@
 // hn.ts
+import { log } from "./logger.ts";
+import { CIRCUIT_BREAKER_RESET_MS, CIRCUIT_BREAKER_THRESHOLD } from "./config.ts";
+
 const HN_API_BASE = "https://api.hnpwa.com/v0";
 const DEFAULT_TIMEOUT_MS = 4500;
 const MAX_RETRIES = 2;
 
-export type FeedSlug = "top" | "ask" | "show" | "jobs";
-const FEED_ENDPOINTS: Record<FeedSlug, "news" | "ask" | "show" | "jobs"> = {
+// --- Circuit breaker state ---
+
+interface CircuitBreakerState {
+  failures: number;
+  lastFailure: number;
+  isOpen: boolean;
+}
+
+const circuitBreaker: CircuitBreakerState = {
+  failures: 0,
+  lastFailure: 0,
+  isOpen: false,
+};
+
+function checkCircuitBreaker(): boolean {
+  if (!circuitBreaker.isOpen) return true;
+  
+  const now = Date.now();
+  if (now - circuitBreaker.lastFailure > CIRCUIT_BREAKER_RESET_MS) {
+    // Reset circuit breaker after timeout
+    circuitBreaker.isOpen = false;
+    circuitBreaker.failures = 0;
+    log.info("Circuit breaker reset", { resetAfterMs: CIRCUIT_BREAKER_RESET_MS });
+    return true;
+  }
+  
+  return false;
+}
+
+function recordFailure(): void {
+  circuitBreaker.failures++;
+  circuitBreaker.lastFailure = Date.now();
+  
+  if (circuitBreaker.failures >= CIRCUIT_BREAKER_THRESHOLD) {
+    circuitBreaker.isOpen = true;
+    log.warn("Circuit breaker opened", {
+      failures: circuitBreaker.failures,
+      threshold: CIRCUIT_BREAKER_THRESHOLD,
+    });
+  }
+}
+
+function recordSuccess(): void {
+  if (circuitBreaker.failures > 0) {
+    circuitBreaker.failures = 0;
+    circuitBreaker.isOpen = false;
+  }
+}
+
+// Export for testing
+export function resetCircuitBreaker(): void {
+  circuitBreaker.failures = 0;
+  circuitBreaker.lastFailure = 0;
+  circuitBreaker.isOpen = false;
+}
+
+export function getCircuitBreakerState(): { failures: number; isOpen: boolean } {
+  return { failures: circuitBreaker.failures, isOpen: circuitBreaker.isOpen };
+}
+
+export type FeedSlug = "top" | "newest" | "ask" | "show" | "jobs";
+const FEED_ENDPOINTS: Record<FeedSlug, "news" | "newest" | "ask" | "show" | "jobs"> = {
   top: "news",
+  newest: "newest",
   ask: "ask",
   show: "show",
   jobs: "jobs",
@@ -78,23 +142,34 @@ async function fetchJsonWithRetry<T>(
   retries = MAX_RETRIES,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<T | null> {
+  // Check circuit breaker before making request
+  if (!checkCircuitBreaker()) {
+    log.warn("Circuit breaker open, skipping request", { url, label });
+    return null;
+  }
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     const { signal, clear } = timeoutSignal(timeoutMs);
     try {
       const res = await fetch(url, { signal });
       if (!res.ok) {
-        console.error(`HN ${label} API error:`, res.status, url);
+        log.error("HN API error", { label, status: res.status, url });
         if (res.status >= 400 && res.status < 500) break;
+        recordFailure();
         continue;
       }
+      recordSuccess();
       return (await res.json()) as T;
     } catch (e) {
       const isLast = attempt === retries;
-      console.error(
-        `HN ${label} fetch error (attempt ${attempt + 1}/${retries + 1}):`,
+      const error = e instanceof Error ? e : new Error(String(e));
+      log.error("HN fetch error", {
+        label,
         url,
-        e,
-      );
+        attempt: attempt + 1,
+        maxAttempts: retries + 1,
+      }, error);
+      recordFailure();
       if (isLast) break;
     } finally {
       clear();
@@ -168,14 +243,13 @@ async function fetchStoriesPageForFeed(
   feed: FeedSlug,
   pageNumber: number,
   pageSize = 30,
-): Promise<StoryItem[]> {
+): Promise<StoryItem[] | null> {
   const stories = await fetchJsonWithRetry<HNAPIItem[]>(
     `${HN_API_BASE}/${FEED_ENDPOINTS[feed]}/${pageNumber}.json`,
     feed,
   );
-  if (!stories || !Array.isArray(stories) || !stories.length) {
-    return [];
-  }
+  if (stories === null || !Array.isArray(stories)) return null;
+  if (!stories.length) return [];
 
   const slice = stories.slice(0, pageSize);
   return slice
@@ -188,6 +262,121 @@ export function fetchStoriesPage(
   feed: FeedSlug,
   pageNumber: number,
   pageSize = 30,
-): Promise<StoryItem[]> {
+): Promise<StoryItem[] | null> {
   return fetchStoriesPageForFeed(feed, pageNumber, pageSize);
+}
+
+// --- User API ---
+
+// Firebase API for user details (includes submitted array)
+const HN_FIREBASE_API = "https://hacker-news.firebaseio.com/v0";
+
+export interface HNAPIUser {
+  id: string;
+  created: number;
+  karma: number;
+  about?: string;
+  submitted?: number[];
+}
+
+export interface User {
+  id: string;
+  created: number;
+  created_ago: string;
+  karma: number;
+  about: string;
+  submitted: number[];
+}
+
+export async function fetchUser(username: string): Promise<HNAPIUser | null> {
+  // Use Firebase API to get user data with submissions
+  return await fetchJsonWithRetry<HNAPIUser>(
+    `${HN_FIREBASE_API}/user/${encodeURIComponent(username)}.json`,
+    "user",
+  );
+}
+
+export function mapApiUser(raw: HNAPIUser | null): User | null {
+  if (!raw || !raw.id) return null;
+  
+  return {
+    id: raw.id,
+    created: raw.created,
+    created_ago: formatTimeAgo(raw.created),
+    karma: raw.karma ?? 0,
+    about: raw.about ?? "",
+    submitted: raw.submitted ?? [],
+  };
+}
+
+// Fetch a single item from Firebase API (for submissions)
+interface FirebaseItem {
+  id: number;
+  type: "story" | "comment" | "job" | "poll" | "pollopt";
+  by?: string;
+  time?: number;
+  title?: string;
+  url?: string;
+  text?: string;
+  score?: number;
+  descendants?: number;
+  dead?: boolean;
+  deleted?: boolean;
+}
+
+export async function fetchFirebaseItem(id: number): Promise<FirebaseItem | null> {
+  return await fetchJsonWithRetry<FirebaseItem>(
+    `${HN_FIREBASE_API}/item/${id}.json`,
+    "firebase-item",
+  );
+}
+
+// Fetch user submissions (stories only) with pagination
+export interface SubmissionItem {
+  id: number;
+  title: string;
+  url?: string;
+  domain?: string;
+  points: number;
+  user: string;
+  time: number;
+  time_ago: string;
+  comments_count: number;
+}
+
+export async function fetchUserSubmissions(
+  submittedIds: number[],
+  limit = 10,
+): Promise<SubmissionItem[]> {
+  const results: SubmissionItem[] = [];
+  
+  // Fetch items in parallel (up to limit * 2 to account for filtering)
+  const idsToFetch = submittedIds.slice(0, limit * 3);
+  const items = await Promise.all(
+    idsToFetch.map((id) => fetchFirebaseItem(id))
+  );
+  
+  for (const item of items) {
+    if (results.length >= limit) break;
+    if (!item) continue;
+    if (item.type !== "story" && item.type !== "job") continue;
+    if (item.dead || item.deleted) continue;
+    if (!item.title) continue;
+    
+    const domain = extractDomain(item.url);
+    
+    results.push({
+      id: item.id,
+      title: item.title,
+      url: item.url,
+      domain,
+      points: item.score ?? 0,
+      user: item.by ?? "",
+      time: item.time ?? 0,
+      time_ago: formatTimeAgo(item.time),
+      comments_count: item.descendants ?? 0,
+    });
+  }
+  
+  return results;
 }

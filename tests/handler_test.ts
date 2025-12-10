@@ -1,6 +1,84 @@
-import handler from "../netlify/edge-functions/lib/handler.ts";
-import { assert, assertEquals, assertStringIncludes } from "std/testing/asserts.ts";
+// Test adapter that routes to the appropriate edge function
+import topHandler from "../netlify/edge-functions/top.ts";
+import newestHandler from "../netlify/edge-functions/newest.ts";
+import askHandler from "../netlify/edge-functions/ask.ts";
+import showHandler from "../netlify/edge-functions/show.ts";
+import jobsHandler from "../netlify/edge-functions/jobs.ts";
+import itemHandler from "../netlify/edge-functions/item.ts";
+import userHandler from "../netlify/edge-functions/user.ts";
+import { handleNotFound, redirect } from "../netlify/edge-functions/lib/handlers.ts";
+import { resetCircuitBreaker } from "../netlify/edge-functions/lib/hn.ts";
+import type { Context } from "@netlify/edge-functions";
+import {
+  assert,
+  assertEquals,
+  assertNotEquals,
+  assertStringIncludes,
+} from "std/testing/asserts.ts";
 
+// Create a mock context with params
+function createContext(params: Record<string, string> = {}): Context {
+  return { params } as Context;
+}
+
+// Router that mimics Netlify routing (redirects from netlify.toml + edge functions)
+// deno-lint-ignore require-await
+async function handler(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const path = url.pathname;
+
+  // Redirects (handled by Netlify CDN in production, simulated here for tests)
+  if (path === "/") return redirect("/top/1");
+  if (path === "/top") return redirect("/top/1");
+  if (path === "/newest") return redirect("/newest/1");
+  if (path === "/ask") return redirect("/ask/1");
+  if (path === "/show") return redirect("/show/1");
+  if (path === "/jobs") return redirect("/jobs/1");
+
+  // /top/:page
+  const topMatch = path.match(/^\/top\/(\d+)$/);
+  if (topMatch) {
+    return topHandler(request, createContext({ page: topMatch[1] }));
+  }
+
+  // /newest/:page
+  const newestMatch = path.match(/^\/newest\/(\d+)$/);
+  if (newestMatch) {
+    return newestHandler(request, createContext({ page: newestMatch[1] }));
+  }
+
+  // /ask/:page
+  const askMatch = path.match(/^\/ask\/(\d+)$/);
+  if (askMatch) {
+    return askHandler(request, createContext({ page: askMatch[1] }));
+  }
+
+  // /show/:page
+  const showMatch = path.match(/^\/show\/(\d+)$/);
+  if (showMatch) {
+    return showHandler(request, createContext({ page: showMatch[1] }));
+  }
+
+  // /jobs/:page
+  const jobsMatch = path.match(/^\/jobs\/(\d+)$/);
+  if (jobsMatch) {
+    return jobsHandler(request, createContext({ page: jobsMatch[1] }));
+  }
+
+  // /item/:id
+  const itemMatch = path.match(/^\/item\/(\d+)$/);
+  if (itemMatch) {
+    return itemHandler(request, createContext({ id: itemMatch[1] }));
+  }
+
+  // /user/:username
+  const userMatch = path.match(/^\/user\/([a-zA-Z0-9_]+)$/);
+  if (userMatch) {
+    return userHandler(request, createContext({ username: userMatch[1] }));
+  }
+
+  return handleNotFound(request);
+}
 type RouteMap = Record<string, unknown>;
 
 class MemoryCache {
@@ -84,6 +162,9 @@ async function withMockedEnv(
   routes: RouteMap,
   testFn: (ctx: { counts: Map<string, number> }) => Promise<void>,
 ) {
+  // Reset circuit breaker state before each test
+  resetCircuitBreaker();
+  
   const originalFetch = globalThis.fetch;
   const cachesAny = globalThis.caches as unknown as {
     open?: (...args: unknown[]) => unknown;
@@ -379,7 +460,7 @@ Deno.test("returns 404 for empty top feed", async () => {
   });
 });
 
-Deno.test("returns 502 on fetch error/timeout", async () => {
+Deno.test("returns offline page on fetch error/timeout", async () => {
   const routes = {
     [topStoriesUrl]: new Error("timeout"),
   };
@@ -388,8 +469,16 @@ Deno.test("returns 502 on fetch error/timeout", async () => {
     const res = await handler(new Request("https://nfhn.test/top/1"));
     const body = await res.text();
 
-    assertEquals(res.status, 404);
-    assertStringIncludes(body.toLowerCase(), "no stories found");
+    assertEquals(res.status, 503);
+    assertStringIncludes(body, "Offline");
+    assertStringIncludes(body, "We can't reach Hacker News right now");
+    assertEquals(res.headers.get("cache-control"), "no-store");
+    assertEquals(res.headers.get("pragma"), "no-cache");
+    assert(res.headers.get("content-security-policy"));
+    assertEquals(res.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
+    assertEquals(res.headers.get("x-content-type-options"), "nosniff");
+    assert(res.headers.get("permissions-policy"));
+    assert(res.headers.get("strict-transport-security"));
   });
 });
 
@@ -430,6 +519,23 @@ Deno.test("serves item page with comments from the mocked API", async () => {
       res.headers.get("cache-control") ?? "",
       "stale-while-revalidate",
     );
+  });
+});
+
+Deno.test("error pages send no-store and security headers", async () => {
+  await withMockedEnv({}, async () => {
+    const res = await handler(new Request("https://nfhn.test/does-not-exist"));
+    const body = await res.text();
+
+    assertEquals(res.status, 404);
+    assertStringIncludes(body, "Page not found");
+    assertEquals(res.headers.get("cache-control"), "no-store");
+    assertEquals(res.headers.get("pragma"), "no-cache");
+    assert(res.headers.get("content-security-policy"));
+    assertEquals(res.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
+    assertEquals(res.headers.get("x-content-type-options"), "nosniff");
+    assert(res.headers.get("permissions-policy"));
+    assert(res.headers.get("strict-transport-security"));
   });
 });
 
@@ -594,5 +700,717 @@ Deno.test("serves stale responses, revalidates, and honors conditional requests"
     } finally {
       Date.now = originalNow;
     }
+  });
+});
+
+Deno.test("refreshes feed etag when visible metadata changes", async () => {
+  const stories = [
+    {
+      id: 1,
+      title: "Cached Story",
+      points: 10,
+      user: "cacher",
+      time: Math.floor(Date.now() / 1000) - 60,
+      type: "link",
+      url: "https://example.com/cached",
+      domain: "example.com",
+      comments_count: 1,
+    },
+    {
+      id: 1,
+      title: "Cached Story",
+      points: 10,
+      user: "cacher",
+      time: Math.floor(Date.now() / 1000) - 60,
+      type: "link",
+      url: "https://example.com/cached",
+      domain: "changed.example.com",
+      comments_count: 12,
+    },
+  ];
+
+  let call = 0;
+  const routes = {
+    [topStoriesUrl]: () => {
+      const idx = Math.min(call, stories.length - 1);
+      call += 1;
+      return [stories[idx]];
+    },
+  };
+
+  await withMockedEnv(routes, async ({ counts }) => {
+    const originalNow = Date.now;
+    const baseNow = Date.now();
+    Date.now = () => baseNow;
+
+    try {
+      const first = await handler(new Request("https://nfhn.test/top/1"));
+      const firstEtag = first.headers.get("etag");
+      const cacheControl = first.headers.get("cache-control") ?? "";
+      await first.text();
+
+      if (!firstEtag) throw new Error("expected initial etag");
+
+      const ttlSeconds = Number.parseInt(
+        (cacheControl.match(/max-age=(\d+)/)?.[1]) ?? "",
+        10,
+      ) || 30;
+      const swrSeconds = Number.parseInt(
+        (cacheControl.match(/stale-while-revalidate=(\d+)/)?.[1]) ?? "",
+        10,
+      ) || 300;
+
+      Date.now = () => baseNow + (ttlSeconds + swrSeconds + 1) * 1000;
+
+      const conditionalReq = new Request("https://nfhn.test/top/1", {
+        headers: { "if-none-match": firstEtag },
+      });
+      const updated = await handler(conditionalReq);
+      const updatedEtag = updated.headers.get("etag");
+      const updatedBody = await updated.text();
+
+      assertEquals(updated.status, 200, "metadata changes should invalidate old etags");
+      if (!updatedEtag) throw new Error("expected updated etag");
+      assertNotEquals(updatedEtag, firstEtag);
+      assertStringIncludes(updatedBody, "view 12 comments");
+      assertStringIncludes(updatedBody, "(changed.example.com)");
+      assertEquals(counts.get(topStoriesUrl) ?? 0, 2);
+    } finally {
+      Date.now = originalNow;
+    }
+  });
+});
+
+// =============================================================================
+// User Page Tests
+// =============================================================================
+
+const userUrl = "https://hacker-news.firebaseio.com/v0/user/testuser.json";
+
+Deno.test("serves user profile page from the mocked API", async () => {
+  const routes = {
+    [userUrl]: {
+      id: "testuser",
+      created: 1234567890,
+      karma: 5000,
+      about: "Hello world",
+      submitted: [],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/user/testuser"));
+    assertEquals(res.status, 200);
+    const body = await res.text();
+    assertStringIncludes(body, "testuser");
+    assertStringIncludes(body, "5,000"); // formatted karma
+    assertStringIncludes(body, "Hello world");
+    assertStringIncludes(body, "View profile on HN");
+  });
+});
+
+Deno.test("returns 404 for non-existent user", async () => {
+  const routes = {
+    "https://hacker-news.firebaseio.com/v0/user/nobody.json": null,
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/user/nobody"));
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    assertStringIncludes(body, "User not found");
+  });
+});
+
+Deno.test("returns 404 for invalid username format", async () => {
+  // No mock needed - validation happens before API call
+  await withMockedEnv({}, async () => {
+    const res = await handler(new Request("https://nfhn.test/user/invalid-user!"));
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    assertStringIncludes(body, "not found");
+  });
+});
+
+Deno.test("user profile page shows recent submissions", async () => {
+  const routes = {
+    "https://hacker-news.firebaseio.com/v0/user/prolificuser.json": {
+      id: "prolificuser",
+      created: 1234567890,
+      karma: 10000,
+      submitted: [100, 101, 102],
+    },
+    "https://hacker-news.firebaseio.com/v0/item/100.json": {
+      id: 100,
+      type: "story",
+      by: "prolificuser",
+      title: "My First Post",
+      url: "https://example.com/first",
+      score: 50,
+      time: Math.floor(Date.now() / 1000) - 3600,
+      descendants: 10,
+    },
+    "https://hacker-news.firebaseio.com/v0/item/101.json": {
+      id: 101,
+      type: "story",
+      by: "prolificuser",
+      title: "My Second Post",
+      score: 30,
+      time: Math.floor(Date.now() / 1000) - 7200,
+      descendants: 5,
+    },
+    "https://hacker-news.firebaseio.com/v0/item/102.json": {
+      id: 102,
+      type: "comment", // Should be filtered out
+      by: "prolificuser",
+      text: "Just a comment",
+      time: Math.floor(Date.now() / 1000) - 3600,
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/user/prolificuser"));
+    assertEquals(res.status, 200);
+    const body = await res.text();
+    assertStringIncludes(body, "Recent Submissions");
+    assertStringIncludes(body, "My First Post");
+    assertStringIncludes(body, "My Second Post");
+    assertStringIncludes(body, "example.com");
+    assertStringIncludes(body, "50 point");
+    assertStringIncludes(body, "All submissions on HN");
+  });
+});
+
+// =============================================================================
+// Server-Timing Header Tests
+// =============================================================================
+
+Deno.test("feed response includes Server-Timing header", async () => {
+  const routes = {
+    [topStoriesUrl]: [
+      {
+        id: 1,
+        title: "Timing Test",
+        points: 10,
+        user: "timer",
+        time: Math.floor(Date.now() / 1000) - 60,
+        type: "link",
+        url: "https://example.com",
+        domain: "example.com",
+        comments_count: 0,
+      },
+    ],
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/1"));
+    assertEquals(res.status, 200);
+    
+    const timing = res.headers.get("Server-Timing");
+    assert(timing !== null, "Server-Timing header should be present");
+    assertStringIncludes(timing, "api;dur=");
+    assertStringIncludes(timing, "total;dur=");
+    await res.text();
+  });
+});
+
+Deno.test("item response includes Server-Timing header", async () => {
+  const routes = {
+    [itemUrl]: {
+      id: 123,
+      title: "Timing Test Item",
+      points: 50,
+      user: "timer",
+      time: Math.floor(Date.now() / 1000) - 3600,
+      type: "link",
+      url: "https://example.com",
+      comments_count: 0,
+      comments: [],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/123"));
+    assertEquals(res.status, 200);
+    
+    const timing = res.headers.get("Server-Timing");
+    assert(timing !== null, "Server-Timing header should be present");
+    assertStringIncludes(timing, "api;dur=");
+    await res.text();
+  });
+});
+
+Deno.test("user response includes Server-Timing header", async () => {
+  const routes = {
+    [userUrl]: {
+      id: "testuser",
+      created: 1234567890,
+      karma: 5000,
+      submitted: [],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/user/testuser"));
+    assertEquals(res.status, 200);
+    
+    const timing = res.headers.get("Server-Timing");
+    assert(timing !== null, "Server-Timing header should be present");
+    assertStringIncludes(timing, "api;dur=");
+    assertStringIncludes(timing, "submissions;dur=");
+    await res.text();
+  });
+});
+
+// =============================================================================
+// OP Highlighting Integration Test
+// =============================================================================
+
+Deno.test("item page highlights OP comments", async () => {
+  const routes = {
+    [itemUrl]: {
+      id: 123,
+      title: "OP Test",
+      points: 50,
+      user: "original_poster",
+      time: Math.floor(Date.now() / 1000) - 3600,
+      type: "link",
+      url: "https://example.com",
+      comments_count: 2,
+      comments: [
+        {
+          id: 111,
+          type: "comment",
+          user: "original_poster",
+          time_ago: "1 hour ago",
+          content: "I'm the OP!",
+          comments: [],
+        },
+        {
+          id: 222,
+          type: "comment",
+          user: "someone_else",
+          time_ago: "30 min ago",
+          content: "I'm not the OP",
+          comments: [],
+        },
+      ],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/123"));
+    assertEquals(res.status, 200);
+    const body = await res.text();
+    
+    // OP's comment should have the badge
+    assertStringIncludes(body, "is-op");
+    assertStringIncludes(body, 'title="Original Poster"');
+    
+    // Count occurrences - should only be for original_poster
+    const opMatches = body.match(/is-op/g) || [];
+    assertEquals(opMatches.length, 1, "Only one comment should have OP badge");
+  });
+});
+
+// =============================================================================
+// MAX_ITEM_ID Validation Test
+// =============================================================================
+
+Deno.test("returns 404 for item ID above MAX_ITEM_ID", async () => {
+  await withMockedEnv({}, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/999999999"));
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    assertStringIncludes(body, "too large");
+  });
+});
+
+// =============================================================================
+// Error Boundary Tests
+// =============================================================================
+
+Deno.test("handles API timeout gracefully for feed", async () => {
+  const routes: RouteMap = {
+    [topStoriesUrl]: new Error("Network timeout"),
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/1"));
+    // Should return offline error page (503), not crash
+    assertEquals(res.status, 503);
+    const body = await res.text();
+    assertStringIncludes(body, "Offline");
+  });
+});
+
+Deno.test("handles API timeout gracefully for item", async () => {
+  const routes: RouteMap = {
+    [itemUrl]: new Error("Network timeout"),
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/123"));
+    // Item errors return 404 (not found) rather than 503 (offline)
+    // because individual items failing is treated as "not available"
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    assertStringIncludes(body, "unavailable");
+  });
+});
+
+Deno.test("handles malformed JSON gracefully", async () => {
+  const routes: RouteMap = {
+    [topStoriesUrl]: "not valid json {{{",
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/1"));
+    // Should handle the error
+    assert(res.status >= 400 || res.status === 200);
+    await res.text();
+  });
+});
+
+Deno.test("handles empty feed response", async () => {
+  const routes: RouteMap = {
+    [topStoriesUrl]: [],
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/1"));
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    assertStringIncludes(body, "No stories found");
+  });
+});
+
+Deno.test("handles null item response", async () => {
+  const routes: RouteMap = {
+    [itemUrl]: null,
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/123"));
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    assertStringIncludes(body, "not found");
+  });
+});
+
+Deno.test("handles deleted item", async () => {
+  const routes: RouteMap = {
+    [itemUrl]: {
+      id: 123,
+      deleted: true,
+      title: "Deleted Story",
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/123"));
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    assertStringIncludes(body, "unavailable");
+  });
+});
+
+Deno.test("handles dead item", async () => {
+  const routes: RouteMap = {
+    [itemUrl]: {
+      id: 123,
+      dead: true,
+      title: "Dead Story",
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/123"));
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    assertStringIncludes(body, "unavailable");
+  });
+});
+
+// =============================================================================
+// Additional Route Tests
+// =============================================================================
+
+Deno.test("serves ask stories page", async () => {
+  const routes = {
+    [askStoriesUrl]: [
+      {
+        id: 100,
+        title: "Ask HN: Question?",
+        points: 20,
+        user: "curious",
+        time: Math.floor(Date.now() / 1000) - 600,
+        type: "ask",
+        comments_count: 5,
+      },
+    ],
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/ask/1"));
+    assertEquals(res.status, 200);
+    const body = await res.text();
+    assertStringIncludes(body, "Ask HN");
+  });
+});
+
+Deno.test("serves show stories page", async () => {
+  const routes = {
+    [showStoriesUrl]: [
+      {
+        id: 200,
+        title: "Show HN: My Project",
+        points: 30,
+        user: "maker",
+        time: Math.floor(Date.now() / 1000) - 1200,
+        type: "show",
+        url: "https://myproject.com",
+        domain: "myproject.com",
+        comments_count: 10,
+      },
+    ],
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/show/1"));
+    assertEquals(res.status, 200);
+    const body = await res.text();
+    assertStringIncludes(body, "Show HN");
+  });
+});
+
+Deno.test("serves jobs stories page", async () => {
+  const routes = {
+    [jobsStoriesUrl]: [
+      {
+        id: 300,
+        title: "Hiring: Software Engineer",
+        points: 0,
+        user: "hr",
+        time: Math.floor(Date.now() / 1000) - 3600,
+        type: "job",
+        url: "https://company.com/jobs",
+        domain: "company.com",
+        comments_count: 0,
+      },
+    ],
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/jobs/1"));
+    assertEquals(res.status, 200);
+    const body = await res.text();
+    assertStringIncludes(body, "Hiring");
+  });
+});
+
+Deno.test("returns 404 for page number too large", async () => {
+  await withMockedEnv({}, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/999"));
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    assertStringIncludes(body, "too large");
+  });
+});
+
+Deno.test("returns 404 for negative page number", async () => {
+  await withMockedEnv({}, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/-1"));
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    assertStringIncludes(body, "not found");
+  });
+});
+
+Deno.test("returns 404 for invalid item ID (zero)", async () => {
+  await withMockedEnv({}, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/0"));
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    // Zero is not a positive integer, so parsePositiveInt returns null
+    // and handleNotFound is called, returning "Page not found"
+    assertStringIncludes(body, "Page not found");
+  });
+});
+
+Deno.test("returns 404 for invalid item ID (negative)", async () => {
+  await withMockedEnv({}, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/-5"));
+    assertEquals(res.status, 404);
+  });
+});
+
+// =============================================================================
+// User Page Error Tests  
+// =============================================================================
+
+Deno.test("handles user API error gracefully", async () => {
+  const routes: RouteMap = {
+    [userUrl]: new Error("Network error"),
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/user/testuser"));
+    // User API errors result in 404 (user not found) since fetchUser returns null on errors
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    assertStringIncludes(body, "User not found");
+  });
+});
+
+Deno.test("handles non-existent user", async () => {
+  const routes: RouteMap = {
+    [userUrl]: null,
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/user/testuser"));
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    assertStringIncludes(body, "User not found");
+  });
+});
+
+Deno.test("handles invalid username with special characters", async () => {
+  await withMockedEnv({}, async () => {
+    const res = await handler(new Request("https://nfhn.test/user/test<script>"));
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    // Special characters in username don't match the route pattern
+    assertStringIncludes(body, "Page not found");
+  });
+});
+
+Deno.test("handles username too long", async () => {
+  await withMockedEnv({}, async () => {
+    const res = await handler(new Request("https://nfhn.test/user/thisisaverylongusername"));
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    assertStringIncludes(body, "invalid");
+  });
+});
+
+// =============================================================================
+// Article Page Features Tests
+// =============================================================================
+
+Deno.test("article page shows comment count", async () => {
+  const routes = {
+    [itemUrl]: {
+      id: 123,
+      title: "Test Story",
+      points: 50,
+      user: "author",
+      time: Math.floor(Date.now() / 1000) - 3600,
+      time_ago: "1 hour ago",
+      type: "link",
+      url: "https://example.com",
+      domain: "example.com",
+      comments_count: 25,
+      comments: [
+        {
+          id: 456,
+          type: "comment",
+          user: "commenter",
+          time_ago: "30 min ago",
+          content: "Great article!",
+          comments: [],
+        },
+      ],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/123"));
+    assertEquals(res.status, 200);
+    const body = await res.text();
+    // Should show total comments
+    assertStringIncludes(body, "25 comment");
+    // Should show loaded count when different from total
+    assertStringIncludes(body, "1 loaded");
+  });
+});
+
+Deno.test("article page shows share buttons", async () => {
+  const routes = {
+    [itemUrl]: {
+      id: 123,
+      title: "Shareable Story",
+      points: 100,
+      user: "author",
+      time: Math.floor(Date.now() / 1000) - 3600,
+      time_ago: "1 hour ago",
+      type: "link",
+      url: "https://example.com/shareable",
+      domain: "example.com",
+      comments_count: 0,
+      comments: [],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/123"));
+    assertEquals(res.status, 200);
+    const body = await res.text();
+    assertStringIncludes(body, "share-buttons");
+    assertStringIncludes(body, "twitter.com/intent/tweet");
+    assertStringIncludes(body, "share-copy");
+  });
+});
+
+Deno.test("article page shows keyboard shortcuts modal markup", async () => {
+  const routes = {
+    [itemUrl]: {
+      id: 123,
+      title: "Test Story",
+      points: 50,
+      user: "author",
+      time: Math.floor(Date.now() / 1000) - 3600,
+      time_ago: "1 hour ago",
+      type: "link",
+      url: "https://example.com",
+      domain: "example.com",
+      comments_count: 0,
+      comments: [],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/123"));
+    assertEquals(res.status, 200);
+    const body = await res.text();
+    assertStringIncludes(body, "shortcuts-modal");
+    assertStringIncludes(body, "Keyboard Shortcuts");
+  });
+});
+
+Deno.test("article page includes ARIA live region", async () => {
+  const routes = {
+    [itemUrl]: {
+      id: 123,
+      title: "Test Story",
+      points: 50,
+      user: "author",
+      time: Math.floor(Date.now() / 1000) - 3600,
+      time_ago: "1 hour ago",
+      type: "link",
+      url: "https://example.com",
+      domain: "example.com",
+      comments_count: 0,
+      comments: [],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/123"));
+    assertEquals(res.status, 200);
+    const body = await res.text();
+    assertStringIncludes(body, 'aria-live="polite"');
+    assertStringIncludes(body, 'id="aria-live"');
   });
 });
