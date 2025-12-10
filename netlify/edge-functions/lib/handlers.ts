@@ -2,7 +2,15 @@
 
 import { HTMLResponse } from "./html.ts";
 import { article, home, userProfile } from "./render.ts";
-import { type FeedSlug, fetchItem, fetchStoriesPage, fetchUser, fetchUserSubmissions, mapApiUser, mapStoryToItem } from "./hn.ts";
+import {
+  type FeedSlug,
+  fetchItem,
+  fetchStoriesPage,
+  fetchUser,
+  fetchUserSubmissions,
+  mapApiUser,
+  mapStoryToItem,
+} from "./hn.ts";
 import {
   FEED_STALE_SECONDS,
   FEED_TTL_SECONDS,
@@ -26,7 +34,12 @@ const encoder = new TextEncoder();
 /**
  * Add Server-Timing header for performance monitoring.
  */
-const addServerTiming = (response: Response, name: string, startTime: number, description?: string): void => {
+const addServerTiming = (
+  response: Response,
+  name: string,
+  startTime: number,
+  description?: string,
+): void => {
   const duration = performance.now() - startTime;
   const value = description
     ? `${name};dur=${duration.toFixed(2)};desc="${description}"`
@@ -108,7 +121,7 @@ export function handleFeed(
         const fetchStart = performance.now();
         const results = await fetchStoriesPage(slug, pageNumber);
         const fetchDuration = performance.now() - fetchStart;
-        
+
         if (results === null) {
           throw new Error(`${slug} feed fetch failed`);
         }
@@ -172,7 +185,7 @@ export function handleItem(request: Request, id: number): Promise<Response> {
         const fetchStart = performance.now();
         const raw = await fetchItem(id);
         const fetchDuration = performance.now() - fetchStart;
-        
+
         if (!raw || raw.deleted || raw.dead) {
           return renderErrorPage(404, "Item not found", "That story is unavailable.", requestId);
         }
@@ -255,7 +268,7 @@ export function handleUser(request: Request, username: string): Promise<Response
         const fetchStart = performance.now();
         const rawUser = await fetchUser(username);
         const fetchDuration = performance.now() - fetchStart;
-        
+
         const user = mapApiUser(rawUser);
         if (!user) {
           return renderErrorPage(404, "User not found", "That user doesn't exist.", requestId);
@@ -277,7 +290,9 @@ export function handleUser(request: Request, username: string): Promise<Response
         if (lastModified) response.headers.set("Last-Modified", lastModified);
         response.headers.set(
           "Server-Timing",
-          `api;dur=${fetchDuration.toFixed(2)};desc="HN API", submissions;dur=${submissionsDuration.toFixed(2)};desc="Submissions"`
+          `api;dur=${fetchDuration.toFixed(2)};desc="HN API", submissions;dur=${
+            submissionsDuration.toFixed(2)
+          };desc="Submissions"`,
         );
         addServerTiming(response, "total", startTime, "Total");
         return response;

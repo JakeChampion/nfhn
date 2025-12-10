@@ -60,6 +60,127 @@ export const skipLink = (): HTML =>
     <a href="#main-content" class="skip-link">Skip to main content</a>
   `;
 
+// --- PWA head tags ---
+
+export const pwaHeadTags = (): HTML =>
+  html`
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#ff7a18">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="NFHN">
+    <link rel="apple-touch-icon" href="/icon.svg">
+  `;
+
+// --- Service worker registration script ---
+
+export const serviceWorkerScript = (): HTML =>
+  html`
+    <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+    </script>
+  `;
+
+// --- Font size controls ---
+
+export const fontSizeControls = (): HTML =>
+  html`
+    <div class="font-size-controls" role="group" aria-label="Font size">
+      <button type="button" class="font-btn" data-size="small" title="Small text">A</button>
+      <button type="button" class="font-btn" data-size="medium" title="Medium text">A</button>
+      <button type="button" class="font-btn" data-size="large" title="Large text">A</button>
+    </div>
+    <script>
+    (function() {
+      const sizes = { small: '16px', medium: '18px', large: '20px' };
+      const stored = localStorage.getItem('fontSize') || 'medium';
+      document.documentElement.style.setProperty('--base-font-size', sizes[stored]);
+      document.body.style.fontSize = 'var(--base-font-size)';
+
+      document.querySelectorAll('.font-btn').forEach(btn => {
+        if (btn.dataset.size === stored) btn.classList.add('active');
+        btn.addEventListener('click', () => {
+          const size = btn.dataset.size;
+          document.documentElement.style.setProperty('--base-font-size', sizes[size]);
+          document.body.style.fontSize = 'var(--base-font-size)';
+          localStorage.setItem('fontSize', size);
+          document.querySelectorAll('.font-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+        });
+      });
+    })();
+    </script>
+  `;
+
+// --- External link indicator script ---
+
+export const externalLinkScript = (): HTML =>
+  html`
+    <script>
+    document.querySelectorAll('a[href^="http"]').forEach(link => {
+      const url = new URL(link.href);
+      if (url.origin !== location.origin) {
+        link.classList.add('external-link');
+        link.setAttribute('target', '_blank');
+        link.setAttribute('rel', 'noopener noreferrer');
+        // Add screen reader text
+        if (!link.querySelector('.sr-only')) {
+          const sr = document.createElement('span');
+          sr.className = 'sr-only';
+          sr.textContent = ' (opens in new tab)';
+          link.appendChild(sr);
+        }
+      }
+    });
+    </script>
+  `;
+
+// --- Mobile swipe navigation ---
+
+export const mobileSwipeScript = (): HTML =>
+  html`
+    <script>
+    (function() {
+      let touchStartX = 0;
+      let touchEndX = 0;
+      const threshold = 100;
+
+      document.addEventListener('touchstart', e => {
+        touchStartX = e.changedTouches[0].screenX;
+      }, { passive: true });
+
+      document.addEventListener('touchend', e => {
+        touchEndX = e.changedTouches[0].screenX;
+        handleSwipe();
+      }, { passive: true });
+
+      function handleSwipe() {
+        const diff = touchEndX - touchStartX;
+        if (Math.abs(diff) < threshold) return;
+
+        // Find pagination links
+        const moreLink = document.querySelector('.more-link');
+        const path = location.pathname;
+        const match = path.match(/^\\/(\\w+)\\/(\\d+)$/);
+
+        if (diff < 0 && moreLink) {
+          // Swipe left = next page
+          moreLink.click();
+        } else if (diff > 0 && match) {
+          // Swipe right = previous page
+          const [, feed, page] = match;
+          const prevPage = parseInt(page) - 1;
+          if (prevPage >= 1) {
+            location.href = '/' + feed + '/' + prevPage;
+          }
+        }
+      }
+    })();
+    </script>
+  `;
+
 // --- Shared styles link ---
 
 export const sharedStyles = (pageNumber = 1): HTML => {
@@ -215,142 +336,147 @@ export const keyboardNavScript = (): HTML =>
     <dialog id="shortcuts-modal" class="shortcuts-modal">
       <h2>Keyboard Shortcuts</h2>
       <dl class="shortcuts-list">
-        <dt><kbd>j</kbd></dt><dd>Next item</dd>
-        <dt><kbd>k</kbd></dt><dd>Previous item</dd>
-        <dt><kbd>o</kbd> / <kbd>Enter</kbd></dt><dd>Open selected item</dd>
-        <dt><kbd>?</kbd></dt><dd>Show this help</dd>
-        <dt><kbd>Esc</kbd></dt><dd>Close modal / clear selection</dd>
+        <dt><kbd>j</kbd></dt>
+        <dd>Next item</dd>
+        <dt><kbd>k</kbd></dt>
+        <dd>Previous item</dd>
+        <dt><kbd>o</kbd> / <kbd>Enter</kbd></dt>
+        <dd>Open selected item</dd>
+        <dt><kbd>?</kbd></dt>
+        <dd>Show this help</dd>
+        <dt><kbd>Esc</kbd></dt>
+        <dd>Close modal / clear selection</dd>
       </dl>
       <button type="button" class="modal-close" aria-label="Close">×</button>
     </dialog>
     <script>
     (function() {
-      let currentIndex = -1;
-      const liveRegion = document.getElementById('aria-live');
-      const modal = document.getElementById('shortcuts-modal');
-      
-      function announce(message) {
-        if (liveRegion) liveRegion.textContent = message;
-      }
-      
-      function getItems() {
-        // On feed pages: list items; on item pages: top-level comments
-        const listItems = document.querySelectorAll('main ol > li');
-        if (listItems.length) return Array.from(listItems);
-        const comments = document.querySelectorAll('section[aria-label="Comments"] > details');
-        return Array.from(comments);
-      }
-      
-      function getItemLabel(item, index, total) {
-        // Try to get a meaningful label for the item
-        const title = item.querySelector('.story-title-text, .title, summary');
-        const text = title ? title.textContent.trim().slice(0, 50) : 'Item';
-        return text + ' (' + (index + 1) + ' of ' + total + ')';
-      }
-      
-      function highlightItem(index) {
-        const items = getItems();
-        if (!items.length) return;
-        
-        // Remove previous highlight
-        items.forEach(item => item.classList.remove('kbd-focus'));
-        
-        // Clamp index
-        if (index < 0) index = 0;
-        if (index >= items.length) index = items.length - 1;
-        currentIndex = index;
-        
-        // Add highlight and scroll into view
-        const item = items[currentIndex];
-        item.classList.add('kbd-focus');
-        item.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        
-        // Set focus for keyboard accessibility
-        item.setAttribute('tabindex', '-1');
-        item.focus({ preventScroll: true });
-        
-        // Announce for screen readers
-        announce(getItemLabel(item, currentIndex, items.length));
-      }
-      
-      function clearSelection() {
-        const items = getItems();
-        items.forEach(item => {
-          item.classList.remove('kbd-focus');
-          item.removeAttribute('tabindex');
-        });
-        currentIndex = -1;
-        announce('Selection cleared');
-      }
-      
-      function openCurrentItem() {
-        const items = getItems();
-        if (currentIndex < 0 || currentIndex >= items.length) return;
-        
-        const item = items[currentIndex];
-        // Find first link in item
-        const link = item.querySelector('a.title, a.comments, a[href^="/item/"]');
-        if (link) link.click();
-      }
-      
-      function showModal() {
-        modal.showModal();
-        modal.querySelector('.modal-close').focus();
-      }
-      
-      function hideModal() {
-        modal.close();
-      }
-      
-      // Close modal on button click or backdrop click
-      modal.querySelector('.modal-close').addEventListener('click', hideModal);
-      modal.addEventListener('click', function(e) {
-        if (e.target === modal) hideModal();
+    let currentIndex = -1;
+    const liveRegion = document.getElementById('aria-live');
+    const modal = document.getElementById('shortcuts-modal');
+
+    function announce(message) {
+      if (liveRegion) liveRegion.textContent = message;
+    }
+
+    function getItems() {
+      // On feed pages: list items; on item pages: top-level comments
+      const listItems = document.querySelectorAll('main ol > li');
+      if (listItems.length) return Array.from(listItems);
+      const comments = document.querySelectorAll('section[aria-label="Comments"] > details');
+      return Array.from(comments);
+    }
+
+    function getItemLabel(item, index, total) {
+      // Try to get a meaningful label for the item
+      const title = item.querySelector('.story-title-text, .title, summary');
+      const text = title ? title.textContent.trim().slice(0, 50) : 'Item';
+      return text + ' (' + (index + 1) + ' of ' + total + ')';
+    }
+
+    function highlightItem(index) {
+      const items = getItems();
+      if (!items.length) return;
+
+      // Remove previous highlight
+      items.forEach(item => item.classList.remove('kbd-focus'));
+
+      // Clamp index
+      if (index < 0) index = 0;
+      if (index >= items.length) index = items.length - 1;
+      currentIndex = index;
+
+      // Add highlight and scroll into view
+      const item = items[currentIndex];
+      item.classList.add('kbd-focus');
+      item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      // Set focus for keyboard accessibility
+      item.setAttribute('tabindex', '-1');
+      item.focus({ preventScroll: true });
+
+      // Announce for screen readers
+      announce(getItemLabel(item, currentIndex, items.length));
+    }
+
+    function clearSelection() {
+      const items = getItems();
+      items.forEach(item => {
+        item.classList.remove('kbd-focus');
+        item.removeAttribute('tabindex');
       });
-      
-      document.addEventListener('keydown', function(e) {
-        // Handle modal close
-        if (modal.open && e.key === 'Escape') {
+      currentIndex = -1;
+      announce('Selection cleared');
+    }
+
+    function openCurrentItem() {
+      const items = getItems();
+      if (currentIndex < 0 || currentIndex >= items.length) return;
+
+      const item = items[currentIndex];
+      // Find first link in item
+      const link = item.querySelector('a.title, a.comments, a[href^="/item/"]');
+      if (link) link.click();
+    }
+
+    function showModal() {
+      modal.showModal();
+      modal.querySelector('.modal-close').focus();
+    }
+
+    function hideModal() {
+      modal.close();
+    }
+
+    // Close modal on button click or backdrop click
+    modal.querySelector('.modal-close').addEventListener('click', hideModal);
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) hideModal();
+    });
+
+    document.addEventListener('keydown', function(e) {
+      // Handle modal close
+      if (modal.open && e.key === 'Escape') {
+        e.preventDefault();
+        hideModal();
+        return;
+      }
+
+      // Ignore if typing in input/textarea
+      if (e.target.matches('input, textarea, select')) return;
+
+      // Show help modal on ?
+      if (e.key === '?') {
+        e.preventDefault();
+        showModal();
+        return;
+      }
+
+      const items = getItems();
+      if (!items.length) return;
+
+      switch (e.key) {
+        case 'j':
           e.preventDefault();
-          hideModal();
-          return;
-        }
-        
-        // Ignore if typing in input/textarea
-        if (e.target.matches('input, textarea, select')) return;
-        
-        // Show help modal on ?
-        if (e.key === '?') {
+          highlightItem(currentIndex + 1);
+          break;
+        case 'k':
           e.preventDefault();
-          showModal();
-          return;
-        }
-        
-        const items = getItems();
-        if (!items.length) return;
-        
-        switch (e.key) {
-          case 'j':
+          highlightItem(currentIndex - 1);
+          break;
+        case 'o':
+        case 'Enter':
+          if (currentIndex >= 0) {
             e.preventDefault();
-            highlightItem(currentIndex + 1);
-            break;
-          case 'k':
+            openCurrentItem();
+          }
+          break;
+        case 'Escape':
+          if (currentIndex >= 0) {
             e.preventDefault();
-            highlightItem(currentIndex - 1);
-            break;
-          case 'o':
-          case 'Enter':
-            if (currentIndex >= 0) {
-              e.preventDefault();
-              openCurrentItem();
-            }
-            break;
-          case 'Escape':
-            if (currentIndex >= 0) {
-              e.preventDefault();
-              clearSelection();
-            }
-            break;
+            clearSelection();
+          }
+          break;
         }
       });
     })();
@@ -360,8 +486,14 @@ export const keyboardNavScript = (): HTML =>
 // --- User link ---
 
 export const userLink = (username: string | null | undefined): HTML => {
-  if (!username) return html`[deleted]`;
-  return html`<a href="/user/${username}" class="user-link">${username}</a>`;
+  if (!username) {
+    return html`
+      [deleted]
+    `;
+  }
+  return html`
+    <a href="/user/${username}" class="user-link">${username}</a>
+  `;
 };
 
 // --- Share buttons ---
@@ -369,22 +501,27 @@ export const userLink = (username: string | null | undefined): HTML => {
 export const shareButtons = (title: string, url: string): HTML =>
   html`
     <div class="share-buttons" aria-label="Share this story">
-      <a href="https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}"
-         class="share-btn share-twitter"
-         target="_blank"
-         rel="noopener noreferrer"
-         title="Share on Twitter">
+      <a
+        href="https://twitter.com/intent/tweet?text=${encodeURIComponent(
+          title,
+        )}&url=${encodeURIComponent(url)}"
+        class="share-btn share-twitter"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Share on Twitter"
+      >
         <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16">
-          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+          <path
+            d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
+          />
         </svg>
         <span class="sr-only">Twitter</span>
       </a>
-      <button type="button"
-              class="share-btn share-copy"
-              data-url="${url}"
-              title="Copy link">
+      <button type="button" class="share-btn share-copy" data-url="${url}" title="Copy link">
         <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16">
-          <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+          <path
+            d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
+          />
         </svg>
         <span class="sr-only">Copy link</span>
       </button>
@@ -451,8 +588,16 @@ export const renderComment = (comment: HNAPIItem, level: number, opUser?: string
   const isOP = opUser && user === opUser;
 
   const userDisplay = user === "[deleted]"
-    ? html`<span class="comment-user">[deleted]</span>`
-    : html`<a href="/user/${user}" class="comment-user${isOP ? " is-op" : ""}">${user}</a>${isOP ? html` <abbr title="Original Poster" class="op-badge">OP</abbr>` : ""}`;
+    ? html`
+      <span class="comment-user">[deleted]</span>
+    `
+    : html`
+      <a href="/user/${user}" class="comment-user${isOP ? " is-op" : ""}">${user}</a>${isOP
+        ? html`
+          <abbr title="Original Poster" class="op-badge">OP</abbr>
+        `
+        : ""}
+    `;
 
   const details = html`
     <details open id="${comment.id}">
