@@ -41,6 +41,50 @@ export const sharedStyles = (pageNumber = 1): HTML => {
   `;
 };
 
+// --- Theme toggle ---
+
+export const themeToggle = (): HTML =>
+  html`
+    <div class="theme-toggle">
+      <fieldset>
+        <legend>Theme</legend>
+        <input type="radio" id="theme-light" name="theme" value="light">
+        <label for="theme-light" title="Light theme">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z"/></svg>
+        </label>
+        <input type="radio" id="theme-dark" name="theme" value="dark">
+        <label for="theme-dark" title="Dark theme">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/></svg>
+        </label>
+        <input type="radio" id="theme-auto" name="theme" value="auto" checked>
+        <label for="theme-auto" title="System theme">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22c1.1 0 2-.9 2-2h-4a2 2 0 002 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+        </label>
+      </fieldset>
+    </div>
+  `;
+
+export const themeScript = (): HTML =>
+  html`
+<script>
+  (function() {
+    const root = document.documentElement;
+    const stored = localStorage.getItem('theme') || 'auto';
+    root.setAttribute('data-theme', stored);
+    
+    const radios = document.querySelectorAll('input[name="theme"]');
+    radios.forEach(radio => {
+      if (radio.value === stored) radio.checked = true;
+      radio.addEventListener('change', (e) => {
+        const theme = e.target.value;
+        root.setAttribute('data-theme', theme);
+        localStorage.setItem('theme', theme);
+      });
+    });
+  })();
+</script>
+`;
+
 // --- Navigation ---
 
 export const renderNav = (activeFeed: FeedSlug): HTML =>
@@ -56,6 +100,16 @@ export const renderNav = (activeFeed: FeedSlug): HTML =>
     )
   }
     </nav>
+  `;
+
+// --- Header bar with nav and theme toggle ---
+
+export const headerBar = (activeFeed: FeedSlug): HTML =>
+  html`
+    <div class="header-bar">
+      ${renderNav(activeFeed)}
+      ${themeToggle()}
+    </div>
   `;
 
 // --- Prefetch/prerender script ---

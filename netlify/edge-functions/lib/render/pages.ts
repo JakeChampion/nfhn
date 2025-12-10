@@ -5,11 +5,17 @@ import { type FeedSlug, type Item } from "../hn.ts";
 import {
   commentsSection,
   getTypeMeta,
-  renderNav,
+  headerBar,
   renderStory,
   sharedStyles,
+  themeScript,
   turboScript,
 } from "./components.ts";
+
+// --- Inline script to set theme before page renders (prevents flash) ---
+
+const themeInitScript = (): HTML =>
+  html`<script>document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'auto');</script>`;
 
 // --- Home page (feed listing) ---
 
@@ -21,10 +27,11 @@ export const home = (
 ): HTML =>
   html`
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="auto">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    ${themeInitScript()}
     ${canonicalUrl ? html`<link rel="canonical" href="${canonicalUrl}">` : ""}
     <meta name="description" content="Hacker News ${feed} page ${pageNumber}: latest ${feed} stories.">
     <meta property="og:type" content="website">
@@ -39,13 +46,14 @@ export const home = (
   </head>
   <body>
     <main aria-label="Main content">
-      ${renderNav(feed)}
+      ${headerBar(feed)}
       <ol>
         ${content.map((data: Item) => renderStory(data))}
       </ol>
       <a href="/${feed}/${pageNumber + 1}" class="more-link">More</a>
     </main>
     ${turboScript()}
+    ${themeScript()}
   </body>
 </html>
 `;
@@ -61,10 +69,11 @@ const shellPage = (
   (async function* (): AsyncGenerator<string> {
     yield* html`
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="auto">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    ${themeInitScript()}
     ${canonicalUrl ? html`<link rel="canonical" href="${canonicalUrl}" />` : ""}
     ${description ? html`<meta name="description" content="${description}" />` : ""}
     <meta property="og:type" content="article">
@@ -83,6 +92,7 @@ const shellPage = (
     yield* body;
 
     yield* html`
+      ${themeScript()}
       </body>
       </html>
     `;
@@ -104,7 +114,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
     `NFHN: ${item.title}`,
     html`
       <main aria-label="Main content">
-        ${renderNav(activeFeed)}
+        ${headerBar(activeFeed)}
         <article>
           <a href="${meta.href(item)}">
             <span class="badge ${meta.badgeClass}">${meta.label}</span>

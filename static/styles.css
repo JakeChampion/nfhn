@@ -1,6 +1,8 @@
 /* NFHN Styles */
 
-:root {
+/* Light theme (default) */
+:root,
+:root[data-theme="light"] {
   --background: #f5f5f5;
   --background-elevated: #ffffff;
   --text-strong: #111827;
@@ -12,11 +14,28 @@
   --divider-color: black;
   --badge-bg: rgba(0, 0, 0, 0.04);
   --comment-bg: rgba(0, 0, 0, 0.02);
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
+/* Dark theme */
+:root[data-theme="dark"] {
+  --background: #0d1117;
+  --background-elevated: #161b22;
+  --text-strong: #f0f6fc;
+  --text-primary: #c9d1d9;
+  --text-muted: #8b949e;
+  --text-secondary: #b1bac4;
+  --border-color: rgba(255, 255, 255, 0.1);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --divider-color: #30363d;
+  --badge-bg: rgba(255, 255, 255, 0.06);
+  --comment-bg: rgba(255, 255, 255, 0.03);
+  color-scheme: dark;
+}
+
+/* Auto theme - follows system preference */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root[data-theme="auto"] {
     --background: #0d1117;
     --background-elevated: #161b22;
     --text-strong: #f0f6fc;
@@ -28,7 +47,90 @@
     --divider-color: #30363d;
     --badge-bg: rgba(255, 255, 255, 0.06);
     --comment-bg: rgba(255, 255, 255, 0.03);
+    color-scheme: dark;
   }
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="auto"] {
+    color-scheme: light;
+  }
+}
+
+/* Theme toggle styles */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.theme-toggle fieldset {
+  display: flex;
+  gap: 0.25em;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.2em;
+  margin: 0;
+  background: var(--badge-bg);
+}
+
+.theme-toggle legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.theme-toggle input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.theme-toggle label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35em 0.6em;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  min-width: 32px;
+  min-height: 32px;
+}
+
+.theme-toggle label:hover {
+  background: var(--border-color);
+}
+
+.theme-toggle input[type="radio"]:checked + label {
+  background: var(--background-elevated);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.theme-toggle input[type="radio"]:focus-visible + label {
+  outline: 2px solid #ff7a18;
+  outline-offset: 2px;
+}
+
+.theme-toggle svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1em;
 }
 
 * {
