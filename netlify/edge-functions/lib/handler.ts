@@ -117,6 +117,8 @@ const renderErrorPage = (
   const id = requestId ?? crypto.randomUUID();
 
   const headers = applySecurityHeaders(new Headers());
+  headers.set("Cache-Control", "no-store");
+  headers.set("Pragma", "no-cache");
   return new HTMLResponse(
     `<!DOCTYPE html>
 <html lang="en">
@@ -174,6 +176,8 @@ const renderOfflinePage = (requestId?: string): Response => {
   const now = new Date();
   const id = requestId ?? crypto.randomUUID();
   const headers = applySecurityHeaders(new Headers());
+  headers.set("Cache-Control", "no-store");
+  headers.set("Pragma", "no-cache");
   return new HTMLResponse(
     `<!DOCTYPE html>
 <html lang="en">

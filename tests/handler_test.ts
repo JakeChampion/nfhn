@@ -396,6 +396,13 @@ Deno.test("returns offline page on fetch error/timeout", async () => {
     assertEquals(res.status, 503);
     assertStringIncludes(body, "Offline");
     assertStringIncludes(body, "We can't reach Hacker News right now");
+    assertEquals(res.headers.get("cache-control"), "no-store");
+    assertEquals(res.headers.get("pragma"), "no-cache");
+    assert(res.headers.get("content-security-policy"));
+    assertEquals(res.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
+    assertEquals(res.headers.get("x-content-type-options"), "nosniff");
+    assert(res.headers.get("permissions-policy"));
+    assert(res.headers.get("strict-transport-security"));
   });
 });
 
@@ -436,6 +443,23 @@ Deno.test("serves item page with comments from the mocked API", async () => {
       res.headers.get("cache-control") ?? "",
       "stale-while-revalidate",
     );
+  });
+});
+
+Deno.test("error pages send no-store and security headers", async () => {
+  await withMockedEnv({}, async () => {
+    const res = await handler(new Request("https://nfhn.test/does-not-exist"));
+    const body = await res.text();
+
+    assertEquals(res.status, 404);
+    assertStringIncludes(body, "Page not found");
+    assertEquals(res.headers.get("cache-control"), "no-store");
+    assertEquals(res.headers.get("pragma"), "no-cache");
+    assert(res.headers.get("content-security-policy"));
+    assertEquals(res.headers.get("referrer-policy"), "strict-origin-when-cross-origin");
+    assertEquals(res.headers.get("x-content-type-options"), "nosniff");
+    assert(res.headers.get("permissions-policy"));
+    assert(res.headers.get("strict-transport-security"));
   });
 });
 
