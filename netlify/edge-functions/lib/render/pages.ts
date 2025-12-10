@@ -11,7 +11,6 @@ import {
   getTypeMeta,
   headerBar,
   keyboardNavScript,
-  mobileSwipeScript,
   pwaHeadTags,
   renderStory,
   serviceWorkerScript,
@@ -73,7 +72,6 @@ export const home = (
     </main>
     ${turboScript()}
     ${keyboardNavScript()}
-    ${mobileSwipeScript()}
     ${externalLinkScript()}
     ${themeScript()}
     ${serviceWorkerScript()}
