@@ -4,10 +4,13 @@ import { type HTML, html as tpl, unsafeHTML } from "../html.ts";
 import { type FeedSlug, type Item, type SubmissionItem, type User } from "../hn.ts";
 import {
   commentsSection,
+  countComments,
+  estimateReadingTime,
   getTypeMeta,
   headerBar,
   keyboardNavScript,
   renderStory,
+  shareButtons,
   sharedStyles,
   skipLink,
   themeScript,
@@ -119,6 +122,16 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
     : "top";
   const meta = getTypeMeta(item.type);
   const opUser = item.user ?? undefined;
+  
+  // Calculate loaded comment count for display
+  const loadedComments = countComments(item.comments);
+  const totalComments = item.comments_count ?? 0;
+  
+  // Estimate reading time for article content
+  const readingTime = estimateReadingTime(item.content);
+  
+  // Build share URL
+  const shareUrl = canonicalUrl || `https://nfhn.netlify.app/item/${item.id}`;
 
   return shellPage(
     `NFHN: ${item.title}`,
@@ -146,8 +159,11 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
         : tpl`
               <p class="meta-line">
                 ${item.points ?? 0} points by ${item.user ? userLink(item.user) : "[deleted]"} ${item.time_ago}
+                · ${totalComments} comment${totalComments === 1 ? "" : "s"}${loadedComments !== totalComments ? tpl` (${loadedComments} loaded)` : ""}
+                ${readingTime > 0 ? tpl`· ${readingTime} min read` : ""}
               </p>
             `}
+          ${shareButtons(item.title, shareUrl)}
           <hr />
           ${unsafeHTML(item.content || "")} ${commentsSection(item.comments, opUser)}
         </article>

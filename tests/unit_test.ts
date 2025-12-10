@@ -530,7 +530,7 @@ Deno.test("log: debug outputs correct level", () => {
 // Comment OP Highlighting Tests
 // =============================================================================
 
-import { renderComment, commentsSection, userLink, keyboardNavScript } from "../netlify/edge-functions/lib/render/components.ts";
+import { renderComment, commentsSection, userLink, keyboardNavScript, countComments, estimateReadingTime, shareButtons } from "../netlify/edge-functions/lib/render/components.ts";
 import type { HNAPIItem as CommentItem } from "../netlify/edge-functions/lib/hn.ts";
 
 Deno.test("userLink: creates link to user profile", async () => {
@@ -679,4 +679,132 @@ Deno.test("config: circuit breaker constants exist", () => {
   assertEquals(typeof CIRCUIT_BREAKER_RESET_MS, "number");
   assertEquals(CIRCUIT_BREAKER_THRESHOLD > 0, true);
   assertEquals(CIRCUIT_BREAKER_RESET_MS > 0, true);
+});
+
+// =============================================================================
+// countComments Tests
+// =============================================================================
+
+Deno.test("countComments: returns 0 for undefined", () => {
+  assertEquals(countComments(undefined), 0);
+});
+
+Deno.test("countComments: returns 0 for empty array", () => {
+  assertEquals(countComments([]), 0);
+});
+
+Deno.test("countComments: counts flat comments correctly", () => {
+  const comments = [
+    { id: 1, content: "comment 1", comments: [], type: "comment" },
+    { id: 2, content: "comment 2", comments: [], type: "comment" },
+    { id: 3, content: "comment 3", comments: [], type: "comment" },
+  ] as CommentItem[];
+  assertEquals(countComments(comments), 3);
+});
+
+Deno.test("countComments: counts nested comments recursively", () => {
+  const comments = [
+    { 
+      id: 1, 
+      content: "parent",
+      type: "comment",
+      comments: [
+        { id: 2, content: "child", comments: [], type: "comment" },
+        { id: 3, content: "child 2", type: "comment", comments: [
+          { id: 4, content: "grandchild", comments: [], type: "comment" }
+        ]}
+      ] 
+    },
+  ] as CommentItem[];
+  assertEquals(countComments(comments), 4);
+});
+
+Deno.test("countComments: excludes comments with empty content", () => {
+  const comments = [
+    { id: 1, content: "has content", comments: [], type: "comment" },
+    { id: 2, content: "", comments: [], type: "comment" },
+    { id: 3, content: "   ", comments: [], type: "comment" },
+  ] as CommentItem[];
+  assertEquals(countComments(comments), 1);
+});
+
+// =============================================================================
+// estimateReadingTime Tests
+// =============================================================================
+
+Deno.test("estimateReadingTime: returns 0 for undefined", () => {
+  assertEquals(estimateReadingTime(undefined), 0);
+});
+
+Deno.test("estimateReadingTime: returns 0 for empty string", () => {
+  assertEquals(estimateReadingTime(""), 0);
+});
+
+Deno.test("estimateReadingTime: returns 1 min for short text", () => {
+  assertEquals(estimateReadingTime("Hello world"), 1);
+});
+
+Deno.test("estimateReadingTime: calculates correctly for longer text", () => {
+  // 200 words should be 1 minute
+  const words = Array(200).fill("word").join(" ");
+  assertEquals(estimateReadingTime(words), 1);
+  
+  // 400 words should be 2 minutes
+  const words400 = Array(400).fill("word").join(" ");
+  assertEquals(estimateReadingTime(words400), 2);
+});
+
+Deno.test("estimateReadingTime: strips HTML tags", () => {
+  const html = "<p>Hello <strong>world</strong> this is <a href='#'>a test</a></p>";
+  const result = estimateReadingTime(html);
+  assertEquals(result, 1);
+});
+
+// =============================================================================
+// shareButtons Tests
+// =============================================================================
+
+Deno.test("shareButtons: includes Twitter share link", async () => {
+  const result = await htmlToString(shareButtons("Test Title", "https://example.com"));
+  assertEquals(result.includes("twitter.com/intent/tweet"), true);
+  assertEquals(result.includes("Test%20Title"), true);
+});
+
+Deno.test("shareButtons: includes copy link button", async () => {
+  const result = await htmlToString(shareButtons("Test", "https://example.com"));
+  assertEquals(result.includes("share-copy"), true);
+  assertEquals(result.includes('data-url="https://example.com"'), true);
+});
+
+Deno.test("shareButtons: properly encodes special characters", async () => {
+  const result = await htmlToString(shareButtons("Test & Special <chars>", "https://example.com?foo=bar"));
+  assertEquals(result.includes("twitter.com/intent/tweet"), true);
+});
+
+// =============================================================================
+// keyboardNavScript ARIA and Modal Tests
+// =============================================================================
+
+Deno.test("keyboardNavScript: includes ARIA live region", async () => {
+  const result = await htmlToString(keyboardNavScript());
+  assertEquals(result.includes('id="aria-live"'), true);
+  assertEquals(result.includes('aria-live="polite"'), true);
+});
+
+Deno.test("keyboardNavScript: includes shortcuts modal", async () => {
+  const result = await htmlToString(keyboardNavScript());
+  assertEquals(result.includes('id="shortcuts-modal"'), true);
+  assertEquals(result.includes("Keyboard Shortcuts"), true);
+});
+
+Deno.test("keyboardNavScript: includes ? key handler", async () => {
+  const result = await htmlToString(keyboardNavScript());
+  assertEquals(result.includes("e.key === '?'"), true);
+  assertEquals(result.includes("showModal()"), true);
+});
+
+Deno.test("keyboardNavScript: includes Escape handler", async () => {
+  const result = await htmlToString(keyboardNavScript());
+  assertEquals(result.includes("case 'Escape'"), true);
+  assertEquals(result.includes("clearSelection()"), true);
 });

@@ -4,6 +4,29 @@ import { type HTML, html, unsafeHTML } from "../html.ts";
 import { FEEDS } from "../feeds.ts";
 import { type FeedSlug, type HNAPIItem, type Item, type ItemType } from "../hn.ts";
 
+// --- Helper: Count total comments recursively ---
+
+export const countComments = (comments: HNAPIItem[] | undefined): number => {
+  if (!comments || comments.length === 0) return 0;
+  return comments.reduce((count, comment) => {
+    // Count this comment (if it has content) + its children
+    const hasContent = comment.content && comment.content.trim() !== "";
+    const childCount = countComments(comment.comments);
+    return count + (hasContent ? 1 : 0) + childCount;
+  }, 0);
+};
+
+// --- Helper: Estimate reading time ---
+
+export const estimateReadingTime = (text: string | undefined): number => {
+  if (!text) return 0;
+  // Strip HTML tags, count words
+  const plainText = text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  const wordCount = plainText.split(" ").filter(Boolean).length;
+  // Average reading speed: 200-250 words per minute, use 200 for technical content
+  return Math.max(1, Math.ceil(wordCount / 200));
+};
+
 // --- Type metadata for story badges ---
 
 export type TypeMeta = {
@@ -188,9 +211,27 @@ export const turboScript = (): HTML =>
 
 export const keyboardNavScript = (): HTML =>
   html`
+    <div id="aria-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+    <dialog id="shortcuts-modal" class="shortcuts-modal">
+      <h2>Keyboard Shortcuts</h2>
+      <dl class="shortcuts-list">
+        <dt><kbd>j</kbd></dt><dd>Next item</dd>
+        <dt><kbd>k</kbd></dt><dd>Previous item</dd>
+        <dt><kbd>o</kbd> / <kbd>Enter</kbd></dt><dd>Open selected item</dd>
+        <dt><kbd>?</kbd></dt><dd>Show this help</dd>
+        <dt><kbd>Esc</kbd></dt><dd>Close modal / clear selection</dd>
+      </dl>
+      <button type="button" class="modal-close" aria-label="Close">×</button>
+    </dialog>
     <script>
     (function() {
       let currentIndex = -1;
+      const liveRegion = document.getElementById('aria-live');
+      const modal = document.getElementById('shortcuts-modal');
+      
+      function announce(message) {
+        if (liveRegion) liveRegion.textContent = message;
+      }
       
       function getItems() {
         // On feed pages: list items; on item pages: top-level comments
@@ -198,6 +239,13 @@ export const keyboardNavScript = (): HTML =>
         if (listItems.length) return Array.from(listItems);
         const comments = document.querySelectorAll('section[aria-label="Comments"] > details');
         return Array.from(comments);
+      }
+      
+      function getItemLabel(item, index, total) {
+        // Try to get a meaningful label for the item
+        const title = item.querySelector('.story-title-text, .title, summary');
+        const text = title ? title.textContent.trim().slice(0, 50) : 'Item';
+        return text + ' (' + (index + 1) + ' of ' + total + ')';
       }
       
       function highlightItem(index) {
@@ -216,6 +264,23 @@ export const keyboardNavScript = (): HTML =>
         const item = items[currentIndex];
         item.classList.add('kbd-focus');
         item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Set focus for keyboard accessibility
+        item.setAttribute('tabindex', '-1');
+        item.focus({ preventScroll: true });
+        
+        // Announce for screen readers
+        announce(getItemLabel(item, currentIndex, items.length));
+      }
+      
+      function clearSelection() {
+        const items = getItems();
+        items.forEach(item => {
+          item.classList.remove('kbd-focus');
+          item.removeAttribute('tabindex');
+        });
+        currentIndex = -1;
+        announce('Selection cleared');
       }
       
       function openCurrentItem() {
@@ -228,9 +293,38 @@ export const keyboardNavScript = (): HTML =>
         if (link) link.click();
       }
       
+      function showModal() {
+        modal.showModal();
+        modal.querySelector('.modal-close').focus();
+      }
+      
+      function hideModal() {
+        modal.close();
+      }
+      
+      // Close modal on button click or backdrop click
+      modal.querySelector('.modal-close').addEventListener('click', hideModal);
+      modal.addEventListener('click', function(e) {
+        if (e.target === modal) hideModal();
+      });
+      
       document.addEventListener('keydown', function(e) {
+        // Handle modal close
+        if (modal.open && e.key === 'Escape') {
+          e.preventDefault();
+          hideModal();
+          return;
+        }
+        
         // Ignore if typing in input/textarea
         if (e.target.matches('input, textarea, select')) return;
+        
+        // Show help modal on ?
+        if (e.key === '?') {
+          e.preventDefault();
+          showModal();
+          return;
+        }
         
         const items = getItems();
         if (!items.length) return;
@@ -251,6 +345,12 @@ export const keyboardNavScript = (): HTML =>
               openCurrentItem();
             }
             break;
+          case 'Escape':
+            if (currentIndex >= 0) {
+              e.preventDefault();
+              clearSelection();
+            }
+            break;
         }
       });
     })();
@@ -263,6 +363,51 @@ export const userLink = (username: string | null | undefined): HTML => {
   if (!username) return html`[deleted]`;
   return html`<a href="/user/${username}" class="user-link">${username}</a>`;
 };
+
+// --- Share buttons ---
+
+export const shareButtons = (title: string, url: string): HTML =>
+  html`
+    <div class="share-buttons" aria-label="Share this story">
+      <a href="https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}"
+         class="share-btn share-twitter"
+         target="_blank"
+         rel="noopener noreferrer"
+         title="Share on Twitter">
+        <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16">
+          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+        </svg>
+        <span class="sr-only">Twitter</span>
+      </a>
+      <button type="button"
+              class="share-btn share-copy"
+              data-url="${url}"
+              title="Copy link">
+        <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16">
+          <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+        </svg>
+        <span class="sr-only">Copy link</span>
+      </button>
+    </div>
+    <script>
+    document.querySelectorAll('.share-copy').forEach(btn => {
+      btn.addEventListener('click', async function() {
+        const url = this.dataset.url;
+        try {
+          await navigator.clipboard.writeText(url);
+          this.classList.add('copied');
+          this.title = 'Copied!';
+          setTimeout(() => {
+            this.classList.remove('copied');
+            this.title = 'Copy link';
+          }, 2000);
+        } catch (err) {
+          console.error('Failed to copy:', err);
+        }
+      });
+    });
+    </script>
+  `;
 
 // --- Story list item ---
 

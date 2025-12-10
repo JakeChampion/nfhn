@@ -559,3 +559,109 @@ pre {
   white-space: nowrap;
   border: 0;
 }
+
+/* Keyboard shortcuts modal */
+.shortcuts-modal {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1.5em;
+  max-width: 400px;
+  background: var(--background-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.shortcuts-modal::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.shortcuts-modal h2 {
+  margin: 0 0 1em;
+  font-size: 1.2em;
+  color: var(--text-strong);
+}
+
+.shortcuts-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5em 1em;
+  margin: 0;
+}
+
+.shortcuts-list dt {
+  font-weight: normal;
+}
+
+.shortcuts-list dd {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.shortcuts-list kbd {
+  display: inline-block;
+  padding: 0.2em 0.5em;
+  font-family: inherit;
+  font-size: 0.85em;
+  background: var(--badge-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.modal-close {
+  position: absolute;
+  top: 0.5em;
+  right: 0.5em;
+  width: 2em;
+  height: 2em;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: 1.2em;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.modal-close:hover {
+  background: var(--badge-bg);
+  color: var(--text-primary);
+}
+
+/* Share buttons */
+.share-buttons {
+  display: flex;
+  gap: 0.5em;
+  margin: 0.5em 0;
+}
+
+.share-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2em;
+  height: 2em;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--badge-bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.share-btn:hover {
+  background: var(--background-elevated);
+  color: var(--text-primary);
+}
+
+.share-btn svg {
+  fill: currentColor;
+}
+
+.share-copy.copied {
+  background: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.5);
+  color: rgb(34, 197, 94);
+}
