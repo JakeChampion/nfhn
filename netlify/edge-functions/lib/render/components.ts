@@ -1,0 +1,190 @@
+// render/components.ts - Reusable UI components
+
+import { type HTML, html, unsafeHTML } from "../html.ts";
+import { FEEDS } from "../feeds.ts";
+import { type FeedSlug, type HNAPIItem, type Item, type ItemType } from "../hn.ts";
+
+// --- Type metadata for story badges ---
+
+export type TypeMeta = {
+  label: string;
+  badgeClass: string;
+  href: (item: Item) => string;
+};
+
+const TYPE_META: Record<ItemType, TypeMeta> = {
+  ask: { label: "Ask HN", badgeClass: "badge-ask", href: (item) => `/item/${item.id}` },
+  show: { label: "Show HN", badgeClass: "badge-show", href: (item) => `/item/${item.id}` },
+  job: {
+    label: "Job",
+    badgeClass: "badge-job",
+    href: (item) => item.url ?? `/item/${item.id}`,
+  },
+  link: {
+    label: "Link",
+    badgeClass: "badge-link",
+    href: (item) => item.url ?? `/item/${item.id}`,
+  },
+  comment: { label: "Comment", badgeClass: "badge-default", href: (item) => `/item/${item.id}` },
+};
+
+export const getTypeMeta = (type: ItemType): TypeMeta => TYPE_META[type];
+
+// --- Shared styles link ---
+
+export const sharedStyles = (pageNumber = 1): HTML => {
+  // Only the dynamic counter-set needs to be inline; all other styles are in /styles.css
+  const counterStart = pageNumber === 1 ? 0 : (pageNumber - 1) * 30;
+  return html`
+    <link rel="stylesheet" href="/styles.css">
+    <style>ol { counter-set: section ${counterStart}; }</style>
+  `;
+};
+
+// --- Navigation ---
+
+export const renderNav = (activeFeed: FeedSlug): HTML =>
+  html`
+    <nav class="nav-feeds" aria-label="Primary">
+      ${
+    FEEDS.map(({ slug, label }) =>
+      html`
+        <a href="/${slug}/1" class="${activeFeed === slug
+          ? "active"
+          : ""}" aria-current="${activeFeed === slug ? "page" : undefined}">${label}</a>
+      `
+    )
+  }
+    </nav>
+  `;
+
+// --- Prefetch/prerender script ---
+
+export const turboScript = (): HTML =>
+  html`
+<script>
+  const used = new Set();
+
+  function supportsRel(rel) {
+    const link = document.createElement("link");
+    return !!(link.relList && link.relList.supports && link.relList.supports(rel));
+  }
+
+  const canPrerender = supportsRel("prerender");
+  const canPrefetch = supportsRel("prefetch");
+
+  function warm(url) {
+    const u = new URL(url, location.href);
+    if (u.origin !== location.origin) return;
+
+    const href = u.toString();
+    if (used.has(href)) return;
+    used.add(href);
+
+    const link = document.createElement("link");
+    if (canPrerender) {
+      link.rel = "prerender";
+    } else if (canPrefetch) {
+      link.rel = "prefetch";
+      link.as = "document"; // hint, safe to omit if you like
+    } else {
+      // No supported rel, give up quietly.
+      return;
+    }
+
+    link.href = href;
+    document.head.appendChild(link);
+    console.debug("Warming link:", link.rel, link.href);
+  }
+
+  function onIntent(e) {
+    const a = e.target.closest("a[href]");
+    if (!a) return;
+    if (a.target && a.target !== "_self") return;
+    if (a.hasAttribute("download")) return;
+
+    warm(a.href);
+  }
+
+  // Hover (desktop) + first touch (mobile)
+  document.addEventListener("mouseover", onIntent, { passive: true });
+  document.addEventListener("touchstart", onIntent, { passive: true });
+</script>
+`;
+
+// --- Story list item ---
+
+export const renderStory = (data: Item): HTML => {
+  const meta = getTypeMeta(data.type);
+
+  return html`
+    <li>
+      <a class="title" href="${meta.href(data)}">
+        <span class="badge ${meta.badgeClass}">${meta.label}</span>
+        <span class="story-title-text">${data.title}</span>
+        ${data.domain
+          ? html`
+            <span class="story-meta">(${data.domain})</span>
+          `
+          : ""}
+      </a>
+      <a class="comments" href="/item/${data.id}">
+        view ${data.comments_count > 0 ? data.comments_count + " comments" : "discussion"}
+      </a>
+    </li>
+  `;
+};
+
+// --- Comments ---
+
+export const isRenderableComment = (comment: HNAPIItem): boolean =>
+  comment.type === "comment" && !comment.deleted && !comment.dead;
+
+export const renderComment = (comment: HNAPIItem, level: number): HTML => {
+  if (!isRenderableComment(comment)) {
+    return html``;
+  }
+
+  const time_ago = comment.time_ago ?? "";
+  const user = comment.user ?? "[deleted]";
+  const content = unsafeHTML(comment.content ?? "");
+  const children = (comment.comments ?? []).filter(isRenderableComment);
+
+  const details = html`
+    <details open id="${comment.id}">
+      <summary aria-label="Comment by ${user}, posted ${time_ago}">
+        <span class="comment-meta">
+          <span class="comment-user">${user}</span>
+          <a class="comment-permalink" href="#${comment.id}">${time_ago}</a>
+        </span>
+      </summary>
+      <div>${content}</div>
+      ${children.length
+        ? html`
+          <ul>${children.map((child) => renderComment(child, level + 1))}</ul>
+        `
+        : ""}
+    </details>
+  `;
+
+  return level >= 1
+    ? html`
+      <li>${details}</li>
+    `
+    : details;
+};
+
+export const commentsSection = (rootComments: HNAPIItem[] | undefined): HTML => {
+  const visibleComments = (rootComments ?? []).filter(isRenderableComment);
+  if (visibleComments.length === 0) {
+    return html`
+      <p>No comments yet.</p>
+    `;
+  }
+
+  return html`
+    <section aria-label="Comments">
+      ${visibleComments.map((comment) => renderComment(comment, 0))}
+    </section>
+  `;
+};
