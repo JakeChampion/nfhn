@@ -4,9 +4,12 @@ import { escape, HTMLResponse } from "./html.ts";
 import { applySecurityHeaders } from "./security.ts";
 
 const errorPageStyles = `
+  :root {
+    color-scheme: light dark;
+  }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-    background-color: whitesmoke;
+    background-color: #f5f5f5;
     margin: 40px auto;
     max-width: 600px;
     line-height: 1.6;
@@ -14,6 +17,18 @@ const errorPageStyles = `
     padding: 0 1em;
     color: #333;
     text-align: center;
+  }
+  @media (prefers-color-scheme: dark) {
+    body {
+      background-color: #0d1117;
+      color: #c9d1d9;
+    }
+    a {
+      border-bottom-color: rgba(255,255,255,0.2);
+    }
+    a:hover {
+      border-bottom-color: rgba(255,255,255,0.5);
+    }
   }
   .actions {
     margin-top: 1em;
