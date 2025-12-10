@@ -9,7 +9,6 @@ import { parsePositiveInt, redirect } from "../netlify/edge-functions/lib/handle
 import {
   pwaHeadTags,
   serviceWorkerScript,
-  fontSizeControls,
   externalLinkScript,
 } from "../netlify/edge-functions/lib/render/components.ts";
 
@@ -862,33 +861,6 @@ Deno.test("serviceWorkerScript: registers service worker", async () => {
 Deno.test("serviceWorkerScript: handles registration errors", async () => {
   const result = await htmlToString(serviceWorkerScript());
   assertEquals(result.includes('.catch'), true);
-});
-
-Deno.test("fontSizeControls: includes small option", async () => {
-  const result = await htmlToString(fontSizeControls());
-  assertEquals(result.includes('data-size="small"'), true);
-});
-
-Deno.test("fontSizeControls: includes medium option", async () => {
-  const result = await htmlToString(fontSizeControls());
-  assertEquals(result.includes('data-size="medium"'), true);
-});
-
-Deno.test("fontSizeControls: includes large option", async () => {
-  const result = await htmlToString(fontSizeControls());
-  assertEquals(result.includes('data-size="large"'), true);
-});
-
-Deno.test("fontSizeControls: persists to localStorage", async () => {
-  const result = await htmlToString(fontSizeControls());
-  assertEquals(result.includes('localStorage.setItem'), true);
-  assertEquals(result.includes('fontSize'), true);
-});
-
-Deno.test("fontSizeControls: has accessible role", async () => {
-  const result = await htmlToString(fontSizeControls());
-  assertEquals(result.includes('role="group"'), true);
-  assertEquals(result.includes('aria-label'), true);
 });
 
 Deno.test("externalLinkScript: detects external links", async () => {

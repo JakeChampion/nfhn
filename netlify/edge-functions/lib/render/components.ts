@@ -83,37 +83,6 @@ export const serviceWorkerScript = (): HTML =>
     </script>
   `;
 
-// --- Font size controls ---
-
-export const fontSizeControls = (): HTML =>
-  html`
-    <div class="font-size-controls" role="group" aria-label="Font size">
-      <button type="button" class="font-btn" data-size="small" title="Small text">A</button>
-      <button type="button" class="font-btn" data-size="medium" title="Medium text">A</button>
-      <button type="button" class="font-btn" data-size="large" title="Large text">A</button>
-    </div>
-    <script>
-    (function() {
-      const sizes = { small: '16px', medium: '18px', large: '20px' };
-      const stored = localStorage.getItem('fontSize') || 'medium';
-      document.documentElement.style.setProperty('--base-font-size', sizes[stored]);
-      document.body.style.fontSize = 'var(--base-font-size)';
-
-      document.querySelectorAll('.font-btn').forEach(btn => {
-        if (btn.dataset.size === stored) btn.classList.add('active');
-        btn.addEventListener('click', () => {
-          const size = btn.dataset.size;
-          document.documentElement.style.setProperty('--base-font-size', sizes[size]);
-          document.body.style.fontSize = 'var(--base-font-size)';
-          localStorage.setItem('fontSize', size);
-          document.querySelectorAll('.font-btn').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-        });
-      });
-    })();
-    </script>
-  `;
-
 // --- External link indicator script ---
 
 export const externalLinkScript = (): HTML =>
