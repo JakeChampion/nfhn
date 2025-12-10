@@ -164,7 +164,7 @@ async function withMockedEnv(
 ) {
   // Reset circuit breaker state before each test
   resetCircuitBreaker();
-  
+
   const originalFetch = globalThis.fetch;
   const cachesAny = globalThis.caches as unknown as {
     open?: (...args: unknown[]) => unknown;
@@ -905,7 +905,7 @@ Deno.test("feed response includes Server-Timing header", async () => {
   await withMockedEnv(routes, async () => {
     const res = await handler(new Request("https://nfhn.test/top/1"));
     assertEquals(res.status, 200);
-    
+
     const timing = res.headers.get("Server-Timing");
     assert(timing !== null, "Server-Timing header should be present");
     assertStringIncludes(timing, "api;dur=");
@@ -932,7 +932,7 @@ Deno.test("item response includes Server-Timing header", async () => {
   await withMockedEnv(routes, async () => {
     const res = await handler(new Request("https://nfhn.test/item/123"));
     assertEquals(res.status, 200);
-    
+
     const timing = res.headers.get("Server-Timing");
     assert(timing !== null, "Server-Timing header should be present");
     assertStringIncludes(timing, "api;dur=");
@@ -953,7 +953,7 @@ Deno.test("user response includes Server-Timing header", async () => {
   await withMockedEnv(routes, async () => {
     const res = await handler(new Request("https://nfhn.test/user/testuser"));
     assertEquals(res.status, 200);
-    
+
     const timing = res.headers.get("Server-Timing");
     assert(timing !== null, "Server-Timing header should be present");
     assertStringIncludes(timing, "api;dur=");
@@ -1002,11 +1002,11 @@ Deno.test("item page highlights OP comments", async () => {
     const res = await handler(new Request("https://nfhn.test/item/123"));
     assertEquals(res.status, 200);
     const body = await res.text();
-    
+
     // OP's comment should have the badge
     assertStringIncludes(body, "is-op");
     assertStringIncludes(body, 'title="Original Poster"');
-    
+
     // Count occurrences - should only be for original_poster
     const opMatches = body.match(/is-op/g) || [];
     assertEquals(opMatches.length, 1, "Only one comment should have OP badge");
@@ -1246,7 +1246,7 @@ Deno.test("returns 404 for invalid item ID (negative)", async () => {
 });
 
 // =============================================================================
-// User Page Error Tests  
+// User Page Error Tests
 // =============================================================================
 
 Deno.test("handles user API error gracefully", async () => {

@@ -6,10 +6,13 @@ import {
   commentsSection,
   countComments,
   estimateReadingTime,
+  externalLinkScript,
   getTypeMeta,
   headerBar,
   keyboardNavScript,
+  pwaHeadTags,
   renderStory,
+  serviceWorkerScript,
   shareButtons,
   sharedStyles,
   skipLink,
@@ -38,6 +41,7 @@ export const home = (
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     ${themeInitScript()}
+    ${pwaHeadTags()}
     ${canonicalUrl ? tpl`<link rel="canonical" href="${canonicalUrl}">` : ""}
     <meta name="description" content="Hacker News ${feed} page ${pageNumber}: latest ${feed} stories.">
     <meta property="og:type" content="website">
@@ -64,7 +68,9 @@ export const home = (
     </main>
     ${turboScript()}
     ${keyboardNavScript()}
+    ${externalLinkScript()}
     ${themeScript()}
+    ${serviceWorkerScript()}
   </body>
 </html>
 `;
@@ -85,6 +91,7 @@ const shellPage = (
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     ${themeInitScript()}
+    ${pwaHeadTags()}
     ${canonicalUrl ? tpl`<link rel="canonical" href="${canonicalUrl}" />` : ""}
     ${description ? tpl`<meta name="description" content="${description}" />` : ""}
     <meta property="og:type" content="article">
@@ -104,7 +111,9 @@ const shellPage = (
     yield* body;
 
     yield* tpl`
+      ${externalLinkScript()}
       ${themeScript()}
+      ${serviceWorkerScript()}
       </body>
       </html>
     `;
@@ -122,14 +131,14 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
     : "top";
   const meta = getTypeMeta(item.type);
   const opUser = item.user ?? undefined;
-  
+
   // Calculate loaded comment count for display
   const loadedComments = countComments(item.comments);
   const totalComments = item.comments_count ?? 0;
-  
+
   // Estimate reading time for article content
   const readingTime = estimateReadingTime(item.content);
-  
+
   // Build share URL
   const shareUrl = canonicalUrl || `https://nfhn.netlify.app/item/${item.id}`;
 
@@ -158,8 +167,12 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
             `
         : tpl`
               <p class="meta-line">
-                ${item.points ?? 0} points by ${item.user ? userLink(item.user) : "[deleted]"} ${item.time_ago}
-                · ${totalComments} comment${totalComments === 1 ? "" : "s"}${loadedComments !== totalComments ? tpl` (${loadedComments} loaded)` : ""}
+                ${item.points ?? 0} points by ${
+          item.user ? userLink(item.user) : "[deleted]"
+        } ${item.time_ago}
+                · ${totalComments} comment${totalComments === 1 ? "" : "s"}${
+          loadedComments !== totalComments ? tpl` (${loadedComments} loaded)` : ""
+        }
                 ${readingTime > 0 ? tpl`· ${readingTime} min read` : ""}
               </p>
             `}
@@ -184,21 +197,28 @@ const renderSubmissionItem = (item: SubmissionItem, index: number): HTML =>
     <span class="story-vote">▲</span>
     <span class="story-body">
       <span class="story-title">
-        ${item.url
-          ? tpl`<a href="${item.url}" class="story-link">${item.title}</a>
+        ${
+    item.url
+      ? tpl`<a href="${item.url}" class="story-link">${item.title}</a>
                <span class="story-domain">(${item.domain})</span>`
-          : tpl`<a href="/item/${item.id}" class="story-link">${item.title}</a>`
-        }
+      : tpl`<a href="/item/${item.id}" class="story-link">${item.title}</a>`
+  }
       </span>
       <span class="story-meta">
         ${item.points} point${item.points === 1 ? "" : "s"} · 
         ${item.time_ago} · 
-        <a href="/item/${item.id}">${item.comments_count} comment${item.comments_count === 1 ? "" : "s"}</a>
+        <a href="/item/${item.id}">${item.comments_count} comment${
+    item.comments_count === 1 ? "" : "s"
+  }</a>
       </span>
     </span>
   </li>`;
 
-export const userProfile = (user: User, submissions: SubmissionItem[] = [], canonicalUrl?: string): HTML =>
+export const userProfile = (
+  user: User,
+  submissions: SubmissionItem[] = [],
+  canonicalUrl?: string,
+): HTML =>
   shellPage(
     `NFHN: ${user.id}`,
     tpl`
@@ -212,20 +232,28 @@ export const userProfile = (user: User, submissions: SubmissionItem[] = [], cano
             <dt>Created</dt>
             <dd>${user.created_ago}</dd>
           </dl>
-          ${user.about ? tpl`
+          ${
+      user.about
+        ? tpl`
             <div class="user-about">
               <h2>About</h2>
               ${unsafeHTML(user.about)}
             </div>
-          ` : ""}
-          ${submissions.length > 0 ? tpl`
+          `
+        : ""
+    }
+          ${
+      submissions.length > 0
+        ? tpl`
             <section class="user-submissions">
               <h2>Recent Submissions</h2>
               <ol class="stories" start="1">
                 ${submissions.map((s, i) => renderSubmissionItem(s, i))}
               </ol>
             </section>
-          ` : ""}
+          `
+        : ""
+    }
           <p class="user-links">
             <a href="https://news.ycombinator.com/submitted?id=${user.id}" rel="noopener">All submissions on HN</a>
             <span class="link-sep">·</span>

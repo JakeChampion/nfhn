@@ -31,18 +31,18 @@ function createEntry(
     level,
     message,
   };
-  
+
   if (context && Object.keys(context).length > 0) {
     entry.context = context;
   }
-  
+
   if (error) {
     entry.error = error.message;
     if (error.stack) {
       entry.stack = error.stack;
     }
   }
-  
+
   return entry;
 }
 

@@ -6,6 +6,11 @@ import { escape, html, htmlToString, raw, unsafeHTML } from "../netlify/edge-fun
 import { formatTimeAgo, type HNAPIItem, mapStoryToItem } from "../netlify/edge-functions/lib/hn.ts";
 import { buildContentSecurityPolicy } from "../netlify/edge-functions/lib/security.ts";
 import { parsePositiveInt, redirect } from "../netlify/edge-functions/lib/handlers.ts";
+import {
+  pwaHeadTags,
+  serviceWorkerScript,
+  externalLinkScript,
+} from "../netlify/edge-functions/lib/render/components.ts";
 
 // =============================================================================
 // HTML Escape Tests
@@ -112,7 +117,9 @@ Deno.test("html: renders nested html templates", async () => {
 
 Deno.test("html: renders arrays of values", async () => {
   const items = ["a", "b", "c"];
-  const result = await htmlToString(html`<ul>${items.map((i) => html`<li>${i}</li>`)}</ul>`);
+  const result = await htmlToString(
+    html`<ul>${items.map((i) => html`<li>${i}</li>`)}</ul>`,
+  );
   assertEquals(result, "<ul><li>a</li><li>b</li><li>c</li></ul>");
 });
 
@@ -462,7 +469,7 @@ Deno.test("mapApiUser: handles missing karma as 0", () => {
 });
 
 // =============================================================================
-// Logger Tests  
+// Logger Tests
 // =============================================================================
 
 import { log } from "../netlify/edge-functions/lib/logger.ts";
@@ -471,11 +478,11 @@ Deno.test("log: info outputs JSON with correct fields", () => {
   const output: string[] = [];
   const origInfo = console.info;
   console.info = (msg: string) => output.push(msg);
-  
+
   log.info("Test message", { foo: "bar" });
-  
+
   console.info = origInfo;
-  
+
   assertEquals(output.length, 1);
   const parsed = JSON.parse(output[0]);
   assertEquals(parsed.level, "info");
@@ -488,11 +495,11 @@ Deno.test("log: error includes error details", () => {
   const output: string[] = [];
   const origError = console.error;
   console.error = (msg: string) => output.push(msg);
-  
+
   log.error("Error occurred", {}, new Error("test error"));
-  
+
   console.error = origError;
-  
+
   const parsed = JSON.parse(output[0]);
   assertEquals(parsed.level, "error");
   assertEquals(parsed.error, "test error");
@@ -503,11 +510,11 @@ Deno.test("log: warn outputs correct level", () => {
   const output: string[] = [];
   const origWarn = console.warn;
   console.warn = (msg: string) => output.push(msg);
-  
+
   log.warn("Warning message", { key: "value" });
-  
+
   console.warn = origWarn;
-  
+
   const parsed = JSON.parse(output[0]);
   assertEquals(parsed.level, "warn");
   assertEquals(parsed.message, "Warning message");
@@ -517,11 +524,11 @@ Deno.test("log: debug outputs correct level", () => {
   const output: string[] = [];
   const origDebug = console.debug;
   console.debug = (msg: string) => output.push(msg);
-  
+
   log.debug("Debug message");
-  
+
   console.debug = origDebug;
-  
+
   const parsed = JSON.parse(output[0]);
   assertEquals(parsed.level, "debug");
 });
@@ -530,7 +537,15 @@ Deno.test("log: debug outputs correct level", () => {
 // Comment OP Highlighting Tests
 // =============================================================================
 
-import { renderComment, commentsSection, userLink, keyboardNavScript, countComments, estimateReadingTime, shareButtons } from "../netlify/edge-functions/lib/render/components.ts";
+import {
+  commentsSection,
+  countComments,
+  estimateReadingTime,
+  keyboardNavScript,
+  renderComment,
+  shareButtons,
+  userLink,
+} from "../netlify/edge-functions/lib/render/components.ts";
 import type { HNAPIItem as CommentItem } from "../netlify/edge-functions/lib/hn.ts";
 
 Deno.test("userLink: creates link to user profile", async () => {
@@ -568,7 +583,7 @@ Deno.test("renderComment: links username to profile", async () => {
     content: "Test comment",
     comments: [],
   };
-  
+
   const result = await htmlToString(renderComment(comment, 0, undefined));
   assertEquals(result.includes('href="/user/alice"'), true);
 });
@@ -582,9 +597,9 @@ Deno.test("renderComment: adds OP badge when user matches opUser", async () => {
     content: "Test comment",
     comments: [],
   };
-  
+
   const result = await htmlToString(renderComment(comment, 0, "alice"));
-  
+
   // Check for OP badge and is-op class
   assertEquals(result.includes("is-op"), true);
   assertEquals(result.includes("OP</abbr>"), true);
@@ -600,9 +615,9 @@ Deno.test("renderComment: no OP badge when user doesn't match opUser", async () 
     content: "Test comment",
     comments: [],
   };
-  
+
   const result = await htmlToString(renderComment(comment, 0, "alice"));
-  
+
   assertEquals(result.includes("is-op"), false);
   assertEquals(result.includes("OP</abbr>"), false);
 });
@@ -616,9 +631,9 @@ Deno.test("renderComment: no OP badge when opUser undefined", async () => {
     content: "Test comment",
     comments: [],
   };
-  
+
   const result = await htmlToString(renderComment(comment, 0, undefined));
-  
+
   assertEquals(result.includes("is-op"), false);
 });
 
@@ -638,9 +653,9 @@ Deno.test("commentsSection: passes opUser to nested comments", async () => {
       comments: [],
     }],
   }];
-  
+
   const result = await htmlToString(commentsSection(comments, "alice"));
-  
+
   // Both comments from alice should have OP badge
   const matches = result.match(/is-op/g);
   assertEquals(matches?.length, 2);
@@ -650,13 +665,13 @@ Deno.test("commentsSection: passes opUser to nested comments", async () => {
 // Config Constants Tests
 // =============================================================================
 
-import { 
-  MAX_ITEM_ID, 
-  MAX_PAGE_NUMBER, 
-  USER_TTL_SECONDS, 
-  USER_STALE_SECONDS,
+import {
+  CIRCUIT_BREAKER_RESET_MS,
   CIRCUIT_BREAKER_THRESHOLD,
-  CIRCUIT_BREAKER_RESET_MS 
+  MAX_ITEM_ID,
+  MAX_PAGE_NUMBER,
+  USER_STALE_SECONDS,
+  USER_TTL_SECONDS,
 } from "../netlify/edge-functions/lib/config.ts";
 
 Deno.test("config: MAX_ITEM_ID is reasonable", () => {
@@ -704,16 +719,21 @@ Deno.test("countComments: counts flat comments correctly", () => {
 
 Deno.test("countComments: counts nested comments recursively", () => {
   const comments = [
-    { 
-      id: 1, 
+    {
+      id: 1,
       content: "parent",
       type: "comment",
       comments: [
         { id: 2, content: "child", comments: [], type: "comment" },
-        { id: 3, content: "child 2", type: "comment", comments: [
-          { id: 4, content: "grandchild", comments: [], type: "comment" }
-        ]}
-      ] 
+        {
+          id: 3,
+          content: "child 2",
+          type: "comment",
+          comments: [
+            { id: 4, content: "grandchild", comments: [], type: "comment" },
+          ],
+        },
+      ],
     },
   ] as CommentItem[];
   assertEquals(countComments(comments), 4);
@@ -748,7 +768,7 @@ Deno.test("estimateReadingTime: calculates correctly for longer text", () => {
   // 200 words should be 1 minute
   const words = Array(200).fill("word").join(" ");
   assertEquals(estimateReadingTime(words), 1);
-  
+
   // 400 words should be 2 minutes
   const words400 = Array(400).fill("word").join(" ");
   assertEquals(estimateReadingTime(words400), 2);
@@ -777,7 +797,9 @@ Deno.test("shareButtons: includes copy link button", async () => {
 });
 
 Deno.test("shareButtons: properly encodes special characters", async () => {
-  const result = await htmlToString(shareButtons("Test & Special <chars>", "https://example.com?foo=bar"));
+  const result = await htmlToString(
+    shareButtons("Test & Special <chars>", "https://example.com?foo=bar"),
+  );
   assertEquals(result.includes("twitter.com/intent/tweet"), true);
 });
 
@@ -807,4 +829,57 @@ Deno.test("keyboardNavScript: includes Escape handler", async () => {
   const result = await htmlToString(keyboardNavScript());
   assertEquals(result.includes("case 'Escape'"), true);
   assertEquals(result.includes("clearSelection()"), true);
+});
+
+// =============================================================================
+// PWA Component Tests
+// =============================================================================
+
+Deno.test("pwaHeadTags: includes manifest link", async () => {
+  const result = await htmlToString(pwaHeadTags());
+  assertEquals(result.includes('rel="manifest"'), true);
+  assertEquals(result.includes('/manifest.json'), true);
+});
+
+Deno.test("pwaHeadTags: includes apple-touch-icon", async () => {
+  const result = await htmlToString(pwaHeadTags());
+  assertEquals(result.includes('rel="apple-touch-icon"'), true);
+});
+
+Deno.test("pwaHeadTags: includes theme-color", async () => {
+  const result = await htmlToString(pwaHeadTags());
+  assertEquals(result.includes('name="theme-color"'), true);
+  assertEquals(result.includes('#ff7a18'), true);
+});
+
+Deno.test("serviceWorkerScript: registers service worker", async () => {
+  const result = await htmlToString(serviceWorkerScript());
+  assertEquals(result.includes('serviceWorker.register'), true);
+  assertEquals(result.includes('/sw.js'), true);
+});
+
+Deno.test("serviceWorkerScript: handles registration errors", async () => {
+  const result = await htmlToString(serviceWorkerScript());
+  assertEquals(result.includes('.catch'), true);
+});
+
+Deno.test("externalLinkScript: detects external links", async () => {
+  const result = await htmlToString(externalLinkScript());
+  assertEquals(result.includes("querySelectorAll('a[href^=\"http\"]')"), true);
+});
+
+Deno.test("externalLinkScript: adds external-link class", async () => {
+  const result = await htmlToString(externalLinkScript());
+  assertEquals(result.includes("classList.add('external-link')"), true);
+});
+
+Deno.test("externalLinkScript: adds screen reader text", async () => {
+  const result = await htmlToString(externalLinkScript());
+  assertEquals(result.includes("sr-only"), true);
+  assertEquals(result.includes("opens in new tab"), true);
+});
+
+Deno.test("externalLinkScript: checks origin for external links", async () => {
+  const result = await htmlToString(externalLinkScript());
+  assertEquals(result.includes("location.origin"), true);
 });

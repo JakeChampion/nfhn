@@ -22,7 +22,7 @@ const circuitBreaker: CircuitBreakerState = {
 
 function checkCircuitBreaker(): boolean {
   if (!circuitBreaker.isOpen) return true;
-  
+
   const now = Date.now();
   if (now - circuitBreaker.lastFailure > CIRCUIT_BREAKER_RESET_MS) {
     // Reset circuit breaker after timeout
@@ -31,14 +31,14 @@ function checkCircuitBreaker(): boolean {
     log.info("Circuit breaker reset", { resetAfterMs: CIRCUIT_BREAKER_RESET_MS });
     return true;
   }
-  
+
   return false;
 }
 
 function recordFailure(): void {
   circuitBreaker.failures++;
   circuitBreaker.lastFailure = Date.now();
-  
+
   if (circuitBreaker.failures >= CIRCUIT_BREAKER_THRESHOLD) {
     circuitBreaker.isOpen = true;
     log.warn("Circuit breaker opened", {
@@ -298,7 +298,7 @@ export async function fetchUser(username: string): Promise<HNAPIUser | null> {
 
 export function mapApiUser(raw: HNAPIUser | null): User | null {
   if (!raw || !raw.id) return null;
-  
+
   return {
     id: raw.id,
     created: raw.created,
@@ -349,22 +349,22 @@ export async function fetchUserSubmissions(
   limit = 10,
 ): Promise<SubmissionItem[]> {
   const results: SubmissionItem[] = [];
-  
+
   // Fetch items in parallel (up to limit * 2 to account for filtering)
   const idsToFetch = submittedIds.slice(0, limit * 3);
   const items = await Promise.all(
-    idsToFetch.map((id) => fetchFirebaseItem(id))
+    idsToFetch.map((id) => fetchFirebaseItem(id)),
   );
-  
+
   for (const item of items) {
     if (results.length >= limit) break;
     if (!item) continue;
     if (item.type !== "story" && item.type !== "job") continue;
     if (item.dead || item.deleted) continue;
     if (!item.title) continue;
-    
+
     const domain = extractDomain(item.url);
-    
+
     results.push({
       id: item.id,
       title: item.title,
@@ -377,6 +377,6 @@ export async function fetchUserSubmissions(
       comments_count: item.descendants ?? 0,
     });
   }
-  
+
   return results;
 }

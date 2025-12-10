@@ -665,3 +665,230 @@ pre {
   border-color: rgba(34, 197, 94, 0.5);
   color: rgb(34, 197, 94);
 }
+
+/* External link indicators */
+.external-link {
+  position: relative;
+}
+
+.external-link::after {
+  content: "↗";
+  display: inline-block;
+  font-size: 0.7em;
+  margin-left: 0.2em;
+  opacity: 0.6;
+  vertical-align: super;
+}
+
+.title .external-link::after,
+.story-link.external-link::after {
+  display: none;
+}
+
+/* Mobile improvements - larger touch targets */
+@media (max-width: 600px) {
+  body {
+    padding: 0 15px;
+    margin: 20px auto;
+  }
+  
+  .nav-feeds {
+    gap: 0.5em;
+    overflow-x: auto;
+    padding-bottom: 0.5em;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .nav-feeds a {
+    padding: 0.5em 0.75em;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    background: var(--badge-bg);
+    border-radius: 6px;
+  }
+  
+  .nav-feeds a.active {
+    background: var(--background-elevated);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .header-bar {
+    flex-wrap: wrap;
+    gap: 0.5em;
+  }
+  
+  .theme-toggle {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  
+  .page-controls {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5em;
+  }
+  
+  summary {
+    min-height: 56px;
+    padding: 1em;
+  }
+  
+  .comment-permalink {
+    min-height: 48px;
+    min-width: 48px;
+  }
+  
+  .more-link {
+    display: block;
+    padding: 1em;
+    background: var(--badge-bg);
+    border-radius: 8px;
+    text-align: center;
+    font-weight: 600;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .share-btn {
+    width: 2.5em;
+    height: 2.5em;
+    min-width: 44px;
+    min-height: 44px;
+  }
+  
+  .font-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Code syntax highlighting for dark mode */
+:root[data-theme="dark"] pre,
+:root[data-theme="dark"] code {
+  background: #1e1e1e;
+  border-radius: 4px;
+}
+
+:root[data-theme="dark"] code {
+  padding: 0.1em 0.3em;
+}
+
+:root[data-theme="dark"] pre code {
+  padding: 0;
+  background: transparent;
+}
+
+:root[data-theme="dark"] pre {
+  padding: 1em;
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] pre,
+  :root[data-theme="auto"] code {
+    background: #1e1e1e;
+    border-radius: 4px;
+  }
+  
+  :root[data-theme="auto"] code {
+    padding: 0.1em 0.3em;
+  }
+  
+  :root[data-theme="auto"] pre code {
+    padding: 0;
+    background: transparent;
+  }
+  
+  :root[data-theme="auto"] pre {
+    padding: 1em;
+    overflow-x: auto;
+    border: 1px solid var(--border-color);
+  }
+}
+
+/* Light mode code blocks */
+:root[data-theme="light"] pre,
+:root[data-theme="light"] code {
+  background: #f6f8fa;
+  border-radius: 4px;
+}
+
+:root[data-theme="light"] code {
+  padding: 0.1em 0.3em;
+}
+
+:root[data-theme="light"] pre code {
+  padding: 0;
+  background: transparent;
+}
+
+:root[data-theme="light"] pre {
+  padding: 1em;
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+}
+
+/* Improved contrast for dark mode */
+:root[data-theme="dark"] .badge {
+  font-weight: 500;
+}
+
+:root[data-theme="dark"] .badge-link {
+  background: rgba(100, 181, 246, 0.15);
+  border-color: rgba(100, 181, 246, 0.4);
+  color: #90caf9;
+}
+
+:root[data-theme="dark"] .badge-ask {
+  background: rgba(239, 83, 80, 0.15);
+  border-color: rgba(239, 83, 80, 0.4);
+  color: #ef9a9a;
+}
+
+:root[data-theme="dark"] .badge-show {
+  background: rgba(102, 187, 106, 0.15);
+  border-color: rgba(102, 187, 106, 0.4);
+  color: #a5d6a7;
+}
+
+:root[data-theme="dark"] .badge-job {
+  background: rgba(255, 183, 77, 0.15);
+  border-color: rgba(255, 183, 77, 0.4);
+  color: #ffcc80;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] .badge {
+    font-weight: 500;
+  }
+  
+  :root[data-theme="auto"] .badge-link {
+    background: rgba(100, 181, 246, 0.15);
+    border-color: rgba(100, 181, 246, 0.4);
+    color: #90caf9;
+  }
+  
+  :root[data-theme="auto"] .badge-ask {
+    background: rgba(239, 83, 80, 0.15);
+    border-color: rgba(239, 83, 80, 0.4);
+    color: #ef9a9a;
+  }
+  
+  :root[data-theme="auto"] .badge-show {
+    background: rgba(102, 187, 106, 0.15);
+    border-color: rgba(102, 187, 106, 0.4);
+    color: #a5d6a7;
+  }
+  
+  :root[data-theme="auto"] .badge-job {
+    background: rgba(255, 183, 77, 0.15);
+    border-color: rgba(255, 183, 77, 0.4);
+    color: #ffcc80;
+  }
+}
+
