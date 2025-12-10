@@ -1,10 +1,73 @@
-import handler from "../netlify/edge-functions/lib/handler.ts";
+// Test adapter that routes to the appropriate edge function
+import homeHandler from "../netlify/edge-functions/home.ts";
+import topHandler from "../netlify/edge-functions/top.ts";
+import newestHandler from "../netlify/edge-functions/newest.ts";
+import askHandler from "../netlify/edge-functions/ask.ts";
+import showHandler from "../netlify/edge-functions/show.ts";
+import jobsHandler from "../netlify/edge-functions/jobs.ts";
+import itemHandler from "../netlify/edge-functions/item.ts";
+import { handleNotFound } from "../netlify/edge-functions/lib/handlers.ts";
+import type { Context } from "@netlify/edge-functions";
 import {
   assert,
   assertEquals,
   assertNotEquals,
   assertStringIncludes,
 } from "std/testing/asserts.ts";
+
+// Create a mock context with params
+function createContext(params: Record<string, string> = {}): Context {
+  return { params } as Context;
+}
+
+// Router that mimics Netlify Edge Functions routing
+async function handler(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const path = url.pathname;
+  
+  // Match routes in order of specificity
+  if (path === "/") {
+    return homeHandler();
+  }
+  
+  // /top or /top/:page
+  const topMatch = path.match(/^\/top(?:\/(\d+))?$/);
+  if (topMatch) {
+    return topHandler(request, createContext({ page: topMatch[1] || "" }));
+  }
+  
+  // /newest or /newest/:page
+  const newestMatch = path.match(/^\/newest(?:\/(\d+))?$/);
+  if (newestMatch) {
+    return newestHandler(request, createContext({ page: newestMatch[1] || "" }));
+  }
+  
+  // /ask or /ask/:page
+  const askMatch = path.match(/^\/ask(?:\/(\d+))?$/);
+  if (askMatch) {
+    return askHandler(request, createContext({ page: askMatch[1] || "" }));
+  }
+  
+  // /show or /show/:page
+  const showMatch = path.match(/^\/show(?:\/(\d+))?$/);
+  if (showMatch) {
+    return showHandler(request, createContext({ page: showMatch[1] || "" }));
+  }
+  
+  // /jobs or /jobs/:page
+  const jobsMatch = path.match(/^\/jobs(?:\/(\d+))?$/);
+  if (jobsMatch) {
+    return jobsHandler(request, createContext({ page: jobsMatch[1] || "" }));
+  }
+  
+  // /item/:id
+  const itemMatch = path.match(/^\/item\/(\d+)$/);
+  if (itemMatch) {
+    return itemHandler(request, createContext({ id: itemMatch[1] }));
+  }
+  
+  return handleNotFound(request);
+}
 
 type RouteMap = Record<string, unknown>;
 
