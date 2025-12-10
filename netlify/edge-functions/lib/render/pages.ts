@@ -13,6 +13,7 @@ import {
   headerBar,
   keyboardNavScript,
   pwaHeadTags,
+  readerModeLink,
   renderStory,
   serviceWorkerScript,
   sharedStyles,
@@ -176,6 +177,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
               </p>
             `}
           <div class="article-actions">
+            ${item.url ? readerModeLink(item.url) : ""}
             ${bookmarkButton(item)}
           </div>
           <hr />

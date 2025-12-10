@@ -927,6 +927,37 @@ pre {
   height: 2em;
 }
 
+/* Reader mode link */
+.reader-mode-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.4em 0.7em;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--badge-bg);
+  color: var(--text-muted);
+  font-size: 0.85em;
+  text-decoration: none;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.reader-mode-link:hover {
+  background: var(--background-elevated);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.reader-mode-link:focus-visible {
+  outline: 2px solid #ff7a18;
+  outline-offset: 2px;
+}
+
+.reader-mode-link svg {
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
 /* Saved stories page */
 .saved-header {
   margin-bottom: 1.5em;
@@ -1028,8 +1059,10 @@ pre {
   .skip-link,
   .share-buttons,
   .bookmark-btn,
+  .reader-mode-link,
   .story-actions .bookmark-btn,
   .article-actions .bookmark-btn,
+  .article-actions .reader-mode-link,
   .more-link,
   .pagination-info,
   .shortcuts-modal,
