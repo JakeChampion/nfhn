@@ -137,49 +137,7 @@ export const externalLinkScript = (): HTML =>
     </script>
   `;
 
-// --- Mobile swipe navigation ---
 
-export const mobileSwipeScript = (): HTML =>
-  html`
-    <script>
-    (function() {
-      let touchStartX = 0;
-      let touchEndX = 0;
-      const threshold = 100;
-
-      document.addEventListener('touchstart', e => {
-        touchStartX = e.changedTouches[0].screenX;
-      }, { passive: true });
-
-      document.addEventListener('touchend', e => {
-        touchEndX = e.changedTouches[0].screenX;
-        handleSwipe();
-      }, { passive: true });
-
-      function handleSwipe() {
-        const diff = touchEndX - touchStartX;
-        if (Math.abs(diff) < threshold) return;
-
-        // Find pagination links
-        const moreLink = document.querySelector('.more-link');
-        const path = location.pathname;
-        const match = path.match(/^\\/(\\w+)\\/(\\d+)$/);
-
-        if (diff < 0 && moreLink) {
-          // Swipe left = next page
-          moreLink.click();
-        } else if (diff > 0 && match) {
-          // Swipe right = previous page
-          const [, feed, page] = match;
-          const prevPage = parseInt(page) - 1;
-          if (prevPage >= 1) {
-            location.href = '/' + feed + '/' + prevPage;
-          }
-        }
-      }
-    })();
-    </script>
-  `;
 
 // --- Shared styles link ---
 

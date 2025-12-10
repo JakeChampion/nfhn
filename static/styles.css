@@ -947,11 +947,3 @@ pre {
   }
 }
 
-/* Swipe hint on mobile */
-@media (max-width: 600px) {
-  .pagination-info::after {
-    content: " · Swipe to navigate";
-    opacity: 0.6;
-    font-size: 0.9em;
-  }
-}
