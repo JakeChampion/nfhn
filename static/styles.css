@@ -649,76 +649,236 @@ pre {
 
 /* Mobile improvements - larger touch targets */
 @media (max-width: 600px) {
+  /* Reduce base font size slightly for more content */
   body {
-    padding: 0 15px;
-    margin: 20px auto;
+    font-size: 16px;
+    padding: 0 12px;
+    margin: 16px auto;
   }
-  
+
+  /* Improve story list layout for narrow screens */
+  ol > li {
+    display: block;
+    padding-left: 2.5em;
+    margin-bottom: 1.25em;
+    padding-bottom: 1em;
+  }
+
+  ol > li:before {
+    font-size: 1.3em;
+    left: 0;
+    top: 0.1em;
+  }
+
+  ol > li:after {
+    left: 0;
+    width: 100%;
+  }
+
+  ol > li > * {
+    margin-left: 0;
+  }
+
+  /* Stack title and meta for better readability */
+  .title {
+    margin-bottom: 0.5em;
+  }
+
+  .story-meta {
+    font-size: 0.8em;
+    line-height: 1.5;
+  }
+
+  /* Compact badges on mobile */
+  .badge {
+    font-size: 0.65em;
+    padding: 0.15em 0.35em;
+  }
+
+  /* Better header layout */
+  .header-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75em;
+  }
+
+  .theme-toggle {
+    width: auto;
+    justify-content: center;
+    order: 2;
+  }
+
+  /* Scrollable nav with visual indicators */
   .nav-feeds {
-    gap: 0.5em;
+    margin: 0 -12px;
+    padding: 0 12px 0.75em;
+    gap: 0.4em;
     overflow-x: auto;
-    padding-bottom: 0.5em;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
   }
-  
+
+  .nav-feeds::-webkit-scrollbar {
+    display: none;
+  }
+
   .nav-feeds a {
-    padding: 0.5em 0.75em;
-    min-height: 44px;
+    scroll-snap-align: start;
+    padding: 0.4em 0.6em;
+    min-height: 40px;
+    font-size: 0.85em;
     display: flex;
     align-items: center;
     white-space: nowrap;
     background: var(--badge-bg);
     border-radius: 6px;
   }
-  
+
   .nav-feeds a.active {
     background: var(--background-elevated);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
-  
-  .header-bar {
-    flex-wrap: wrap;
-    gap: 0.5em;
+
+  /* Reduce heading sizes */
+  h1, h2, h3 {
+    font-size: 1.25em;
   }
-  
-  .theme-toggle {
-    width: 100%;
-    justify-content: flex-end;
-  }
-  
+
   .page-controls {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.5em;
   }
-  
+
+  /* Optimize comment layout */
+  details {
+    margin: 20px auto;
+    font-size: 16px;
+  }
+
   summary {
     min-height: 56px;
-    padding: 1em;
+    padding: 0.75em 0.5em;
+    gap: 0.4em;
   }
-  
+
+  .comment-meta {
+    gap: 0.35em;
+    font-size: 0.85em;
+  }
+
   .comment-permalink {
     min-height: 48px;
     min-width: 48px;
   }
-  
+
+  /* Reduce comment indentation on mobile */
+  .comment {
+    --indent-unit: 12px;
+  }
+
+  /* Full-width pagination button */
   .more-link {
-    display: block;
-    padding: 1em;
-    background: var(--badge-bg);
-    border-radius: 8px;
-    text-align: center;
-    font-weight: 600;
-    min-height: 48px;
     display: flex;
     align-items: center;
     justify-content: center;
+    margin: 1em -12px 0;
+    padding: 1em;
+    background: var(--badge-bg);
+    border-radius: 0;
+    text-align: center;
+    font-weight: 600;
+    min-height: 48px;
   }
 
-  
+  /* Share buttons - horizontal scroll */
+  .share-buttons {
+    gap: 0.4em;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.5em;
+  }
+
+  .share-btn {
+    flex-shrink: 0;
+    width: 2.5em;
+    height: 2.5em;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* User profile adjustments */
+  .user-stats {
+    gap: 0.2em 0.75em;
+    padding: 0.75em;
+  }
+
+  /* Modal adjustments */
+  .shortcuts-modal {
+    max-width: calc(100vw - 2em);
+    padding: 1em;
+  }
+
   .font-btn {
     min-width: 44px;
     min-height: 44px;
+  }
+}
+
+/* Extra small screens (< 400px) */
+@media (max-width: 400px) {
+  body {
+    font-size: 15px;
+    padding: 0 10px;
+  }
+
+  ol > li {
+    padding-left: 2em;
+  }
+
+  ol > li:before {
+    font-size: 1.1em;
+  }
+
+  .nav-feeds a {
+    padding: 0.35em 0.5em;
+    font-size: 0.8em;
+  }
+
+  .badge {
+    font-size: 0.6em;
+  }
+
+  .story-heading {
+    margin-left: 0.2em;
+  }
+
+  /* Stack metadata on very small screens */
+  .story-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25em;
+  }
+
+  .link-sep {
+    display: none;
+  }
+}
+
+/* Landscape phone orientation */
+@media (max-width: 600px) and (orientation: landscape) {
+  body {
+    margin: 10px auto;
+  }
+
+  .header-bar {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  summary {
+    min-height: 48px;
   }
 }
 
