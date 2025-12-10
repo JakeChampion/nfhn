@@ -179,7 +179,7 @@ export const themeScript = (): HTML =>
 
 // --- Navigation ---
 
-export const renderNav = (activeFeed: FeedSlug): HTML =>
+export const renderNav = (activeFeed: FeedSlug | "saved"): HTML =>
   html`
     <nav class="nav-feeds" aria-label="Primary">
       ${FEEDS.map(({ slug, label }) =>
@@ -189,12 +189,13 @@ export const renderNav = (activeFeed: FeedSlug): HTML =>
             : ""}" aria-current="${activeFeed === slug ? "page" : undefined}">${label}</a>
         `
       )}
+      <a href="/saved" class="${activeFeed === "saved" ? "active" : ""}" aria-current="${activeFeed === "saved" ? "page" : undefined}">Saved</a>
     </nav>
   `;
 
 // --- Header bar with nav and theme toggle ---
 
-export const headerBar = (activeFeed: FeedSlug): HTML =>
+export const headerBar = (activeFeed: FeedSlug | "saved"): HTML =>
   html`
     <div class="header-bar">
       ${renderNav(activeFeed)} ${themeToggle()}
@@ -473,13 +474,127 @@ export const shareButtons = (title: string, url: string): HTML =>
     </script>
   `;
 
+// --- Bookmark/Save button ---
+
+export const bookmarkButton = (item: Item): HTML =>
+  html`
+    <button
+      type="button"
+      class="bookmark-btn"
+      data-story-id="${item.id}"
+      data-story-title="${item.title}"
+      data-story-url="${item.url || ""}"
+      data-story-domain="${item.domain || ""}"
+      data-story-type="${item.type}"
+      data-story-points="${item.points ?? 0}"
+      data-story-user="${item.user || ""}"
+      data-story-time="${item.time ?? 0}"
+      data-story-time-ago="${item.time_ago || ""}"
+      data-story-comments="${item.comments_count ?? 0}"
+      title="Save story"
+      aria-label="Save story"
+    >
+      <svg class="bookmark-icon-outline" viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+        <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z"/>
+      </svg>
+      <svg class="bookmark-icon-filled" viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+        <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
+      </svg>
+      <span class="sr-only">Save</span>
+    </button>
+  `;
+
+// --- Favorites/Bookmarks script ---
+
+export const favoritesScript = (): HTML =>
+  html`
+    <script>
+    (function() {
+      const STORAGE_KEY = 'nfhn-saved-stories';
+
+      function getSavedStories() {
+        try {
+          return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        } catch { return {}; }
+      }
+
+      function saveStories(stories) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(stories));
+        } catch (e) { console.error('Failed to save:', e); }
+      }
+
+      function notifyServiceWorker(type, id) {
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            type: type,
+            url: '/item/' + id
+          });
+        }
+      }
+
+      function toggleStory(btn) {
+        const id = btn.dataset.storyId;
+        const stories = getSavedStories();
+        
+        if (stories[id]) {
+          delete stories[id];
+          btn.classList.remove('is-saved');
+          btn.title = 'Save story';
+          btn.setAttribute('aria-label', 'Save story');
+          notifyServiceWorker('UNCACHE_ITEM', id);
+        } else {
+          stories[id] = {
+            id: parseInt(id, 10),
+            title: btn.dataset.storyTitle,
+            url: btn.dataset.storyUrl || null,
+            domain: btn.dataset.storyDomain || null,
+            type: btn.dataset.storyType,
+            points: parseInt(btn.dataset.storyPoints, 10) || 0,
+            user: btn.dataset.storyUser || null,
+            time: parseInt(btn.dataset.storyTime, 10) || 0,
+            time_ago: btn.dataset.storyTimeAgo,
+            comments_count: parseInt(btn.dataset.storyComments, 10) || 0,
+            saved_at: Date.now()
+          };
+          btn.classList.add('is-saved');
+          btn.title = 'Remove from saved';
+          btn.setAttribute('aria-label', 'Remove from saved');
+          notifyServiceWorker('CACHE_ITEM', id);
+        }
+        
+        saveStories(stories);
+      }
+
+      function initBookmarks() {
+        const saved = getSavedStories();
+        document.querySelectorAll('.bookmark-btn').forEach(btn => {
+          const id = btn.dataset.storyId;
+          if (saved[id]) {
+            btn.classList.add('is-saved');
+            btn.title = 'Remove from saved';
+            btn.setAttribute('aria-label', 'Remove from saved');
+          }
+          btn.addEventListener('click', () => toggleStory(btn));
+        });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initBookmarks);
+      } else {
+        initBookmarks();
+      }
+    })();
+    </script>
+  `;
+
 // --- Story list item ---
 
 export const renderStory = (data: Item): HTML => {
   const meta = getTypeMeta(data.type);
 
   return html`
-    <li>
+    <li data-story-id="${data.id}">
       <a class="title" href="${meta.href(data)}">
         <span class="badge ${meta.badgeClass}">${meta.label}</span>
         <span class="story-title-text">${data.title}</span>
@@ -489,9 +604,12 @@ export const renderStory = (data: Item): HTML => {
           `
           : ""}
       </a>
-      <a class="comments" href="/item/${data.id}">
-        view ${data.comments_count > 0 ? data.comments_count + " comments" : "discussion"}
-      </a>
+      <div class="story-actions">
+        <a class="comments" href="/item/${data.id}">
+          view ${data.comments_count > 0 ? data.comments_count + " comments" : "discussion"}
+        </a>
+        ${bookmarkButton(data)}
+      </div>
     </li>
   `;
 };

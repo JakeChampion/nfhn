@@ -892,3 +892,138 @@ pre {
   }
 }
 
+/* Bookmark/Save button */
+.bookmark-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.2em;
+  height: 2.2em;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--badge-bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, transform 0.1s;
+  flex-shrink: 0;
+}
+
+.bookmark-btn:hover {
+  background: var(--background-elevated);
+  color: var(--text-primary);
+  transform: scale(1.05);
+}
+
+.bookmark-btn:focus-visible {
+  outline: 2px solid #ff7a18;
+  outline-offset: 2px;
+}
+
+.bookmark-btn svg {
+  fill: currentColor;
+}
+
+.bookmark-btn .bookmark-icon-filled {
+  display: none;
+}
+
+.bookmark-btn .bookmark-icon-outline {
+  display: block;
+}
+
+.bookmark-btn.is-saved {
+  background: rgba(255, 122, 24, 0.15);
+  border-color: rgba(255, 122, 24, 0.5);
+  color: #ff7a18;
+}
+
+.bookmark-btn.is-saved .bookmark-icon-filled {
+  display: block;
+}
+
+.bookmark-btn.is-saved .bookmark-icon-outline {
+  display: none;
+}
+
+.bookmark-btn.is-saved:hover {
+  background: rgba(255, 122, 24, 0.25);
+}
+
+/* Story actions container */
+.story-actions {
+  grid-area: footer;
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+}
+
+/* Article actions (share + bookmark on article page) */
+.article-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin: 0.5em 0;
+}
+
+.article-actions .share-buttons {
+  margin: 0;
+}
+
+.article-actions .bookmark-btn {
+  width: 2em;
+  height: 2em;
+}
+
+/* Saved stories page */
+.saved-header {
+  margin-bottom: 1.5em;
+  padding-left: 0.5em;
+}
+
+.saved-header h1 {
+  margin: 0 0 0.25em;
+}
+
+.saved-description {
+  font-size: 0.9em;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.saved-count {
+  font-size: 0.85em;
+  color: var(--text-muted);
+  margin-bottom: 0.5em;
+  padding-left: 0.5em;
+}
+
+.empty-saved {
+  text-align: center;
+  padding: 3em 1em;
+  color: var(--text-muted);
+}
+
+.empty-saved p {
+  margin: 0.5em 0;
+}
+
+.loading-message {
+  text-align: center;
+  padding: 2em 1em;
+  color: var(--text-muted);
+}
+
+/* Mobile touch target improvements for bookmark */
+@media (max-width: 600px) {
+  .bookmark-btn {
+    min-width: 44px;
+    min-height: 44px;
+    width: 2.5em;
+    height: 2.5em;
+  }
+  
+  .story-actions {
+    gap: 0.5em;
+  }
+}
