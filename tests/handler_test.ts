@@ -379,7 +379,7 @@ Deno.test("returns 404 for empty top feed", async () => {
   });
 });
 
-Deno.test("returns 502 on fetch error/timeout", async () => {
+Deno.test("returns offline page on fetch error/timeout", async () => {
   const routes = {
     [topStoriesUrl]: new Error("timeout"),
   };
@@ -388,8 +388,9 @@ Deno.test("returns 502 on fetch error/timeout", async () => {
     const res = await handler(new Request("https://nfhn.test/top/1"));
     const body = await res.text();
 
-    assertEquals(res.status, 404);
-    assertStringIncludes(body.toLowerCase(), "no stories found");
+    assertEquals(res.status, 503);
+    assertStringIncludes(body, "Offline");
+    assertStringIncludes(body, "We can't reach Hacker News right now");
   });
 });
 

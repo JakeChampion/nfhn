@@ -168,14 +168,13 @@ async function fetchStoriesPageForFeed(
   feed: FeedSlug,
   pageNumber: number,
   pageSize = 30,
-): Promise<StoryItem[]> {
+): Promise<StoryItem[] | null> {
   const stories = await fetchJsonWithRetry<HNAPIItem[]>(
     `${HN_API_BASE}/${FEED_ENDPOINTS[feed]}/${pageNumber}.json`,
     feed,
   );
-  if (!stories || !Array.isArray(stories) || !stories.length) {
-    return [];
-  }
+  if (stories === null || !Array.isArray(stories)) return null;
+  if (!stories.length) return [];
 
   const slice = stories.slice(0, pageSize);
   return slice
@@ -188,6 +187,6 @@ export function fetchStoriesPage(
   feed: FeedSlug,
   pageNumber: number,
   pageSize = 30,
-): Promise<StoryItem[]> {
+): Promise<StoryItem[] | null> {
   return fetchStoriesPageForFeed(feed, pageNumber, pageSize);
 }

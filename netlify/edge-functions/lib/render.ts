@@ -35,8 +35,8 @@ const PAGE_MARGIN = "40px auto";
 
 const tpl = html;
 
-const sharedStyles = (pageNumber = 1): HTML =>
-  tpl`
+const sharedStyles = (pageNumber = 1): HTML => {
+  return tpl`
     <style type="text/css">
       :root {
         --background: #f5f5f5;
@@ -213,6 +213,15 @@ const sharedStyles = (pageNumber = 1): HTML =>
         font-size: 0.9em;
         color: var(--text-secondary);
       }
+      .more-link {
+        display: block;
+        text-align: center;
+        margin-top: 1.5em;
+      }
+      .story-heading {
+        display: inline-block;
+        margin-left: 0.4em;
+      }
       details {
         background-color: var(--background);
         margin: 40px auto;
@@ -267,6 +276,7 @@ const sharedStyles = (pageNumber = 1): HTML =>
       }
     </style>
   `;
+};
 
 const renderNav = (activeFeed: FeedSlug): HTML =>
   tpl`
@@ -283,7 +293,8 @@ const renderNav = (activeFeed: FeedSlug): HTML =>
     </nav>
   `;
 
-const turboScript = tpl`
+const turboScript = (): HTML =>
+  tpl`
 <script>
   const used = new Set();
 
@@ -379,11 +390,9 @@ export const home = (
       <ol>
         ${content.map((data: Item) => renderStory(data))}
       </ol>
-      <a href="/${feed}/${
-    pageNumber + 1
-  }" class="more-link" style="text-align: center; display:block; margin-top:1.5em;">More</a>
+      <a href="/${feed}/${pageNumber + 1}" class="more-link">More</a>
     </main>
-    ${turboScript}
+    ${turboScript()}
   </body>
 </html>
 `;
@@ -405,7 +414,7 @@ const shellPage = (
     ${canonicalUrl ? tpl`<link rel="canonical" href="${canonicalUrl}" />` : ""}
     ${description ? tpl`<meta name="description" content="${description}" />` : ""}
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    ${sharedStyles()}
+    ${sharedStyles(1)}
     <title>${title}</title>
   </head>
   <body>
@@ -492,7 +501,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
         <article>
           <a href="${meta.href(item)}">
             <span class="badge ${meta.badgeClass}">${meta.label}</span>
-            <h1 style="display:inline-block; margin-left:0.4em;">${item.title}</h1>
+            <h1 class="story-heading">${item.title}</h1>
             ${item.domain
               ? html`
                 <small>${item.domain}</small>
@@ -513,7 +522,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
           ${unsafeHTML(item.content || "")} ${commentsSection(item.comments)}
         </article>
       </main>
-      ${turboScript}
+      ${turboScript()}
     `,
     canonicalUrl,
     `Hacker News discussion: ${item.title}`,

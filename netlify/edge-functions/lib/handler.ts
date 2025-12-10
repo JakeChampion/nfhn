@@ -13,26 +13,38 @@ const encoder = new TextEncoder();
 
 type FeedHandler = (request: Request, pageNumber: number) => Promise<Response>;
 
+const buildContentSecurityPolicy = (): string => {
+  return [
+    "default-src 'self'",
+    "style-src 'self'",
+    "style-src-attr 'none'",
+    "font-src 'self'",
+    "img-src 'self' data:",
+    "connect-src 'self'",
+    "script-src 'self'",
+    "script-src-attr 'none'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "require-trusted-types-for 'script'",
+    "trusted-types nfhn",
+  ].join("; ");
+};
+
 const applySecurityHeaders = (headers: Headers): Headers => {
-  headers.set(
-    "Content-Security-Policy",
-    [
-      "default-src 'self'",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "font-src 'self' https://fonts.gstatic.com",
-      "img-src 'self' data:",
-      "connect-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
-      "frame-ancestors 'none'",
-      "base-uri 'none'",
-      "form-action 'none'",
-    ].join("; "),
-  );
+  if (!headers.has("Content-Security-Policy")) {
+    headers.set("Content-Security-Policy", buildContentSecurityPolicy());
+  }
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set(
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+  );
+  headers.set(
+    "Strict-Transport-Security",
+    "max-age=63072000; includeSubDomains; preload",
   );
   return headers;
 };
@@ -124,6 +136,13 @@ const renderErrorPage = (
         color: #333;
         text-align: center;
       }
+      .actions {
+        margin-top: 1em;
+      }
+      .meta-note {
+        font-size: 0.9em;
+        opacity: 0.7;
+      }
       h1 { margin-bottom: 0.2em; }
       p { margin-top: 0; }
       a {
@@ -138,8 +157,8 @@ const renderErrorPage = (
     <main aria-live="polite">
       <h1>${escape(title)}</h1>
       <p>${escape(description)}</p>
-      <p><a href="/">Return to home</a> &middot; <a href="#" onclick="location.reload();return false;">Retry</a></p>
-      <p style="font-size:0.9em; opacity:0.7;">Request ID: ${escape(id)}<br/>${
+      <p class="actions"><a href="/">Return to home</a> &middot; <a class="retry" href="">Retry</a></p>
+      <p class="meta-note">Request ID: ${escape(id)}<br/>${
       escape(
         now.toUTCString(),
       )
@@ -173,6 +192,13 @@ const renderOfflinePage = (requestId?: string): Response => {
         text-align: center;
         line-height: 1.6;
       }
+      .actions {
+        margin-top: 1em;
+      }
+      .meta-note {
+        font-size: 0.9em;
+        opacity: 0.7;
+      }
       a { color: inherit; text-decoration: none; border-bottom: 1px solid rgba(0,0,0,0.2); }
       a:hover { border-bottom-color: rgba(0,0,0,0.5); }
     </style>
@@ -181,8 +207,8 @@ const renderOfflinePage = (requestId?: string): Response => {
     <main aria-live="polite">
       <h1>Offline</h1>
       <p>We can't reach Hacker News right now. Please check your connection and try again.</p>
-      <p><a href="#" onclick="location.reload();return false;">Retry</a> · <a href="/">Go home</a></p>
-      <p style="font-size:0.9em; opacity:0.7;">Request ID: ${escape(id)}<br/>${
+      <p class="actions"><a class="retry" href="">Retry</a> · <a href="/">Go home</a></p>
+      <p class="meta-note">Request ID: ${escape(id)}<br/>${
       escape(
         now.toUTCString(),
       )
@@ -362,6 +388,9 @@ function createFeedHandler({
       async () => {
         try {
           const results = await fetchStoriesPage(slug, pageNumber);
+          if (results === null) {
+            throw new Error(`${slug} feed fetch failed`);
+          }
           if (!results.length) {
             return renderErrorPage(
               404,
@@ -372,6 +401,7 @@ function createFeedHandler({
           }
           const canonical = computeCanonical(request, `/${slug}/${pageNumber}`);
           const response = new HTMLResponse(home(results, pageNumber, slug, canonical));
+          applySecurityHeaders(response.headers);
           const etag = await generateETag(results.map((r) => r.id));
           const lastModified = lastModifiedFromTimes(results.map((r) => r.time));
           if (etag) response.headers.set("ETag", etag);
@@ -449,6 +479,7 @@ function handleItem(request: Request, id: number): Promise<Response> {
 
         const canonical = computeCanonical(request, `/item/${id}`);
         const response = new HTMLResponse(article(story, canonical));
+        applySecurityHeaders(response.headers);
         const etag = await generateETag([
           story.id,
           story.time,
