@@ -8,6 +8,7 @@ import {
   headerBar,
   renderStory,
   sharedStyles,
+  skipLink,
   themeScript,
   turboScript,
 } from "./components.ts";
@@ -45,7 +46,8 @@ export const home = (
     <title>NFHN: Page ${pageNumber}</title>
   </head>
   <body>
-    <main aria-label="Main content">
+    ${skipLink()}
+    <main id="main-content" aria-label="Main content">
       ${headerBar(feed)}
       <ol>
         ${content.map((data: Item) => renderStory(data))}
@@ -87,6 +89,7 @@ const shellPage = (
     <title>${title}</title>
   </head>
   <body>
+    ${skipLink()}
     `;
 
     yield* body;
@@ -113,7 +116,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
   return shellPage(
     `NFHN: ${item.title}`,
     html`
-      <main aria-label="Main content">
+      <main id="main-content" aria-label="Main content">
         ${headerBar(activeFeed)}
         <article>
           <a href="${meta.href(item)}">

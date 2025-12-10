@@ -30,6 +30,11 @@ const TYPE_META: Record<ItemType, TypeMeta> = {
 
 export const getTypeMeta = (type: ItemType): TypeMeta => TYPE_META[type];
 
+// --- Skip link for keyboard accessibility ---
+
+export const skipLink = (): HTML =>
+  html`<a href="#main-content" class="skip-link">Skip to main content</a>`;
+
 // --- Shared styles link ---
 
 export const sharedStyles = (pageNumber = 1): HTML => {
