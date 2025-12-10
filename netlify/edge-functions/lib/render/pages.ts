@@ -1,6 +1,6 @@
 // render/pages.ts - Full page templates
 
-import { type HTML, html, unsafeHTML } from "../html.ts";
+import { type HTML, html as tpl, unsafeHTML } from "../html.ts";
 import { type FeedSlug, type Item } from "../hn.ts";
 import {
   commentsSection,
@@ -16,7 +16,7 @@ import {
 // --- Inline script to set theme before page renders (prevents flash) ---
 
 const themeInitScript = (): HTML =>
-  html`<script>document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'auto');</script>`;
+  tpl`<script>document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'auto');</script>`;
 
 // --- Home page (feed listing) ---
 
@@ -26,19 +26,21 @@ export const home = (
   feed: FeedSlug = "top",
   canonicalUrl?: string,
 ): HTML =>
-  html`
+  tpl`
 <!DOCTYPE html>
 <html lang="en" data-theme="auto">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     ${themeInitScript()}
-    ${canonicalUrl ? html`<link rel="canonical" href="${canonicalUrl}">` : ""}
+    ${canonicalUrl ? tpl`<link rel="canonical" href="${canonicalUrl}">` : ""}
     <meta name="description" content="Hacker News ${feed} page ${pageNumber}: latest ${feed} stories.">
     <meta property="og:type" content="website">
-    <meta property="og:title" content="NFHN: ${feed.charAt(0).toUpperCase() + feed.slice(1)} Stories - Page ${pageNumber}">
+    <meta property="og:title" content="NFHN: ${
+    feed.charAt(0).toUpperCase() + feed.slice(1)
+  } Stories - Page ${pageNumber}">
     <meta property="og:description" content="Hacker News ${feed} page ${pageNumber}: latest ${feed} stories.">
-    ${canonicalUrl ? html`<meta property="og:url" content="${canonicalUrl}">` : ""}
+    ${canonicalUrl ? tpl`<meta property="og:url" content="${canonicalUrl}">` : ""}
     <meta property="og:site_name" content="NFHN">
     <meta name="twitter:card" content="summary">
     <link rel="icon" type="image/svg+xml" href="/icon.svg">
@@ -69,19 +71,19 @@ const shellPage = (
   description?: string,
 ): HTML =>
   (async function* (): AsyncGenerator<string> {
-    yield* html`
+    yield* tpl`
 <!DOCTYPE html>
 <html lang="en" data-theme="auto">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     ${themeInitScript()}
-    ${canonicalUrl ? html`<link rel="canonical" href="${canonicalUrl}" />` : ""}
-    ${description ? html`<meta name="description" content="${description}" />` : ""}
+    ${canonicalUrl ? tpl`<link rel="canonical" href="${canonicalUrl}" />` : ""}
+    ${description ? tpl`<meta name="description" content="${description}" />` : ""}
     <meta property="og:type" content="article">
     <meta property="og:title" content="${title}">
-    ${description ? html`<meta property="og:description" content="${description}" />` : ""}
-    ${canonicalUrl ? html`<meta property="og:url" content="${canonicalUrl}" />` : ""}
+    ${description ? tpl`<meta property="og:description" content="${description}" />` : ""}
+    ${canonicalUrl ? tpl`<meta property="og:url" content="${canonicalUrl}" />` : ""}
     <meta property="og:site_name" content="NFHN">
     <meta name="twitter:card" content="summary">
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
@@ -94,7 +96,7 @@ const shellPage = (
 
     yield* body;
 
-    yield* html`
+    yield* tpl`
       ${themeScript()}
       </body>
       </html>
@@ -115,25 +117,28 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
 
   return shellPage(
     `NFHN: ${item.title}`,
-    html`
+    tpl`
       <main id="main-content" aria-label="Main content">
         ${headerBar(activeFeed)}
         <article>
           <a href="${meta.href(item)}">
             <span class="badge ${meta.badgeClass}">${meta.label}</span>
             <h1 class="story-heading">${item.title}</h1>
-            ${item.domain
-              ? html`
+            ${
+      item.domain
+        ? tpl`
                 <small>${item.domain}</small>
               `
-              : ""}
+        : ""
+    }
           </a>
-          ${// Job with no comments: hide points/comments line, just show "posted X ago"
-          item.type === "job" && item.comments_count === 0
-            ? html`
+          ${
+      // Job with no comments: hide points/comments line, just show "posted X ago"
+      item.type === "job" && item.comments_count === 0
+        ? tpl`
               <p class="meta-line">posted ${item.time_ago}</p>
             `
-            : html`
+        : tpl`
               <p class="meta-line">
                 ${item.points ?? 0} points by ${item.user ?? "[deleted]"} ${item.time_ago}
               </p>

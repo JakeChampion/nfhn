@@ -1,12 +1,11 @@
 // Test adapter that routes to the appropriate edge function
-import homeHandler from "../netlify/edge-functions/home.ts";
 import topHandler from "../netlify/edge-functions/top.ts";
 import newestHandler from "../netlify/edge-functions/newest.ts";
 import askHandler from "../netlify/edge-functions/ask.ts";
 import showHandler from "../netlify/edge-functions/show.ts";
 import jobsHandler from "../netlify/edge-functions/jobs.ts";
 import itemHandler from "../netlify/edge-functions/item.ts";
-import { handleNotFound } from "../netlify/edge-functions/lib/handlers.ts";
+import { handleNotFound, redirect } from "../netlify/edge-functions/lib/handlers.ts";
 import type { Context } from "@netlify/edge-functions";
 import {
   assert,
@@ -20,44 +19,47 @@ function createContext(params: Record<string, string> = {}): Context {
   return { params } as Context;
 }
 
-// Router that mimics Netlify Edge Functions routing
+// Router that mimics Netlify routing (redirects from netlify.toml + edge functions)
 async function handler(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
 
-  // Match routes in order of specificity
-  if (path === "/") {
-    return homeHandler();
-  }
+  // Redirects (handled by Netlify CDN in production, simulated here for tests)
+  if (path === "/") return redirect("/top/1");
+  if (path === "/top") return redirect("/top/1");
+  if (path === "/newest") return redirect("/newest/1");
+  if (path === "/ask") return redirect("/ask/1");
+  if (path === "/show") return redirect("/show/1");
+  if (path === "/jobs") return redirect("/jobs/1");
 
-  // /top or /top/:page
-  const topMatch = path.match(/^\/top(?:\/(\d+))?$/);
+  // /top/:page
+  const topMatch = path.match(/^\/top\/(\d+)$/);
   if (topMatch) {
-    return topHandler(request, createContext({ page: topMatch[1] || "" }));
+    return topHandler(request, createContext({ page: topMatch[1] }));
   }
 
-  // /newest or /newest/:page
-  const newestMatch = path.match(/^\/newest(?:\/(\d+))?$/);
+  // /newest/:page
+  const newestMatch = path.match(/^\/newest\/(\d+)$/);
   if (newestMatch) {
-    return newestHandler(request, createContext({ page: newestMatch[1] || "" }));
+    return newestHandler(request, createContext({ page: newestMatch[1] }));
   }
 
-  // /ask or /ask/:page
-  const askMatch = path.match(/^\/ask(?:\/(\d+))?$/);
+  // /ask/:page
+  const askMatch = path.match(/^\/ask\/(\d+)$/);
   if (askMatch) {
-    return askHandler(request, createContext({ page: askMatch[1] || "" }));
+    return askHandler(request, createContext({ page: askMatch[1] }));
   }
 
-  // /show or /show/:page
-  const showMatch = path.match(/^\/show(?:\/(\d+))?$/);
+  // /show/:page
+  const showMatch = path.match(/^\/show\/(\d+)$/);
   if (showMatch) {
-    return showHandler(request, createContext({ page: showMatch[1] || "" }));
+    return showHandler(request, createContext({ page: showMatch[1] }));
   }
 
-  // /jobs or /jobs/:page
-  const jobsMatch = path.match(/^\/jobs(?:\/(\d+))?$/);
+  // /jobs/:page
+  const jobsMatch = path.match(/^\/jobs\/(\d+)$/);
   if (jobsMatch) {
-    return jobsHandler(request, createContext({ page: jobsMatch[1] || "" }));
+    return jobsHandler(request, createContext({ page: jobsMatch[1] }));
   }
 
   // /item/:id
@@ -68,7 +70,6 @@ async function handler(request: Request): Promise<Response> {
 
   return handleNotFound(request);
 }
-
 type RouteMap = Record<string, unknown>;
 
 class MemoryCache {
