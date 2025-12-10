@@ -268,11 +268,15 @@ export function fetchStoriesPage(
 
 // --- User API ---
 
+// Firebase API for user details (includes submitted array)
+const HN_FIREBASE_API = "https://hacker-news.firebaseio.com/v0";
+
 export interface HNAPIUser {
   id: string;
   created: number;
   karma: number;
   about?: string;
+  submitted?: number[];
 }
 
 export interface User {
@@ -281,11 +285,13 @@ export interface User {
   created_ago: string;
   karma: number;
   about: string;
+  submitted: number[];
 }
 
 export async function fetchUser(username: string): Promise<HNAPIUser | null> {
+  // Use Firebase API to get user data with submissions
   return await fetchJsonWithRetry<HNAPIUser>(
-    `${HN_API_BASE}/user/${encodeURIComponent(username)}.json`,
+    `${HN_FIREBASE_API}/user/${encodeURIComponent(username)}.json`,
     "user",
   );
 }
@@ -299,5 +305,78 @@ export function mapApiUser(raw: HNAPIUser | null): User | null {
     created_ago: formatTimeAgo(raw.created),
     karma: raw.karma ?? 0,
     about: raw.about ?? "",
+    submitted: raw.submitted ?? [],
   };
+}
+
+// Fetch a single item from Firebase API (for submissions)
+interface FirebaseItem {
+  id: number;
+  type: "story" | "comment" | "job" | "poll" | "pollopt";
+  by?: string;
+  time?: number;
+  title?: string;
+  url?: string;
+  text?: string;
+  score?: number;
+  descendants?: number;
+  dead?: boolean;
+  deleted?: boolean;
+}
+
+export async function fetchFirebaseItem(id: number): Promise<FirebaseItem | null> {
+  return await fetchJsonWithRetry<FirebaseItem>(
+    `${HN_FIREBASE_API}/item/${id}.json`,
+    "firebase-item",
+  );
+}
+
+// Fetch user submissions (stories only) with pagination
+export interface SubmissionItem {
+  id: number;
+  title: string;
+  url?: string;
+  domain?: string;
+  points: number;
+  user: string;
+  time: number;
+  time_ago: string;
+  comments_count: number;
+}
+
+export async function fetchUserSubmissions(
+  submittedIds: number[],
+  limit = 10,
+): Promise<SubmissionItem[]> {
+  const results: SubmissionItem[] = [];
+  
+  // Fetch items in parallel (up to limit * 2 to account for filtering)
+  const idsToFetch = submittedIds.slice(0, limit * 3);
+  const items = await Promise.all(
+    idsToFetch.map((id) => fetchFirebaseItem(id))
+  );
+  
+  for (const item of items) {
+    if (results.length >= limit) break;
+    if (!item) continue;
+    if (item.type !== "story" && item.type !== "job") continue;
+    if (item.dead || item.deleted) continue;
+    if (!item.title) continue;
+    
+    const domain = extractDomain(item.url);
+    
+    results.push({
+      id: item.id,
+      title: item.title,
+      url: item.url,
+      domain,
+      points: item.score ?? 0,
+      user: item.by ?? "",
+      time: item.time ?? 0,
+      time_ago: formatTimeAgo(item.time),
+      comments_count: item.descendants ?? 0,
+    });
+  }
+  
+  return results;
 }

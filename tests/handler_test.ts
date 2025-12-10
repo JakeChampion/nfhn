@@ -781,7 +781,7 @@ Deno.test("refreshes feed etag when visible metadata changes", async () => {
 // User Page Tests
 // =============================================================================
 
-const userUrl = "https://api.hnpwa.com/v0/user/testuser.json";
+const userUrl = "https://hacker-news.firebaseio.com/v0/user/testuser.json";
 
 Deno.test("serves user profile page from the mocked API", async () => {
   const routes = {
@@ -790,6 +790,7 @@ Deno.test("serves user profile page from the mocked API", async () => {
       created: 1234567890,
       karma: 5000,
       about: "Hello world",
+      submitted: [],
     },
   };
 
@@ -800,13 +801,13 @@ Deno.test("serves user profile page from the mocked API", async () => {
     assertStringIncludes(body, "testuser");
     assertStringIncludes(body, "5,000"); // formatted karma
     assertStringIncludes(body, "Hello world");
-    assertStringIncludes(body, "View on HN");
+    assertStringIncludes(body, "View profile on HN");
   });
 });
 
 Deno.test("returns 404 for non-existent user", async () => {
   const routes = {
-    "https://api.hnpwa.com/v0/user/nobody.json": null,
+    "https://hacker-news.firebaseio.com/v0/user/nobody.json": null,
   };
 
   await withMockedEnv(routes, async () => {
@@ -824,6 +825,55 @@ Deno.test("returns 404 for invalid username format", async () => {
     assertEquals(res.status, 404);
     const body = await res.text();
     assertStringIncludes(body, "not found");
+  });
+});
+
+Deno.test("user profile page shows recent submissions", async () => {
+  const routes = {
+    "https://hacker-news.firebaseio.com/v0/user/prolificuser.json": {
+      id: "prolificuser",
+      created: 1234567890,
+      karma: 10000,
+      submitted: [100, 101, 102],
+    },
+    "https://hacker-news.firebaseio.com/v0/item/100.json": {
+      id: 100,
+      type: "story",
+      by: "prolificuser",
+      title: "My First Post",
+      url: "https://example.com/first",
+      score: 50,
+      time: Math.floor(Date.now() / 1000) - 3600,
+      descendants: 10,
+    },
+    "https://hacker-news.firebaseio.com/v0/item/101.json": {
+      id: 101,
+      type: "story",
+      by: "prolificuser",
+      title: "My Second Post",
+      score: 30,
+      time: Math.floor(Date.now() / 1000) - 7200,
+      descendants: 5,
+    },
+    "https://hacker-news.firebaseio.com/v0/item/102.json": {
+      id: 102,
+      type: "comment", // Should be filtered out
+      by: "prolificuser",
+      text: "Just a comment",
+      time: Math.floor(Date.now() / 1000) - 3600,
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/user/prolificuser"));
+    assertEquals(res.status, 200);
+    const body = await res.text();
+    assertStringIncludes(body, "Recent Submissions");
+    assertStringIncludes(body, "My First Post");
+    assertStringIncludes(body, "My Second Post");
+    assertStringIncludes(body, "example.com");
+    assertStringIncludes(body, "50 point");
+    assertStringIncludes(body, "All submissions on HN");
   });
 });
 
@@ -892,6 +942,7 @@ Deno.test("user response includes Server-Timing header", async () => {
       id: "testuser",
       created: 1234567890,
       karma: 5000,
+      submitted: [],
     },
   };
 
@@ -902,6 +953,7 @@ Deno.test("user response includes Server-Timing header", async () => {
     const timing = res.headers.get("Server-Timing");
     assert(timing !== null, "Server-Timing header should be present");
     assertStringIncludes(timing, "api;dur=");
+    assertStringIncludes(timing, "submissions;dur=");
     await res.text();
   });
 });

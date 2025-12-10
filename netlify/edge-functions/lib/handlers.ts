@@ -2,7 +2,7 @@
 
 import { HTMLResponse } from "./html.ts";
 import { article, home, userProfile } from "./render.ts";
-import { type FeedSlug, fetchItem, fetchStoriesPage, fetchUser, mapApiUser, mapStoryToItem } from "./hn.ts";
+import { type FeedSlug, fetchItem, fetchStoriesPage, fetchUser, fetchUserSubmissions, mapApiUser, mapStoryToItem } from "./hn.ts";
 import {
   FEED_STALE_SECONDS,
   FEED_TTL_SECONDS,
@@ -261,14 +261,24 @@ export function handleUser(request: Request, username: string): Promise<Response
           return renderErrorPage(404, "User not found", "That user doesn't exist.", requestId);
         }
 
+        // Fetch recent submissions (stories only)
+        const submissionsStart = performance.now();
+        const submissions = user.submitted.length > 0
+          ? await fetchUserSubmissions(user.submitted, 10)
+          : [];
+        const submissionsDuration = performance.now() - submissionsStart;
+
         const canonical = new URL(`/user/${username}`, request.url).toString();
-        const response = new HTMLResponse(userProfile(user, canonical));
+        const response = new HTMLResponse(userProfile(user, submissions, canonical));
         applySecurityHeaders(response.headers);
         const etag = await generateETag([user.id, user.karma, user.created]);
         const lastModified = new Date(user.created * 1000).toUTCString();
         if (etag) response.headers.set("ETag", etag);
         if (lastModified) response.headers.set("Last-Modified", lastModified);
-        response.headers.set("Server-Timing", `api;dur=${fetchDuration.toFixed(2)};desc="HN API"`);
+        response.headers.set(
+          "Server-Timing",
+          `api;dur=${fetchDuration.toFixed(2)};desc="HN API", submissions;dur=${submissionsDuration.toFixed(2)};desc="Submissions"`
+        );
         addServerTiming(response, "total", startTime, "Total");
         return response;
       } catch (e) {

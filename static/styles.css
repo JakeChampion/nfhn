@@ -496,3 +496,66 @@ pre {
   vertical-align: middle;
   text-decoration: none;
 }
+
+/* User links in comments and stories */
+.user-link {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+
+.user-link:hover {
+  text-decoration: underline;
+  color: var(--text-primary);
+}
+
+.comment-user .user-link {
+  color: inherit;
+}
+
+/* User submissions section */
+.user-submissions {
+  margin-top: 2em;
+  padding-top: 1em;
+  border-top: 1px solid var(--border-color);
+}
+
+.user-submissions h2 {
+  font-size: 1em;
+  color: var(--text-muted);
+  margin-bottom: 1em;
+}
+
+.user-submissions .stories {
+  padding-left: 0;
+}
+
+.link-sep {
+  margin: 0 0.5em;
+  color: var(--text-muted);
+}
+
+/* Keyboard navigation focus styles */
+.kbd-focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  background: rgba(255, 122, 24, 0.05);
+  border-radius: 4px;
+}
+
+.kbd-focus.comment {
+  padding-left: calc(var(--indent-level, 0) * var(--indent-unit, 16px) + 4px);
+  margin-left: calc(var(--indent-level, 0) * var(--indent-unit, 16px) * -1 - 4px);
+}
+
+/* Visually hidden class for screen reader text */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

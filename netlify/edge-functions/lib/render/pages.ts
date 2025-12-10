@@ -1,16 +1,18 @@
 // render/pages.ts - Full page templates
 
 import { type HTML, html as tpl, unsafeHTML } from "../html.ts";
-import { type FeedSlug, type Item, type User } from "../hn.ts";
+import { type FeedSlug, type Item, type SubmissionItem, type User } from "../hn.ts";
 import {
   commentsSection,
   getTypeMeta,
   headerBar,
+  keyboardNavScript,
   renderStory,
   sharedStyles,
   skipLink,
   themeScript,
   turboScript,
+  userLink,
 } from "./components.ts";
 
 // --- Inline script to set theme before page renders (prevents flash) ---
@@ -52,12 +54,13 @@ export const home = (
     <main id="main-content" aria-label="Main content">
       ${headerBar(feed)}
       <div class="pagination-info">Page ${pageNumber}</div>
-      <ol>
+      <ol class="stories">
         ${content.map((data: Item) => renderStory(data))}
       </ol>
       <a href="/${feed}/${pageNumber + 1}" class="more-link">More</a>
     </main>
     ${turboScript()}
+    ${keyboardNavScript()}
     ${themeScript()}
   </body>
 </html>
@@ -142,7 +145,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
             `
         : tpl`
               <p class="meta-line">
-                ${item.points ?? 0} points by ${item.user ?? "[deleted]"} ${item.time_ago}
+                ${item.points ?? 0} points by ${item.user ? userLink(item.user) : "[deleted]"} ${item.time_ago}
               </p>
             `}
           <hr />
@@ -150,6 +153,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
         </article>
       </main>
       ${turboScript()}
+      ${keyboardNavScript()}
     `,
     canonicalUrl,
     `Hacker News discussion: ${item.title}`,
@@ -158,7 +162,27 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
 
 // --- User profile page ---
 
-export const userProfile = (user: User, canonicalUrl?: string): HTML =>
+const renderSubmissionItem = (item: SubmissionItem, index: number): HTML =>
+  tpl`<li class="story-item" data-story-index="${index}">
+    <span class="story-index">${index + 1}.</span>
+    <span class="story-vote">▲</span>
+    <span class="story-body">
+      <span class="story-title">
+        ${item.url
+          ? tpl`<a href="${item.url}" class="story-link">${item.title}</a>
+               <span class="story-domain">(${item.domain})</span>`
+          : tpl`<a href="/item/${item.id}" class="story-link">${item.title}</a>`
+        }
+      </span>
+      <span class="story-meta">
+        ${item.points} point${item.points === 1 ? "" : "s"} · 
+        ${item.time_ago} · 
+        <a href="/item/${item.id}">${item.comments_count} comment${item.comments_count === 1 ? "" : "s"}</a>
+      </span>
+    </span>
+  </li>`;
+
+export const userProfile = (user: User, submissions: SubmissionItem[] = [], canonicalUrl?: string): HTML =>
   shellPage(
     `NFHN: ${user.id}`,
     tpl`
@@ -178,12 +202,23 @@ export const userProfile = (user: User, canonicalUrl?: string): HTML =>
               ${unsafeHTML(user.about)}
             </div>
           ` : ""}
+          ${submissions.length > 0 ? tpl`
+            <section class="user-submissions">
+              <h2>Recent Submissions</h2>
+              <ol class="stories" start="1">
+                ${submissions.map((s, i) => renderSubmissionItem(s, i))}
+              </ol>
+            </section>
+          ` : ""}
           <p class="user-links">
-            <a href="https://news.ycombinator.com/user?id=${user.id}" rel="noopener">View on HN</a>
+            <a href="https://news.ycombinator.com/submitted?id=${user.id}" rel="noopener">All submissions on HN</a>
+            <span class="link-sep">·</span>
+            <a href="https://news.ycombinator.com/user?id=${user.id}" rel="noopener">View profile on HN</a>
           </p>
         </article>
       </main>
       ${turboScript()}
+      ${keyboardNavScript()}
     `,
     canonicalUrl,
     `User profile for ${user.id} on Hacker News`,

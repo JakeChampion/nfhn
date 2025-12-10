@@ -428,6 +428,7 @@ Deno.test("mapApiUser: maps valid user correctly", () => {
     created: 1234567890,
     karma: 500,
     about: "Hello world",
+    submitted: [123, 456, 789],
   };
   const result = mapApiUser(raw);
   assertStrictEquals(result?.id, "testuser");
@@ -435,6 +436,7 @@ Deno.test("mapApiUser: maps valid user correctly", () => {
   assertStrictEquals(result?.about, "Hello world");
   assertStrictEquals(result?.created, 1234567890);
   assertEquals(typeof result?.created_ago, "string");
+  assertEquals(result?.submitted, [123, 456, 789]);
 });
 
 Deno.test("mapApiUser: handles missing about field", () => {
@@ -445,6 +447,7 @@ Deno.test("mapApiUser: handles missing about field", () => {
   };
   const result = mapApiUser(raw);
   assertEquals(result?.about, "");
+  assertEquals(result?.submitted, []);
 });
 
 Deno.test("mapApiUser: handles missing karma as 0", () => {
@@ -455,6 +458,7 @@ Deno.test("mapApiUser: handles missing karma as 0", () => {
   };
   const result = mapApiUser(raw);
   assertEquals(result?.karma, 0);
+  assertEquals(result?.submitted, []);
 });
 
 // =============================================================================
@@ -526,8 +530,48 @@ Deno.test("log: debug outputs correct level", () => {
 // Comment OP Highlighting Tests
 // =============================================================================
 
-import { renderComment, commentsSection } from "../netlify/edge-functions/lib/render/components.ts";
+import { renderComment, commentsSection, userLink, keyboardNavScript } from "../netlify/edge-functions/lib/render/components.ts";
 import type { HNAPIItem as CommentItem } from "../netlify/edge-functions/lib/hn.ts";
+
+Deno.test("userLink: creates link to user profile", async () => {
+  const result = await htmlToString(userLink("testuser"));
+  assertEquals(result.includes('href="/user/testuser"'), true);
+  assertEquals(result.includes("testuser</a>"), true);
+  assertEquals(result.includes('class="user-link"'), true);
+});
+
+Deno.test("userLink: escapes username in href and content", async () => {
+  const result = await htmlToString(userLink("user<script>"));
+  assertEquals(result.includes("<script>"), false);
+  assertEquals(result.includes("&lt;script&gt;"), true);
+});
+
+Deno.test("keyboardNavScript: includes j/k navigation", async () => {
+  const result = await htmlToString(keyboardNavScript());
+  assertEquals(result.includes("case 'j':"), true);
+  assertEquals(result.includes("case 'k':"), true);
+  assertEquals(result.includes("kbd-focus"), true);
+});
+
+Deno.test("keyboardNavScript: includes Enter/o to open", async () => {
+  const result = await htmlToString(keyboardNavScript());
+  assertEquals(result.includes("case 'Enter':"), true);
+  assertEquals(result.includes("case 'o':"), true);
+});
+
+Deno.test("renderComment: links username to profile", async () => {
+  const comment: CommentItem = {
+    id: 1,
+    type: "comment",
+    user: "alice",
+    time_ago: "1 hour ago",
+    content: "Test comment",
+    comments: [],
+  };
+  
+  const result = await htmlToString(renderComment(comment, 0, undefined));
+  assertEquals(result.includes('href="/user/alice"'), true);
+});
 
 Deno.test("renderComment: adds OP badge when user matches opUser", async () => {
   const comment: CommentItem = {
