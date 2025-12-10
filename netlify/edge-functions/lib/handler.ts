@@ -10,6 +10,7 @@ import {
   HTML_CACHE_NAME,
   ITEM_STALE_SECONDS,
   ITEM_TTL_SECONDS,
+  MAX_PAGE_NUMBER,
 } from "./config.ts";
 import { applySecurityHeaders, getRequestId } from "./security.ts";
 import { withProgrammableCache } from "./cache.ts";
@@ -58,12 +59,14 @@ function createFeedHandler({
 }): FeedHandler {
   return (request, pageNumber) => {
     const requestId = getRequestId(request);
-    if (!Number.isFinite(pageNumber) || pageNumber < 1) {
+    if (!Number.isFinite(pageNumber) || pageNumber < 1 || pageNumber > MAX_PAGE_NUMBER) {
       return Promise.resolve(
         renderErrorPage(
           404,
           "Page not found",
-          "That page number is invalid.",
+          pageNumber > MAX_PAGE_NUMBER
+            ? "That page number is too large."
+            : "That page number is invalid.",
           requestId,
         ),
       );

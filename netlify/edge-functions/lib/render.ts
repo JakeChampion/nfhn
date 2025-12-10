@@ -380,6 +380,12 @@ export const home = (
     <meta name="viewport" content="width=device-width, initial-scale=1">
     ${canonicalUrl ? tpl`<link rel="canonical" href="${canonicalUrl}">` : ""}
     <meta name="description" content="Hacker News ${feed} page ${pageNumber}: latest ${feed} stories.">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="NFHN: ${feed.charAt(0).toUpperCase() + feed.slice(1)} Stories - Page ${pageNumber}">
+    <meta property="og:description" content="Hacker News ${feed} page ${pageNumber}: latest ${feed} stories.">
+    ${canonicalUrl ? tpl`<meta property="og:url" content="${canonicalUrl}">` : ""}
+    <meta property="og:site_name" content="NFHN">
+    <meta name="twitter:card" content="summary">
     <link rel="icon" type="image/svg+xml" href="/icon.svg">
     ${sharedStyles(pageNumber)}
     <title>NFHN: Page ${pageNumber}</title>
@@ -413,6 +419,12 @@ const shellPage = (
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     ${canonicalUrl ? tpl`<link rel="canonical" href="${canonicalUrl}" />` : ""}
     ${description ? tpl`<meta name="description" content="${description}" />` : ""}
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="${title}">
+    ${description ? tpl`<meta property="og:description" content="${description}" />` : ""}
+    ${canonicalUrl ? tpl`<meta property="og:url" content="${canonicalUrl}" />` : ""}
+    <meta property="og:site_name" content="NFHN">
+    <meta name="twitter:card" content="summary">
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     ${sharedStyles(1)}
     <title>${title}</title>

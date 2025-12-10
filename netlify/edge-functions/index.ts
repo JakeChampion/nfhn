@@ -8,5 +8,5 @@ export const config: Config = {
   method: ["GET"],
   path: "/*",
   excludedPath: "/icon.svg",
-  //cache: "manual",
+  cache: "manual",
 };

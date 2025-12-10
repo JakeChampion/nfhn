@@ -2,6 +2,9 @@
 
 export const HTML_CACHE_NAME = "nfhn-html";
 
+// Pagination
+export const MAX_PAGE_NUMBER = 100;
+
 // Feed caching
 export const FEED_TTL_SECONDS = 30;
 export const FEED_STALE_SECONDS = 300;
