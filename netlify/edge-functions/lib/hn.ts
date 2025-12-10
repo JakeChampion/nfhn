@@ -3,9 +3,10 @@ const HN_API_BASE = "https://api.hnpwa.com/v0";
 const DEFAULT_TIMEOUT_MS = 4500;
 const MAX_RETRIES = 2;
 
-export type FeedSlug = "top" | "ask" | "show" | "jobs";
-const FEED_ENDPOINTS: Record<FeedSlug, "news" | "ask" | "show" | "jobs"> = {
+export type FeedSlug = "top" | "newest" | "ask" | "show" | "jobs";
+const FEED_ENDPOINTS: Record<FeedSlug, "news" | "newest" | "ask" | "show" | "jobs"> = {
   top: "news",
+  newest: "newest",
   ask: "ask",
   show: "show",
   jobs: "jobs",

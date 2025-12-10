@@ -15,6 +15,12 @@ export const FEEDS: FeedConfig[] = [
     emptyDescription: "We couldn't find that page of top stories.",
   },
   {
+    slug: "newest",
+    label: "New",
+    emptyTitle: "No stories found",
+    emptyDescription: "We couldn't find that page of new stories.",
+  },
+  {
     slug: "ask",
     label: "Ask",
     emptyTitle: "No stories found",
