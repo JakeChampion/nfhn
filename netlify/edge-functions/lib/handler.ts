@@ -1,56 +1,25 @@
-// handler.ts
-import { escape, HTMLResponse } from "./html.ts";
+// handler.ts - Main request handler with routing logic
+
+import { HTMLResponse } from "./html.ts";
 import { FEEDS } from "./feeds.ts";
 import { article, home } from "./render.ts";
 import { type FeedSlug, fetchItem, fetchStoriesPage, mapStoryToItem } from "./hn.ts";
+import {
+  FEED_STALE_SECONDS,
+  FEED_TTL_SECONDS,
+  HTML_CACHE_NAME,
+  ITEM_STALE_SECONDS,
+  ITEM_TTL_SECONDS,
+} from "./config.ts";
+import { applySecurityHeaders, getRequestId } from "./security.ts";
+import { withProgrammableCache } from "./cache.ts";
+import { renderErrorPage, renderOfflinePage } from "./errors.ts";
 
-const HTML_CACHE_NAME = "nfhn-html";
-const FEED_TTL_SECONDS = 30;
-const FEED_STALE_SECONDS = 300;
-const ITEM_TTL_SECONDS = 60;
-const ITEM_STALE_SECONDS = 600;
 const encoder = new TextEncoder();
 
 type FeedHandler = (request: Request, pageNumber: number) => Promise<Response>;
 
-const buildContentSecurityPolicy = (): string => {
-  return [
-    "default-src 'self'",
-    "style-src 'self'",
-    "style-src-attr 'none'",
-    "font-src 'self'",
-    "img-src 'self' data:",
-    "connect-src 'self'",
-    "script-src 'self'",
-    "script-src-attr 'none'",
-    "object-src 'none'",
-    "frame-ancestors 'none'",
-    "base-uri 'none'",
-    "form-action 'none'",
-    "require-trusted-types-for 'script'",
-    "trusted-types nfhn",
-  ].join("; ");
-};
-
-const applySecurityHeaders = (headers: Headers): Headers => {
-  if (!headers.has("Content-Security-Policy")) {
-    headers.set("Content-Security-Policy", buildContentSecurityPolicy());
-  }
-  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  headers.set("X-Content-Type-Options", "nosniff");
-  headers.set(
-    "Permissions-Policy",
-    "camera=(), microphone=(), geolocation=(), interest-cohort=()",
-  );
-  headers.set(
-    "Strict-Transport-Security",
-    "max-age=63072000; includeSubDomains; preload",
-  );
-  return headers;
-};
-
-const getRequestId = (request: Request): string | undefined =>
-  request.headers.get("x-nf-request-id") ?? undefined;
+// --- Utility functions ---
 
 const computeCanonical = (request: Request, pathname: string): string =>
   new URL(pathname, request.url).toString();
@@ -76,291 +45,7 @@ const parsePositiveInt = (value: string): number | null => {
   return num;
 };
 
-const applyConditionalRequest = (request: Request, response: Response): Response => {
-  if (request.method !== "GET") return response;
-  const etag = response.headers.get("etag");
-  const ifNoneMatch = request.headers.get("if-none-match");
-  const lastModified = response.headers.get("last-modified");
-  const ifModifiedSince = request.headers.get("if-modified-since");
-
-  let notModified = false;
-
-  if (etag && ifNoneMatch) {
-    const tags = ifNoneMatch.split(",").map((t) => t.trim());
-    if (tags.includes(etag) || tags.includes("*")) {
-      notModified = true;
-    }
-  }
-
-  if (!notModified && lastModified && ifModifiedSince) {
-    const sinceTime = Date.parse(ifModifiedSince);
-    const lastTime = Date.parse(lastModified);
-    if (!Number.isNaN(sinceTime) && !Number.isNaN(lastTime) && sinceTime >= lastTime) {
-      notModified = true;
-    }
-  }
-
-  if (!notModified) return response;
-
-  const headers = new Headers(response.headers);
-  headers.delete("content-length");
-  return new Response(null, { status: 304, headers });
-};
-
-const renderErrorPage = (
-  status: number,
-  title: string,
-  description: string,
-  requestId?: string,
-): Response => {
-  const now = new Date();
-  const id = requestId ?? crypto.randomUUID();
-
-  const headers = applySecurityHeaders(new Headers());
-  headers.set("Cache-Control", "no-store");
-  headers.set("Pragma", "no-cache");
-  return new HTMLResponse(
-    `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>${escape(title)} | NFHN</title>
-    <style>
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-        background-color: whitesmoke;
-        margin: 40px auto;
-        max-width: 600px;
-        line-height: 1.6;
-        font-size: 18px;
-        padding: 0 1em;
-        color: #333;
-        text-align: center;
-      }
-      .actions {
-        margin-top: 1em;
-      }
-      .meta-note {
-        font-size: 0.9em;
-        opacity: 0.7;
-      }
-      h1 { margin-bottom: 0.2em; }
-      p { margin-top: 0; }
-      a {
-        color: inherit;
-        text-decoration: none;
-        border-bottom: 1px solid rgba(0,0,0,0.2);
-      }
-      a:hover { border-bottom-color: rgba(0,0,0,0.5); }
-    </style>
-  </head>
-  <body>
-    <main aria-live="polite">
-      <h1>${escape(title)}</h1>
-      <p>${escape(description)}</p>
-      <p class="actions"><a href="/">Return to home</a> &middot; <a class="retry" href="">Retry</a></p>
-      <p class="meta-note">Request ID: ${escape(id)}<br/>${
-      escape(
-        now.toUTCString(),
-      )
-    }</p>
-    </main>
-  </body>
-</html>`,
-    { status, headers },
-  );
-};
-
-const renderOfflinePage = (requestId?: string): Response => {
-  const now = new Date();
-  const id = requestId ?? crypto.randomUUID();
-  const headers = applySecurityHeaders(new Headers());
-  headers.set("Cache-Control", "no-store");
-  headers.set("Pragma", "no-cache");
-  return new HTMLResponse(
-    `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Offline | NFHN</title>
-    <style>
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        background: #f5f5f5;
-        color: #333;
-        max-width: 600px;
-        margin: 40px auto;
-        padding: 0 1em;
-        text-align: center;
-        line-height: 1.6;
-      }
-      .actions {
-        margin-top: 1em;
-      }
-      .meta-note {
-        font-size: 0.9em;
-        opacity: 0.7;
-      }
-      a { color: inherit; text-decoration: none; border-bottom: 1px solid rgba(0,0,0,0.2); }
-      a:hover { border-bottom-color: rgba(0,0,0,0.5); }
-    </style>
-  </head>
-  <body>
-    <main aria-live="polite">
-      <h1>Offline</h1>
-      <p>We can't reach Hacker News right now. Please check your connection and try again.</p>
-      <p class="actions"><a class="retry" href="">Retry</a> · <a href="/">Go home</a></p>
-      <p class="meta-note">Request ID: ${escape(id)}<br/>${
-      escape(
-        now.toUTCString(),
-      )
-    }</p>
-    </main>
-  </body>
-</html>`,
-    { status: 503, headers },
-  );
-};
-
-const cacheControlValue = (ttlSeconds: number, swrSeconds: number): string => {
-  const parts = [`public`, `max-age=${ttlSeconds}`];
-  if (swrSeconds > 0) parts.push(`stale-while-revalidate=${swrSeconds}`);
-  return parts.join(", ");
-};
-
-const isCacheable = (response: Response): boolean =>
-  response.status >= 200 && response.status < 300;
-
-const ageSeconds = (response: Response): number => {
-  const cachedAt = Number.parseInt(
-    response.headers.get("x-cached-at") ?? "",
-    10,
-  );
-  if (!Number.isFinite(cachedAt)) return Infinity;
-  return (Date.now() - cachedAt) / 1000;
-};
-
-const prepareResponses = (
-  response: Response,
-  ttlSeconds: number,
-  swrSeconds: number,
-): { client: Response; cacheable: Response } => {
-  const headers = applySecurityHeaders(new Headers(response.headers));
-  headers.set("Cache-Control", cacheControlValue(ttlSeconds, swrSeconds));
-  headers.set("x-cached-at", Date.now().toString());
-
-  const init: ResponseInit = {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  };
-
-  if (!response.body) {
-    const cacheable = new Response(null, init);
-    const client = new Response(null, init);
-    return { client, cacheable };
-  }
-
-  const [bodyForClient, bodyForCache] = response.body.tee();
-
-  return {
-    client: new Response(bodyForClient, init),
-    cacheable: new Response(bodyForCache, init),
-  };
-};
-
-async function withProgrammableCache(
-  request: Request,
-  cacheName: string,
-  ttlSeconds: number,
-  swrSeconds: number,
-  producer: () => Promise<Response>,
-  offlineFallback?: () => Response,
-): Promise<Response> {
-  const requestId = getRequestId(request);
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
-  const cachedAge = cached ? ageSeconds(cached) : Infinity;
-
-  const serveFresh = (response: Response): Response => applyConditionalRequest(request, response);
-
-  const revalidateInBackground = (): void => {
-    producer()
-      .then((response) => {
-        if (!isCacheable(response)) return;
-        const { cacheable } = prepareResponses(
-          response,
-          ttlSeconds,
-          swrSeconds,
-        );
-        cache.put(request, cacheable).catch((err) => {
-          console.error("Failed to update cache in background:", err);
-        });
-      })
-      .catch((err) => {
-        console.error("Background revalidation failed:", err);
-      });
-  };
-
-  const serveStaleAndRevalidate = (stale: Response): Response => {
-    revalidateInBackground();
-    return serveFresh(stale);
-  };
-
-  const cacheAndReturn = (response: Response): Response => {
-    const { client, cacheable } = prepareResponses(
-      response,
-      ttlSeconds,
-      swrSeconds,
-    );
-
-    cache.put(request, cacheable).catch((err) => {
-      console.error("Failed to cache response:", err);
-    });
-
-    return serveFresh(client);
-  };
-
-  // Fresh hit
-  if (cached && cachedAge <= ttlSeconds) {
-    return serveFresh(cached);
-  }
-
-  // Stale-but-serveable hit: return now and refresh in background
-  if (cached && cachedAge <= ttlSeconds + swrSeconds) {
-    return serveStaleAndRevalidate(cached);
-  }
-
-  // Miss or too stale: fetch fresh
-  const fallback = cached ?? null;
-
-  try {
-    const response = await producer();
-
-    if (!isCacheable(response)) {
-      if (offlineFallback && response.status >= 500) {
-        return offlineFallback();
-      }
-      // Avoid caching errors; fall back to stale if available
-      if (fallback) return fallback;
-      return response;
-    }
-
-    return cacheAndReturn(response);
-  } catch (err) {
-    console.error("Cache producer threw:", err);
-    if (offlineFallback) return offlineFallback();
-    if (fallback) return applyConditionalRequest(request, fallback);
-    return renderErrorPage(
-      500,
-      "Something went wrong",
-      "Please try again in a moment.",
-      requestId,
-    );
-  }
-}
+// --- Route handlers ---
 
 function createFeedHandler({
   slug,
@@ -408,7 +93,7 @@ function createFeedHandler({
           applySecurityHeaders(response.headers);
           const etag = await generateETag(
             results.map((r) =>
-              [r.id, r.title, r.domain ?? "", r.comments_count, r.type, r.url ?? ""].join(":"),
+              [r.id, r.title, r.domain ?? "", r.comments_count, r.type, r.url ?? ""].join(":")
             ),
           );
           const lastModified = lastModifiedFromTimes(results.map((r) => r.time));
@@ -510,6 +195,8 @@ function handleItem(request: Request, id: number): Promise<Response> {
     () => renderOfflinePage(requestId),
   );
 }
+
+// --- Main handler ---
 
 export default async function handler(
   request: Request,
