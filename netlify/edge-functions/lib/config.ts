@@ -13,12 +13,12 @@ export const ITEM_STALE_SECONDS = 600;
 // Content Security Policy directives
 export const CSP_DIRECTIVES = [
   "default-src 'self'",
-  "style-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
   "style-src-attr 'none'",
   "font-src 'self'",
   "img-src 'self' data:",
   "connect-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
   "script-src-attr 'none'",
   "object-src 'none'",
   "frame-ancestors 'none'",
