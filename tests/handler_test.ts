@@ -24,48 +24,48 @@ function createContext(params: Record<string, string> = {}): Context {
 async function handler(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
-  
+
   // Match routes in order of specificity
   if (path === "/") {
     return homeHandler();
   }
-  
+
   // /top or /top/:page
   const topMatch = path.match(/^\/top(?:\/(\d+))?$/);
   if (topMatch) {
     return topHandler(request, createContext({ page: topMatch[1] || "" }));
   }
-  
+
   // /newest or /newest/:page
   const newestMatch = path.match(/^\/newest(?:\/(\d+))?$/);
   if (newestMatch) {
     return newestHandler(request, createContext({ page: newestMatch[1] || "" }));
   }
-  
+
   // /ask or /ask/:page
   const askMatch = path.match(/^\/ask(?:\/(\d+))?$/);
   if (askMatch) {
     return askHandler(request, createContext({ page: askMatch[1] || "" }));
   }
-  
+
   // /show or /show/:page
   const showMatch = path.match(/^\/show(?:\/(\d+))?$/);
   if (showMatch) {
     return showHandler(request, createContext({ page: showMatch[1] || "" }));
   }
-  
+
   // /jobs or /jobs/:page
   const jobsMatch = path.match(/^\/jobs(?:\/(\d+))?$/);
   if (jobsMatch) {
     return jobsHandler(request, createContext({ page: jobsMatch[1] || "" }));
   }
-  
+
   // /item/:id
   const itemMatch = path.match(/^\/item\/(\d+)$/);
   if (itemMatch) {
     return itemHandler(request, createContext({ id: itemMatch[1] }));
   }
-  
+
   return handleNotFound(request);
 }
 

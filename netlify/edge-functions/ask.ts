@@ -7,7 +7,7 @@ export default (request: Request, context: Context) => {
   if (pageNumber === null) {
     return handleNotFound(request);
   }
-  
+
   return handleFeed(
     request,
     "ask",

@@ -4,11 +4,11 @@ import { handleItem, handleNotFound, parsePositiveInt } from "./lib/handlers.ts"
 
 export default (request: Request, context: Context) => {
   const id = parsePositiveInt(context.params.id);
-  
+
   if (id === null) {
     return handleNotFound(request);
   }
-  
+
   return handleItem(request, id);
 };
 

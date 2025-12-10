@@ -126,7 +126,9 @@ export function handleItem(request: Request, id: number): Promise<Response> {
   const requestId = getRequestId(request);
 
   if (!Number.isFinite(id) || id < 1) {
-    return Promise.resolve(renderErrorPage(404, "Item not found", "That story ID looks invalid.", requestId));
+    return Promise.resolve(
+      renderErrorPage(404, "Item not found", "That story ID looks invalid.", requestId),
+    );
   }
 
   return withProgrammableCache(

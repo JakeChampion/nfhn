@@ -1,12 +1,9 @@
 // unit_test.ts - Unit tests for core utility functions
 
-import {
-  assertEquals,
-  assertStrictEquals,
-} from "std/testing/asserts.ts";
+import { assertEquals, assertStrictEquals } from "std/testing/asserts.ts";
 
 import { escape, html, htmlToString, raw, unsafeHTML } from "../netlify/edge-functions/lib/html.ts";
-import { formatTimeAgo, mapStoryToItem, type HNAPIItem } from "../netlify/edge-functions/lib/hn.ts";
+import { formatTimeAgo, type HNAPIItem, mapStoryToItem } from "../netlify/edge-functions/lib/hn.ts";
 import { buildContentSecurityPolicy } from "../netlify/edge-functions/lib/security.ts";
 import { parsePositiveInt, redirect } from "../netlify/edge-functions/lib/handlers.ts";
 
@@ -77,13 +74,17 @@ Deno.test("escape: passes through safe strings unchanged", () => {
 // =============================================================================
 
 Deno.test("html: renders static content", async () => {
-  const result = await htmlToString(html`<div>Hello</div>`);
+  const result = await htmlToString(html`
+    <div>Hello</div>
+  `);
   assertEquals(result, "<div>Hello</div>");
 });
 
 Deno.test("html: escapes interpolated strings", async () => {
   const userInput = "<script>alert('xss')</script>";
-  const result = await htmlToString(html`<p>${userInput}</p>`);
+  const result = await htmlToString(html`
+    <p>${userInput}</p>
+  `);
   assertEquals(
     result,
     "<p>&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;</p>",
@@ -92,60 +93,86 @@ Deno.test("html: escapes interpolated strings", async () => {
 
 Deno.test("html: renders numbers", async () => {
   const count = 42;
-  const result = await htmlToString(html`<span>${count}</span>`);
+  const result = await htmlToString(html`
+    <span>${count}</span>
+  `);
   assertEquals(result, "<span>42</span>");
 });
 
 Deno.test("html: handles null and undefined as empty", async () => {
-  const result = await htmlToString(html`<span>${null}${undefined}</span>`);
+  const result = await htmlToString(html`
+    <span>${null}${undefined}</span>
+  `);
   assertEquals(result, "<span></span>");
 });
 
 Deno.test("html: handles false as empty", async () => {
-  const result = await htmlToString(html`<span>${false}</span>`);
+  const result = await htmlToString(html`
+    <span>${false}</span>
+  `);
   assertEquals(result, "<span></span>");
 });
 
 Deno.test("html: renders nested html templates", async () => {
-  const inner = html`<span>inner</span>`;
-  const outer = html`<div>${inner}</div>`;
+  const inner = html`
+    <span>inner</span>
+  `;
+  const outer = html`
+    <div>${inner}</div>
+  `;
   const result = await htmlToString(outer);
   assertEquals(result, "<div><span>inner</span></div>");
 });
 
 Deno.test("html: renders arrays of values", async () => {
   const items = ["a", "b", "c"];
-  const result = await htmlToString(html`<ul>${items.map((i) => html`<li>${i}</li>`)}</ul>`);
+  const result = await htmlToString(html`
+    <ul>${items.map((i) =>
+      html`
+        <li>${i}</li>
+      `
+    )}</ul>
+  `);
   assertEquals(result, "<ul><li>a</li><li>b</li><li>c</li></ul>");
 });
 
 Deno.test("raw: renders HTML without escaping", async () => {
   const rawHtml = raw("<strong>bold</strong>");
-  const result = await htmlToString(html`<div>${rawHtml}</div>`);
+  const result = await htmlToString(html`
+    <div>${rawHtml}</div>
+  `);
   assertEquals(result, "<div><strong>bold</strong></div>");
 });
 
 Deno.test("unsafeHTML: alias for raw works correctly", async () => {
   const rawHtml = unsafeHTML("<em>italic</em>");
-  const result = await htmlToString(html`<div>${rawHtml}</div>`);
+  const result = await htmlToString(html`
+    <div>${rawHtml}</div>
+  `);
   assertEquals(result, "<div><em>italic</em></div>");
 });
 
 Deno.test("html: handles promises", async () => {
   const asyncValue = Promise.resolve("async content");
-  const result = await htmlToString(html`<div>${asyncValue}</div>`);
+  const result = await htmlToString(html`
+    <div>${asyncValue}</div>
+  `);
   assertEquals(result, "<div>async content</div>");
 });
 
 Deno.test("html: handles functions", async () => {
   const fn = () => "from function";
-  const result = await htmlToString(html`<div>${fn}</div>`);
+  const result = await htmlToString(html`
+    <div>${fn}</div>
+  `);
   assertEquals(result, "<div>from function</div>");
 });
 
 Deno.test("html: handles async functions", async () => {
   const asyncFn = async () => "from async function";
-  const result = await htmlToString(html`<div>${asyncFn}</div>`);
+  const result = await htmlToString(html`
+    <div>${asyncFn}</div>
+  `);
   assertEquals(result, "<div>from async function</div>");
 });
 
