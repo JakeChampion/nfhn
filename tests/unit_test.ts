@@ -169,6 +169,7 @@ Deno.test("html: handles functions", async () => {
 });
 
 Deno.test("html: handles async functions", async () => {
+  // deno-lint-ignore require-await
   const asyncFn = async () => "from async function";
   const result = await htmlToString(html`
     <div>${asyncFn}</div>

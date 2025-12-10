@@ -20,6 +20,7 @@ function createContext(params: Record<string, string> = {}): Context {
 }
 
 // Router that mimics Netlify routing (redirects from netlify.toml + edge functions)
+// deno-lint-ignore require-await
 async function handler(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const path = url.pathname;
