@@ -1336,33 +1336,6 @@ Deno.test("article page shows comment count", async () => {
   });
 });
 
-Deno.test("article page shows share buttons", async () => {
-  const routes = {
-    [itemUrl]: {
-      id: 123,
-      title: "Shareable Story",
-      points: 100,
-      user: "author",
-      time: Math.floor(Date.now() / 1000) - 3600,
-      time_ago: "1 hour ago",
-      type: "link",
-      url: "https://example.com/shareable",
-      domain: "example.com",
-      comments_count: 0,
-      comments: [],
-    },
-  };
-
-  await withMockedEnv(routes, async () => {
-    const res = await handler(new Request("https://nfhn.test/item/123"));
-    assertEquals(res.status, 200);
-    const body = await res.text();
-    assertStringIncludes(body, "share-buttons");
-    assertStringIncludes(body, "twitter.com/intent/tweet");
-    assertStringIncludes(body, "share-copy");
-  });
-});
-
 Deno.test("article page shows keyboard shortcuts modal markup", async () => {
   const routes = {
     [itemUrl]: {

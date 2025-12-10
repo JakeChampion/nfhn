@@ -106,17 +106,82 @@ export async function* flattenValue(
   yield escape(value);
 }
 
+/**
+ * Remove common leading whitespace from a multi-line string.
+ * This allows template literals to be indented naturally in source code
+ * while producing output without that indentation.
+ */
+export function dedent(str: string): string {
+  // Split into lines, preserving empty lines
+  const lines = str.split("\n");
+
+  // Skip if single line or empty
+  if (lines.length <= 1) return str;
+
+  // Remove first line if it's empty (common with template literals starting with newline)
+  const startIndex = lines[0].trim() === "" ? 1 : 0;
+  // Remove last line if it's empty/whitespace only (common with closing backtick on new line)
+  const endIndex = lines[lines.length - 1].trim() === "" ? lines.length - 1 : lines.length;
+
+  const contentLines = lines.slice(startIndex, endIndex);
+  if (contentLines.length === 0) return "";
+
+  // Find the minimum indentation (ignoring empty lines)
+  let minIndent = Infinity;
+  for (const line of contentLines) {
+    // Skip empty lines or lines with only whitespace
+    if (line.trim() === "") continue;
+    const match = line.match(/^(\s*)/);
+    if (match) {
+      minIndent = Math.min(minIndent, match[1].length);
+    }
+  }
+
+  // If no indentation found, return trimmed version
+  if (minIndent === Infinity || minIndent === 0) {
+    return contentLines.join("\n");
+  }
+
+  // Remove the common indentation from each line
+  return contentLines
+    .map((line) => (line.trim() === "" ? "" : line.slice(minIndent)))
+    .join("\n");
+}
+
 export function html(
   strings: TemplateStringsArray,
   ...values: HTMLValue[]
 ): HTML {
   return (async function* (): AsyncGenerator<string> {
+    // Build the full string first, then dedent
+    let fullString = "";
+    const placeholders: { index: number; value: HTMLValue }[] = [];
+
     for (let i = 0; i < strings.length; i++) {
-      yield strings[i];
-      if (i >= values.length) continue;
-      const value = values[i];
-      yield* flattenValue(value);
+      fullString += strings[i];
+      if (i < values.length) {
+        // Use a placeholder marker (null byte + index + null byte)
+        const placeholder = `\x00${i}\x00`;
+        fullString += placeholder;
+        placeholders.push({ index: i, value: values[i] });
+      }
     }
+
+    // Dedent the full string
+    const dedented = dedent(fullString);
+
+    // Now yield the dedented string, replacing placeholders with actual values
+    let lastIndex = 0;
+    for (const { index, value } of placeholders) {
+      const placeholder = `\x00${index}\x00`;
+      const placeholderIndex = dedented.indexOf(placeholder, lastIndex);
+      if (placeholderIndex !== -1) {
+        yield dedented.slice(lastIndex, placeholderIndex);
+        yield* flattenValue(value);
+        lastIndex = placeholderIndex + placeholder.length;
+      }
+    }
+    yield dedented.slice(lastIndex);
   })();
 }
 

@@ -628,44 +628,6 @@ pre {
   color: var(--text-primary);
 }
 
-/* Share buttons */
-.share-buttons {
-  display: flex;
-  gap: 0.5em;
-  margin: 0.5em 0;
-}
-
-.share-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2em;
-  height: 2em;
-  padding: 0;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  background: var(--badge-bg);
-  color: var(--text-muted);
-  cursor: pointer;
-  text-decoration: none;
-  transition: background-color 0.15s, color 0.15s;
-}
-
-.share-btn:hover {
-  background: var(--background-elevated);
-  color: var(--text-primary);
-}
-
-.share-btn svg {
-  fill: currentColor;
-}
-
-.share-copy.copied {
-  background: rgba(34, 197, 94, 0.15);
-  border-color: rgba(34, 197, 94, 0.5);
-  color: rgb(34, 197, 94);
-}
-
 /* External link indicators */
 .external-link {
   position: relative;
@@ -752,13 +714,7 @@ pre {
     align-items: center;
     justify-content: center;
   }
-  
-  .share-btn {
-    width: 2.5em;
-    height: 2.5em;
-    min-width: 44px;
-    min-height: 44px;
-  }
+
   
   .font-btn {
     min-width: 44px;
@@ -958,16 +914,12 @@ pre {
   gap: 0.75em;
 }
 
-/* Article actions (share + bookmark on article page) */
+/* Article actions (bookmark on article page) */
 .article-actions {
   display: flex;
   align-items: center;
   gap: 0.5em;
   margin: 0.5em 0;
-}
-
-.article-actions .share-buttons {
-  margin: 0;
 }
 
 .article-actions .bookmark-btn {

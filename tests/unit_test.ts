@@ -7,9 +7,9 @@ import { formatTimeAgo, type HNAPIItem, mapStoryToItem } from "../netlify/edge-f
 import { buildContentSecurityPolicy } from "../netlify/edge-functions/lib/security.ts";
 import { parsePositiveInt, redirect } from "../netlify/edge-functions/lib/handlers.ts";
 import {
+  externalLinkScript,
   pwaHeadTags,
   serviceWorkerScript,
-  externalLinkScript,
 } from "../netlify/edge-functions/lib/render/components.ts";
 
 // =============================================================================
@@ -79,13 +79,17 @@ Deno.test("escape: passes through safe strings unchanged", () => {
 // =============================================================================
 
 Deno.test("html: renders static content", async () => {
-  const result = await htmlToString(html`<div>Hello</div>`);
+  const result = await htmlToString(html`
+    <div>Hello</div>
+  `);
   assertEquals(result, "<div>Hello</div>");
 });
 
 Deno.test("html: escapes interpolated strings", async () => {
   const userInput = "<script>alert('xss')</script>";
-  const result = await htmlToString(html`<p>${userInput}</p>`);
+  const result = await htmlToString(html`
+    <p>${userInput}</p>
+  `);
   assertEquals(
     result,
     "<p>&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;</p>",
@@ -94,63 +98,85 @@ Deno.test("html: escapes interpolated strings", async () => {
 
 Deno.test("html: renders numbers", async () => {
   const count = 42;
-  const result = await htmlToString(html`<span>${count}</span>`);
+  const result = await htmlToString(html`
+    <span>${count}</span>
+  `);
   assertEquals(result, "<span>42</span>");
 });
 
 Deno.test("html: handles null and undefined as empty", async () => {
-  const result = await htmlToString(html`<span>${null}${undefined}</span>`);
+  const result = await htmlToString(html`
+    <span>${null}${undefined}</span>
+  `);
   assertEquals(result, "<span></span>");
 });
 
 Deno.test("html: handles false as empty", async () => {
-  const result = await htmlToString(html`<span>${false}</span>`);
+  const result = await htmlToString(html`
+    <span>${false}</span>
+  `);
   assertEquals(result, "<span></span>");
 });
 
 Deno.test("html: renders nested html templates", async () => {
   const inner = html`<span>inner</span>`;
-  const outer = html`<div>${inner}</div>`;
-  const result = await htmlToString(outer);
+  const outer = html`
+    <div>${inner}</div>
+  `;
+  const result = (await htmlToString(outer)).trim();
   assertEquals(result, "<div><span>inner</span></div>");
 });
 
 Deno.test("html: renders arrays of values", async () => {
   const items = ["a", "b", "c"];
-  const result = await htmlToString(
-    html`<ul>${items.map((i) => html`<li>${i}</li>`)}</ul>`,
-  );
+  const result = (await htmlToString(
+    html`
+      <ul>${items.map((i) =>
+        html`<li>${i}</li>`
+      )}</ul>
+    `,
+  )).trim();
   assertEquals(result, "<ul><li>a</li><li>b</li><li>c</li></ul>");
 });
 
 Deno.test("raw: renders HTML without escaping", async () => {
   const rawHtml = raw("<strong>bold</strong>");
-  const result = await htmlToString(html`<div>${rawHtml}</div>`);
+  const result = (await htmlToString(html`
+    <div>${rawHtml}</div>
+  `)).trim();
   assertEquals(result, "<div><strong>bold</strong></div>");
 });
 
 Deno.test("unsafeHTML: alias for raw works correctly", async () => {
   const rawHtml = unsafeHTML("<em>italic</em>");
-  const result = await htmlToString(html`<div>${rawHtml}</div>`);
+  const result = (await htmlToString(html`
+    <div>${rawHtml}</div>
+  `)).trim();
   assertEquals(result, "<div><em>italic</em></div>");
 });
 
 Deno.test("html: handles promises", async () => {
   const asyncValue = Promise.resolve("async content");
-  const result = await htmlToString(html`<div>${asyncValue}</div>`);
+  const result = (await htmlToString(html`
+    <div>${asyncValue}</div>
+  `)).trim();
   assertEquals(result, "<div>async content</div>");
 });
 
 Deno.test("html: handles functions", async () => {
   const fn = () => "from function";
-  const result = await htmlToString(html`<div>${fn}</div>`);
+  const result = (await htmlToString(html`
+    <div>${fn}</div>
+  `)).trim();
   assertEquals(result, "<div>from function</div>");
 });
 
 Deno.test("html: handles async functions", async () => {
   // deno-lint-ignore require-await
   const asyncFn = async () => "from async function";
-  const result = await htmlToString(html`<div>${asyncFn}</div>`);
+  const result = (await htmlToString(html`
+    <div>${asyncFn}</div>
+  `)).trim();
   assertEquals(result, "<div>from async function</div>");
 });
 
@@ -543,7 +569,6 @@ import {
   estimateReadingTime,
   keyboardNavScript,
   renderComment,
-  shareButtons,
   userLink,
 } from "../netlify/edge-functions/lib/render/components.ts";
 import type { HNAPIItem as CommentItem } from "../netlify/edge-functions/lib/hn.ts";
@@ -781,29 +806,6 @@ Deno.test("estimateReadingTime: strips HTML tags", () => {
 });
 
 // =============================================================================
-// shareButtons Tests
-// =============================================================================
-
-Deno.test("shareButtons: includes Twitter share link", async () => {
-  const result = await htmlToString(shareButtons("Test Title", "https://example.com"));
-  assertEquals(result.includes("twitter.com/intent/tweet"), true);
-  assertEquals(result.includes("Test%20Title"), true);
-});
-
-Deno.test("shareButtons: includes copy link button", async () => {
-  const result = await htmlToString(shareButtons("Test", "https://example.com"));
-  assertEquals(result.includes("share-copy"), true);
-  assertEquals(result.includes('data-url="https://example.com"'), true);
-});
-
-Deno.test("shareButtons: properly encodes special characters", async () => {
-  const result = await htmlToString(
-    shareButtons("Test & Special <chars>", "https://example.com?foo=bar"),
-  );
-  assertEquals(result.includes("twitter.com/intent/tweet"), true);
-});
-
-// =============================================================================
 // keyboardNavScript ARIA and Modal Tests
 // =============================================================================
 
@@ -838,7 +840,7 @@ Deno.test("keyboardNavScript: includes Escape handler", async () => {
 Deno.test("pwaHeadTags: includes manifest link", async () => {
   const result = await htmlToString(pwaHeadTags());
   assertEquals(result.includes('rel="manifest"'), true);
-  assertEquals(result.includes('/manifest.json'), true);
+  assertEquals(result.includes("/manifest.json"), true);
 });
 
 Deno.test("pwaHeadTags: includes apple-touch-icon", async () => {
@@ -849,18 +851,18 @@ Deno.test("pwaHeadTags: includes apple-touch-icon", async () => {
 Deno.test("pwaHeadTags: includes theme-color", async () => {
   const result = await htmlToString(pwaHeadTags());
   assertEquals(result.includes('name="theme-color"'), true);
-  assertEquals(result.includes('#ff7a18'), true);
+  assertEquals(result.includes("#ff7a18"), true);
 });
 
 Deno.test("serviceWorkerScript: registers service worker", async () => {
   const result = await htmlToString(serviceWorkerScript());
-  assertEquals(result.includes('serviceWorker.register'), true);
-  assertEquals(result.includes('/sw.js'), true);
+  assertEquals(result.includes("serviceWorker.register"), true);
+  assertEquals(result.includes("/sw.js"), true);
 });
 
 Deno.test("serviceWorkerScript: handles registration errors", async () => {
   const result = await htmlToString(serviceWorkerScript());
-  assertEquals(result.includes('.catch'), true);
+  assertEquals(result.includes(".catch"), true);
 });
 
 Deno.test("externalLinkScript: detects external links", async () => {

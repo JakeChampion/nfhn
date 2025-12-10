@@ -106,8 +106,6 @@ export const externalLinkScript = (): HTML =>
     </script>
   `;
 
-
-
 // --- Shared styles link ---
 
 export const sharedStyles = (pageNumber = 1): HTML => {
@@ -189,7 +187,9 @@ export const renderNav = (activeFeed: FeedSlug | "saved"): HTML =>
             : ""}" aria-current="${activeFeed === slug ? "page" : undefined}">${label}</a>
         `
       )}
-      <a href="/saved" class="${activeFeed === "saved" ? "active" : ""}" aria-current="${activeFeed === "saved" ? "page" : undefined}">Saved</a>
+      <a href="/saved" class="${activeFeed === "saved"
+        ? "active"
+        : ""}" aria-current="${activeFeed === "saved" ? "page" : undefined}">Saved</a>
     </nav>
   `;
 
@@ -424,56 +424,6 @@ export const userLink = (username: string | null | undefined): HTML => {
   `;
 };
 
-// --- Share buttons ---
-
-export const shareButtons = (title: string, url: string): HTML =>
-  html`
-    <div class="share-buttons" aria-label="Share this story">
-      <a
-        href="https://twitter.com/intent/tweet?text=${encodeURIComponent(
-          title,
-        )}&url=${encodeURIComponent(url)}"
-        class="share-btn share-twitter"
-        target="_blank"
-        rel="noopener noreferrer"
-        title="Share on Twitter"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16">
-          <path
-            d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
-          />
-        </svg>
-        <span class="sr-only">Twitter</span>
-      </a>
-      <button type="button" class="share-btn share-copy" data-url="${url}" title="Copy link">
-        <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16">
-          <path
-            d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
-          />
-        </svg>
-        <span class="sr-only">Copy link</span>
-      </button>
-    </div>
-    <script>
-    document.querySelectorAll('.share-copy').forEach(btn => {
-      btn.addEventListener('click', async function() {
-        const url = this.dataset.url;
-        try {
-          await navigator.clipboard.writeText(url);
-          this.classList.add('copied');
-          this.title = 'Copied!';
-          setTimeout(() => {
-            this.classList.remove('copied');
-            this.title = 'Copy link';
-          }, 2000);
-        } catch (err) {
-          console.error('Failed to copy:', err);
-        }
-      });
-    });
-    </script>
-  `;
-
 // --- Bookmark/Save button ---
 
 export const bookmarkButton = (item: Item): HTML =>
@@ -495,10 +445,10 @@ export const bookmarkButton = (item: Item): HTML =>
       aria-label="Save story"
     >
       <svg class="bookmark-icon-outline" viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
-        <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z"/>
+        <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z" />
       </svg>
       <svg class="bookmark-icon-filled" viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
-        <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
+        <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z" />
       </svg>
       <span class="sr-only">Save</span>
     </button>
@@ -536,7 +486,7 @@ export const favoritesScript = (): HTML =>
       function toggleStory(btn) {
         const id = btn.dataset.storyId;
         const stories = getSavedStories();
-        
+
         if (stories[id]) {
           delete stories[id];
           btn.classList.remove('is-saved');
@@ -562,7 +512,7 @@ export const favoritesScript = (): HTML =>
           btn.setAttribute('aria-label', 'Remove from saved');
           notifyServiceWorker('CACHE_ITEM', id);
         }
-        
+
         saveStories(stories);
       }
 

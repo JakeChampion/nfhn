@@ -15,7 +15,6 @@ import {
   pwaHeadTags,
   renderStory,
   serviceWorkerScript,
-  shareButtons,
   sharedStyles,
   skipLink,
   themeScript,
@@ -142,9 +141,6 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
   // Estimate reading time for article content
   const readingTime = estimateReadingTime(item.content);
 
-  // Build share URL
-  const shareUrl = canonicalUrl || `https://nfhn.netlify.app/item/${item.id}`;
-
   return shellPage(
     `NFHN: ${item.title}`,
     tpl`
@@ -180,7 +176,6 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
               </p>
             `}
           <div class="article-actions">
-            ${shareButtons(item.title, shareUrl)}
             ${bookmarkButton(item)}
           </div>
           <hr />
