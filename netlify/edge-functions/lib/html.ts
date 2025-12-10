@@ -119,9 +119,11 @@ export function dedent(str: string): string {
   if (lines.length <= 1) return str;
 
   // Remove first line if it's empty (common with template literals starting with newline)
-  const startIndex = lines[0].trim() === "" ? 1 : 0;
+  const firstLine = lines[0];
+  const lastLine = lines[lines.length - 1];
+  const startIndex = firstLine?.trim() === "" ? 1 : 0;
   // Remove last line if it's empty/whitespace only (common with closing backtick on new line)
-  const endIndex = lines[lines.length - 1].trim() === "" ? lines.length - 1 : lines.length;
+  const endIndex = lastLine?.trim() === "" ? lines.length - 1 : lines.length;
 
   const contentLines = lines.slice(startIndex, endIndex);
   if (contentLines.length === 0) return "";
@@ -132,7 +134,7 @@ export function dedent(str: string): string {
     // Skip empty lines or lines with only whitespace
     if (line.trim() === "") continue;
     const match = line.match(/^(\s*)/);
-    if (match) {
+    if (match?.[1] != null) {
       minIndent = Math.min(minIndent, match[1].length);
     }
   }

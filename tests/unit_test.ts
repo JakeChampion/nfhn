@@ -510,7 +510,7 @@ Deno.test("log: info outputs JSON with correct fields", () => {
   console.info = origInfo;
 
   assertEquals(output.length, 1);
-  const parsed = JSON.parse(output[0]);
+  const parsed = JSON.parse(output[0] ?? "");
   assertEquals(parsed.level, "info");
   assertEquals(parsed.message, "Test message");
   assertEquals(parsed.context.foo, "bar");
@@ -526,7 +526,7 @@ Deno.test("log: error includes error details", () => {
 
   console.error = origError;
 
-  const parsed = JSON.parse(output[0]);
+  const parsed = JSON.parse(output[0] ?? "");
   assertEquals(parsed.level, "error");
   assertEquals(parsed.error, "test error");
   assertEquals(typeof parsed.stack, "string");
@@ -541,7 +541,7 @@ Deno.test("log: warn outputs correct level", () => {
 
   console.warn = origWarn;
 
-  const parsed = JSON.parse(output[0]);
+  const parsed = JSON.parse(output[0] ?? "");
   assertEquals(parsed.level, "warn");
   assertEquals(parsed.message, "Warning message");
 });
@@ -555,7 +555,7 @@ Deno.test("log: debug outputs correct level", () => {
 
   console.debug = origDebug;
 
-  const parsed = JSON.parse(output[0]);
+  const parsed = JSON.parse(output[0] ?? "");
   assertEquals(parsed.level, "debug");
 });
 

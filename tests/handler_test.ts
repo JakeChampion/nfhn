@@ -37,43 +37,43 @@ async function handler(request: Request): Promise<Response> {
 
   // /top/:page
   const topMatch = path.match(/^\/top\/(\d+)$/);
-  if (topMatch) {
+  if (topMatch?.[1]) {
     return topHandler(request, createContext({ page: topMatch[1] }));
   }
 
   // /newest/:page
   const newestMatch = path.match(/^\/newest\/(\d+)$/);
-  if (newestMatch) {
+  if (newestMatch?.[1]) {
     return newestHandler(request, createContext({ page: newestMatch[1] }));
   }
 
   // /ask/:page
   const askMatch = path.match(/^\/ask\/(\d+)$/);
-  if (askMatch) {
+  if (askMatch?.[1]) {
     return askHandler(request, createContext({ page: askMatch[1] }));
   }
 
   // /show/:page
   const showMatch = path.match(/^\/show\/(\d+)$/);
-  if (showMatch) {
+  if (showMatch?.[1]) {
     return showHandler(request, createContext({ page: showMatch[1] }));
   }
 
   // /jobs/:page
   const jobsMatch = path.match(/^\/jobs\/(\d+)$/);
-  if (jobsMatch) {
+  if (jobsMatch?.[1]) {
     return jobsHandler(request, createContext({ page: jobsMatch[1] }));
   }
 
   // /item/:id
   const itemMatch = path.match(/^\/item\/(\d+)$/);
-  if (itemMatch) {
+  if (itemMatch?.[1]) {
     return itemHandler(request, createContext({ id: itemMatch[1] }));
   }
 
   // /user/:username
   const userMatch = path.match(/^\/user\/([a-zA-Z0-9_]+)$/);
-  if (userMatch) {
+  if (userMatch?.[1]) {
     return userHandler(request, createContext({ username: userMatch[1] }));
   }
 
