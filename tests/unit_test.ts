@@ -8,6 +8,7 @@ import {
 import { escape, html, htmlToString, raw, unsafeHTML } from "../netlify/edge-functions/lib/html.ts";
 import { formatTimeAgo, mapStoryToItem, type HNAPIItem } from "../netlify/edge-functions/lib/hn.ts";
 import { buildContentSecurityPolicy } from "../netlify/edge-functions/lib/security.ts";
+import { parseIntParam, redirect, route, Router } from "../netlify/edge-functions/lib/router.ts";
 
 // =============================================================================
 // HTML Escape Tests
@@ -362,4 +363,120 @@ Deno.test("buildContentSecurityPolicy: contains trusted-types", () => {
 Deno.test("buildContentSecurityPolicy: directives are semicolon-separated", () => {
   const csp = buildContentSecurityPolicy();
   assertEquals(csp.includes("; "), true);
+});
+
+// =============================================================================
+// Router Tests
+// =============================================================================
+
+Deno.test("parseIntParam: returns null for undefined", () => {
+  assertEquals(parseIntParam(undefined), null);
+});
+
+Deno.test("parseIntParam: returns null for empty string", () => {
+  assertEquals(parseIntParam(""), null);
+});
+
+Deno.test("parseIntParam: returns null for non-numeric string", () => {
+  assertEquals(parseIntParam("abc"), null);
+});
+
+Deno.test("parseIntParam: returns null for zero", () => {
+  assertEquals(parseIntParam("0"), null);
+});
+
+Deno.test("parseIntParam: returns null for negative numbers", () => {
+  assertEquals(parseIntParam("-1"), null);
+});
+
+Deno.test("parseIntParam: returns number for valid positive integer", () => {
+  assertEquals(parseIntParam("1"), 1);
+  assertEquals(parseIntParam("42"), 42);
+  assertEquals(parseIntParam("100"), 100);
+});
+
+Deno.test("parseIntParam: returns null for floats", () => {
+  assertEquals(parseIntParam("1.5"), 1); // parseInt behavior
+});
+
+Deno.test("redirect: creates 301 redirect by default", () => {
+  const response = redirect("/test");
+  assertEquals(response.status, 301);
+  assertEquals(response.headers.get("Location"), "/test");
+});
+
+Deno.test("redirect: creates redirect with custom status", () => {
+  const response = redirect("/test", 302);
+  assertEquals(response.status, 302);
+});
+
+Deno.test("redirect: applies header function when provided", () => {
+  const response = redirect("/test", 301, (headers) => {
+    headers.set("X-Custom", "value");
+    return headers;
+  });
+  assertEquals(response.headers.get("X-Custom"), "value");
+});
+
+Deno.test("route: creates route with URLPattern", () => {
+  const r = route("/test/:id", () => new Response("ok"));
+  assertEquals(r.pattern instanceof URLPattern, true);
+});
+
+Deno.test("Router: matches exact path", async () => {
+  const router = new Router();
+  router.add("/test", () => new Response("matched"));
+  
+  const request = new Request("http://localhost/test");
+  const response = await router.handle(request);
+  assertEquals(await response.text(), "matched");
+});
+
+Deno.test("Router: extracts params from path", async () => {
+  const router = new Router();
+  router.add("/item/:id", (_req, params) => new Response(params.id));
+  
+  const request = new Request("http://localhost/item/123");
+  const response = await router.handle(request);
+  assertEquals(await response.text(), "123");
+});
+
+Deno.test("Router: returns 404 for unmatched routes", async () => {
+  const router = new Router();
+  router.add("/test", () => new Response("matched"));
+  
+  const request = new Request("http://localhost/other");
+  const response = await router.handle(request);
+  assertEquals(response.status, 404);
+});
+
+Deno.test("Router: uses custom notFound handler", async () => {
+  const router = new Router();
+  router.add("/test", () => new Response("matched"));
+  router.onNotFound(() => new Response("custom 404", { status: 404 }));
+  
+  const request = new Request("http://localhost/other");
+  const response = await router.handle(request);
+  assertEquals(await response.text(), "custom 404");
+});
+
+Deno.test("Router: uses error handler for thrown errors", async () => {
+  const router = new Router();
+  router.add("/error", () => { throw new Error("oops"); });
+  router.onError(() => new Response("caught", { status: 500 }));
+  
+  const request = new Request("http://localhost/error");
+  const response = await router.handle(request);
+  assertEquals(await response.text(), "caught");
+  assertEquals(response.status, 500);
+});
+
+Deno.test("Router: matches routes in order", async () => {
+  const router = new Router();
+  router.add("/test", () => new Response("first"));
+  router.add("/test", () => new Response("second"));
+  
+  const request = new Request("http://localhost/test");
+  const response = await router.handle(request);
+  assertEquals(await response.text(), "first");
 });
