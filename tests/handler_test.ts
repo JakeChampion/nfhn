@@ -1,5 +1,10 @@
 import handler from "../netlify/edge-functions/lib/handler.ts";
-import { assert, assertEquals, assertStringIncludes } from "std/testing/asserts.ts";
+import {
+  assert,
+  assertEquals,
+  assertNotEquals,
+  assertStringIncludes,
+} from "std/testing/asserts.ts";
 
 type RouteMap = Record<string, unknown>;
 
@@ -592,6 +597,84 @@ Deno.test("serves stale responses, revalidates, and honors conditional requests"
       const conditional = await handler(conditionalReq);
       assertEquals(conditional.status, 304);
       assertEquals(conditional.headers.get("content-length"), null);
+    } finally {
+      Date.now = originalNow;
+    }
+  });
+});
+
+Deno.test("refreshes feed etag when visible metadata changes", async () => {
+  const stories = [
+    {
+      id: 1,
+      title: "Cached Story",
+      points: 10,
+      user: "cacher",
+      time: Math.floor(Date.now() / 1000) - 60,
+      type: "link",
+      url: "https://example.com/cached",
+      domain: "example.com",
+      comments_count: 1,
+    },
+    {
+      id: 1,
+      title: "Cached Story",
+      points: 10,
+      user: "cacher",
+      time: Math.floor(Date.now() / 1000) - 60,
+      type: "link",
+      url: "https://example.com/cached",
+      domain: "changed.example.com",
+      comments_count: 12,
+    },
+  ];
+
+  let call = 0;
+  const routes = {
+    [topStoriesUrl]: () => {
+      const idx = Math.min(call, stories.length - 1);
+      call += 1;
+      return [stories[idx]];
+    },
+  };
+
+  await withMockedEnv(routes, async ({ counts }) => {
+    const originalNow = Date.now;
+    const baseNow = Date.now();
+    Date.now = () => baseNow;
+
+    try {
+      const first = await handler(new Request("https://nfhn.test/top/1"));
+      const firstEtag = first.headers.get("etag");
+      const cacheControl = first.headers.get("cache-control") ?? "";
+      await first.text();
+
+      if (!firstEtag) throw new Error("expected initial etag");
+
+      const ttlSeconds = Number.parseInt(
+        (cacheControl.match(/max-age=(\d+)/)?.[1]) ?? "",
+        10,
+      ) || 30;
+      const swrSeconds = Number.parseInt(
+        (cacheControl.match(/stale-while-revalidate=(\d+)/)?.[1]) ?? "",
+        10,
+      ) || 300;
+
+      Date.now = () => baseNow + (ttlSeconds + swrSeconds + 1) * 1000;
+
+      const conditionalReq = new Request("https://nfhn.test/top/1", {
+        headers: { "if-none-match": firstEtag },
+      });
+      const updated = await handler(conditionalReq);
+      const updatedEtag = updated.headers.get("etag");
+      const updatedBody = await updated.text();
+
+      assertEquals(updated.status, 200, "metadata changes should invalidate old etags");
+      if (!updatedEtag) throw new Error("expected updated etag");
+      assertNotEquals(updatedEtag, firstEtag);
+      assertStringIncludes(updatedBody, "view 12 comments");
+      assertStringIncludes(updatedBody, "(changed.example.com)");
+      assertEquals(counts.get(topStoriesUrl) ?? 0, 2);
     } finally {
       Date.now = originalNow;
     }

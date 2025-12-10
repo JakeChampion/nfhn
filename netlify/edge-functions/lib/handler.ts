@@ -402,7 +402,11 @@ function createFeedHandler({
           const canonical = computeCanonical(request, `/${slug}/${pageNumber}`);
           const response = new HTMLResponse(home(results, pageNumber, slug, canonical));
           applySecurityHeaders(response.headers);
-          const etag = await generateETag(results.map((r) => r.id));
+          const etag = await generateETag(
+            results.map((r) =>
+              [r.id, r.title, r.domain ?? "", r.comments_count, r.type, r.url ?? ""].join(":"),
+            ),
+          );
           const lastModified = lastModifiedFromTimes(results.map((r) => r.time));
           if (etag) response.headers.set("ETag", etag);
           if (lastModified) response.headers.set("Last-Modified", lastModified);
