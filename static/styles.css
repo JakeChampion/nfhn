@@ -1,0 +1,282 @@
+/* NFHN Styles */
+
+:root {
+  --background: #f5f5f5;
+  --text-strong: #111827;
+  --text-primary: #1f2937;
+  --text-muted: #4b5563;
+  --text-secondary: #374151;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, sans-serif;
+  background-color: var(--background);
+  margin: 40px auto;
+  max-width: 80ch;
+  line-height: 1.6;
+  font-size: 18px;
+  color: var(--text-strong);
+  padding: 0 10px;
+}
+
+main {
+  display: block;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.2;
+  font-size: x-large;
+  margin: 0;
+}
+
+ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+article ul {
+  padding-left: 1em;
+}
+
+ol {
+  list-style-type: none;
+  counter-reset: section;
+  padding: 0;
+}
+
+ol > li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 0fr 1fr;
+  grid-template-areas:
+    ". main"
+    ". footer"
+    ". .";
+  gap: 1em;
+  margin-bottom: 1em;
+}
+
+ol > li:before {
+  counter-increment: section;
+  content: counter(section);
+  font-size: 1.6em;
+  position: absolute;
+}
+
+ol > li:after {
+  content: "";
+  background: black;
+  position: absolute;
+  bottom: 0;
+  left: 3em;
+  width: calc(100% - 3em);
+  height: 1px;
+}
+
+ol > li > * {
+  margin-left: 2em;
+}
+
+.title {
+  grid-area: main;
+}
+
+.comments {
+  grid-area: footer;
+}
+
+.title,
+.comments {
+  display: flex;
+  justify-content: center;
+  align-content: center;
+  flex-direction: column;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+article a:hover {
+  text-decoration: underline;
+}
+
+a:hover .story-title-text {
+  text-decoration: underline;
+}
+
+a:focus-visible {
+  outline: 2px solid #ff7a18;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.1em 0.4em;
+  border-radius: 999px;
+  font-size: 0.7em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 0.5em;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(0, 0, 0, 0.04);
+  vertical-align: middle;
+}
+
+.badge-link {
+  background: rgba(25, 118, 210, 0.08);
+  border-color: rgba(25, 118, 210, 0.25);
+}
+
+.badge-ask {
+  background: rgba(244, 67, 54, 0.08);
+  border-color: rgba(244, 67, 54, 0.25);
+}
+
+.badge-show {
+  background: rgba(67, 160, 71, 0.08);
+  border-color: rgba(67, 160, 71, 0.25);
+}
+
+.badge-job {
+  background: rgba(255, 160, 0, 0.08);
+  border-color: rgba(255, 160, 0, 0.25);
+}
+
+.badge-default {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+.story-title-text {
+  font-weight: 500;
+}
+
+.story-meta {
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+.nav-feeds {
+  display: flex;
+  gap: 0.75em;
+  margin-bottom: 1.5em;
+  font-size: 0.9em;
+  color: var(--text-primary);
+}
+
+.nav-feeds a {
+  text-decoration: none;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.nav-feeds a.active {
+  color: var(--text-strong);
+  text-decoration: underline;
+}
+
+hr {
+  border: none;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  margin: 1.5em 0;
+}
+
+article {
+  padding-left: 0.5em;
+}
+
+small {
+  display: block;
+  padding-top: 0.35em;
+}
+
+p {
+  padding-block: 0.5em;
+  margin: 0;
+}
+
+.meta-line {
+  font-size: 0.9em;
+  color: var(--text-secondary);
+}
+
+.more-link {
+  display: block;
+  text-align: center;
+  margin-top: 1.5em;
+}
+
+.story-heading {
+  display: inline-block;
+  margin-left: 0.4em;
+}
+
+details {
+  background-color: var(--background);
+  margin: 40px auto;
+  max-width: 650px;
+  line-height: 1.6;
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+summary {
+  font-weight: bold;
+  margin: -0.5em -0.5em 0;
+  padding: 0.75em;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  min-height: 48px;
+}
+
+details[open] summary {
+  border-bottom: 1px solid #aaa;
+}
+
+.comment-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  flex-wrap: wrap;
+}
+
+.comment-user {
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.comment-permalink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45em 0.7em;
+  min-height: 44px;
+  min-width: 44px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--text-primary);
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.comment-permalink:hover {
+  text-decoration: underline;
+}
+
+.comment-permalink:focus-visible {
+  outline: 2px solid #ff7a18;
+  outline-offset: 3px;
+}
+
+pre {
+  white-space: pre-wrap;
+}
