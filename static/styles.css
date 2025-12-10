@@ -685,61 +685,6 @@ pre {
   display: none;
 }
 
-/* Font size controls */
-.page-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5em;
-  padding-left: 0.5em;
-}
-
-.font-size-controls {
-  display: flex;
-  gap: 0.25em;
-  background: var(--badge-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  padding: 0.2em;
-}
-
-.font-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2em;
-  height: 2em;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-radius: 4px;
-  font-weight: 500;
-  transition: background-color 0.15s;
-}
-
-.font-btn:hover {
-  background: var(--border-color);
-}
-
-.font-btn.active {
-  background: var(--background-elevated);
-  color: var(--text-strong);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-
-.font-btn[data-size="small"] {
-  font-size: 0.75em;
-}
-
-.font-btn[data-size="medium"] {
-  font-size: 0.9em;
-}
-
-.font-btn[data-size="large"] {
-  font-size: 1.1em;
-}
-
 /* Mobile improvements - larger touch targets */
 @media (max-width: 600px) {
   body {
