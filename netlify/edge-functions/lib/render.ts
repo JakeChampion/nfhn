@@ -3,4 +3,4 @@
 //   - render/components.ts - Reusable UI components
 //   - render/pages.ts - Full page templates
 
-export { article, home } from "./render/pages.ts";
+export { article, home, userProfile } from "./render/pages.ts";

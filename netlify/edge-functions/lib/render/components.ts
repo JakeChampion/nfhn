@@ -212,7 +212,7 @@ export const renderStory = (data: Item): HTML => {
 export const isRenderableComment = (comment: HNAPIItem): boolean =>
   comment.type === "comment" && !comment.deleted && !comment.dead;
 
-export const renderComment = (comment: HNAPIItem, level: number): HTML => {
+export const renderComment = (comment: HNAPIItem, level: number, opUser?: string): HTML => {
   if (!isRenderableComment(comment)) {
     return html`
 
@@ -223,19 +223,20 @@ export const renderComment = (comment: HNAPIItem, level: number): HTML => {
   const user = comment.user ?? "[deleted]";
   const content = unsafeHTML(comment.content ?? "");
   const children = (comment.comments ?? []).filter(isRenderableComment);
+  const isOP = opUser && user === opUser;
 
   const details = html`
     <details open id="${comment.id}">
-      <summary aria-label="Comment by ${user}, posted ${time_ago}">
+      <summary aria-label="Comment by ${user}${isOP ? " (OP)" : ""}, posted ${time_ago}">
         <span class="comment-meta">
-          <span class="comment-user">${user}</span>
+          <span class="comment-user${isOP ? " is-op" : ""}">${user}${isOP ? html` <abbr title="Original Poster" class="op-badge">OP</abbr>` : ""}</span>
           <a class="comment-permalink" href="#${comment.id}">${time_ago}</a>
         </span>
       </summary>
       <div>${content}</div>
       ${children.length
         ? html`
-          <ul>${children.map((child) => renderComment(child, level + 1))}</ul>
+          <ul>${children.map((child) => renderComment(child, level + 1, opUser))}</ul>
         `
         : ""}
     </details>
@@ -248,7 +249,7 @@ export const renderComment = (comment: HNAPIItem, level: number): HTML => {
     : details;
 };
 
-export const commentsSection = (rootComments: HNAPIItem[] | undefined): HTML => {
+export const commentsSection = (rootComments: HNAPIItem[] | undefined, opUser?: string): HTML => {
   const visibleComments = (rootComments ?? []).filter(isRenderableComment);
   if (visibleComments.length === 0) {
     return html`
@@ -258,7 +259,7 @@ export const commentsSection = (rootComments: HNAPIItem[] | undefined): HTML => 
 
   return html`
     <section aria-label="Comments">
-      ${visibleComments.map((comment) => renderComment(comment, 0))}
+      ${visibleComments.map((comment) => renderComment(comment, 0, opUser))}
     </section>
   `;
 };

@@ -5,6 +5,7 @@ import askHandler from "../netlify/edge-functions/ask.ts";
 import showHandler from "../netlify/edge-functions/show.ts";
 import jobsHandler from "../netlify/edge-functions/jobs.ts";
 import itemHandler from "../netlify/edge-functions/item.ts";
+import userHandler from "../netlify/edge-functions/user.ts";
 import { handleNotFound, redirect } from "../netlify/edge-functions/lib/handlers.ts";
 import type { Context } from "@netlify/edge-functions";
 import {
@@ -67,6 +68,12 @@ async function handler(request: Request): Promise<Response> {
   const itemMatch = path.match(/^\/item\/(\d+)$/);
   if (itemMatch) {
     return itemHandler(request, createContext({ id: itemMatch[1] }));
+  }
+
+  // /user/:username
+  const userMatch = path.match(/^\/user\/([a-zA-Z0-9_]+)$/);
+  if (userMatch) {
+    return userHandler(request, createContext({ username: userMatch[1] }));
   }
 
   return handleNotFound(request);
@@ -767,5 +774,198 @@ Deno.test("refreshes feed etag when visible metadata changes", async () => {
     } finally {
       Date.now = originalNow;
     }
+  });
+});
+
+// =============================================================================
+// User Page Tests
+// =============================================================================
+
+const userUrl = "https://api.hnpwa.com/v0/user/testuser.json";
+
+Deno.test("serves user profile page from the mocked API", async () => {
+  const routes = {
+    [userUrl]: {
+      id: "testuser",
+      created: 1234567890,
+      karma: 5000,
+      about: "Hello world",
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/user/testuser"));
+    assertEquals(res.status, 200);
+    const body = await res.text();
+    assertStringIncludes(body, "testuser");
+    assertStringIncludes(body, "5,000"); // formatted karma
+    assertStringIncludes(body, "Hello world");
+    assertStringIncludes(body, "View on HN");
+  });
+});
+
+Deno.test("returns 404 for non-existent user", async () => {
+  const routes = {
+    "https://api.hnpwa.com/v0/user/nobody.json": null,
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/user/nobody"));
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    assertStringIncludes(body, "User not found");
+  });
+});
+
+Deno.test("returns 404 for invalid username format", async () => {
+  // No mock needed - validation happens before API call
+  await withMockedEnv({}, async () => {
+    const res = await handler(new Request("https://nfhn.test/user/invalid-user!"));
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    assertStringIncludes(body, "not found");
+  });
+});
+
+// =============================================================================
+// Server-Timing Header Tests
+// =============================================================================
+
+Deno.test("feed response includes Server-Timing header", async () => {
+  const routes = {
+    [topStoriesUrl]: [
+      {
+        id: 1,
+        title: "Timing Test",
+        points: 10,
+        user: "timer",
+        time: Math.floor(Date.now() / 1000) - 60,
+        type: "link",
+        url: "https://example.com",
+        domain: "example.com",
+        comments_count: 0,
+      },
+    ],
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/1"));
+    assertEquals(res.status, 200);
+    
+    const timing = res.headers.get("Server-Timing");
+    assert(timing !== null, "Server-Timing header should be present");
+    assertStringIncludes(timing, "api;dur=");
+    assertStringIncludes(timing, "total;dur=");
+    await res.text();
+  });
+});
+
+Deno.test("item response includes Server-Timing header", async () => {
+  const routes = {
+    [itemUrl]: {
+      id: 123,
+      title: "Timing Test Item",
+      points: 50,
+      user: "timer",
+      time: Math.floor(Date.now() / 1000) - 3600,
+      type: "link",
+      url: "https://example.com",
+      comments_count: 0,
+      comments: [],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/123"));
+    assertEquals(res.status, 200);
+    
+    const timing = res.headers.get("Server-Timing");
+    assert(timing !== null, "Server-Timing header should be present");
+    assertStringIncludes(timing, "api;dur=");
+    await res.text();
+  });
+});
+
+Deno.test("user response includes Server-Timing header", async () => {
+  const routes = {
+    [userUrl]: {
+      id: "testuser",
+      created: 1234567890,
+      karma: 5000,
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/user/testuser"));
+    assertEquals(res.status, 200);
+    
+    const timing = res.headers.get("Server-Timing");
+    assert(timing !== null, "Server-Timing header should be present");
+    assertStringIncludes(timing, "api;dur=");
+    await res.text();
+  });
+});
+
+// =============================================================================
+// OP Highlighting Integration Test
+// =============================================================================
+
+Deno.test("item page highlights OP comments", async () => {
+  const routes = {
+    [itemUrl]: {
+      id: 123,
+      title: "OP Test",
+      points: 50,
+      user: "original_poster",
+      time: Math.floor(Date.now() / 1000) - 3600,
+      type: "link",
+      url: "https://example.com",
+      comments_count: 2,
+      comments: [
+        {
+          id: 111,
+          type: "comment",
+          user: "original_poster",
+          time_ago: "1 hour ago",
+          content: "I'm the OP!",
+          comments: [],
+        },
+        {
+          id: 222,
+          type: "comment",
+          user: "someone_else",
+          time_ago: "30 min ago",
+          content: "I'm not the OP",
+          comments: [],
+        },
+      ],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/123"));
+    assertEquals(res.status, 200);
+    const body = await res.text();
+    
+    // OP's comment should have the badge
+    assertStringIncludes(body, "is-op");
+    assertStringIncludes(body, 'title="Original Poster"');
+    
+    // Count occurrences - should only be for original_poster
+    const opMatches = body.match(/is-op/g) || [];
+    assertEquals(opMatches.length, 1, "Only one comment should have OP badge");
+  });
+});
+
+// =============================================================================
+// MAX_ITEM_ID Validation Test
+// =============================================================================
+
+Deno.test("returns 404 for item ID above MAX_ITEM_ID", async () => {
+  await withMockedEnv({}, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/999999999"));
+    assertEquals(res.status, 404);
+    const body = await res.text();
+    assertStringIncludes(body, "too large");
   });
 });

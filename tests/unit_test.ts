@@ -74,17 +74,13 @@ Deno.test("escape: passes through safe strings unchanged", () => {
 // =============================================================================
 
 Deno.test("html: renders static content", async () => {
-  const result = await htmlToString(html`
-    <div>Hello</div>
-  `);
+  const result = await htmlToString(html`<div>Hello</div>`);
   assertEquals(result, "<div>Hello</div>");
 });
 
 Deno.test("html: escapes interpolated strings", async () => {
   const userInput = "<script>alert('xss')</script>";
-  const result = await htmlToString(html`
-    <p>${userInput}</p>
-  `);
+  const result = await htmlToString(html`<p>${userInput}</p>`);
   assertEquals(
     result,
     "<p>&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;</p>",
@@ -93,87 +89,61 @@ Deno.test("html: escapes interpolated strings", async () => {
 
 Deno.test("html: renders numbers", async () => {
   const count = 42;
-  const result = await htmlToString(html`
-    <span>${count}</span>
-  `);
+  const result = await htmlToString(html`<span>${count}</span>`);
   assertEquals(result, "<span>42</span>");
 });
 
 Deno.test("html: handles null and undefined as empty", async () => {
-  const result = await htmlToString(html`
-    <span>${null}${undefined}</span>
-  `);
+  const result = await htmlToString(html`<span>${null}${undefined}</span>`);
   assertEquals(result, "<span></span>");
 });
 
 Deno.test("html: handles false as empty", async () => {
-  const result = await htmlToString(html`
-    <span>${false}</span>
-  `);
+  const result = await htmlToString(html`<span>${false}</span>`);
   assertEquals(result, "<span></span>");
 });
 
 Deno.test("html: renders nested html templates", async () => {
-  const inner = html`
-    <span>inner</span>
-  `;
-  const outer = html`
-    <div>${inner}</div>
-  `;
+  const inner = html`<span>inner</span>`;
+  const outer = html`<div>${inner}</div>`;
   const result = await htmlToString(outer);
   assertEquals(result, "<div><span>inner</span></div>");
 });
 
 Deno.test("html: renders arrays of values", async () => {
   const items = ["a", "b", "c"];
-  const result = await htmlToString(html`
-    <ul>${items.map((i) =>
-      html`
-        <li>${i}</li>
-      `
-    )}</ul>
-  `);
+  const result = await htmlToString(html`<ul>${items.map((i) => html`<li>${i}</li>`)}</ul>`);
   assertEquals(result, "<ul><li>a</li><li>b</li><li>c</li></ul>");
 });
 
 Deno.test("raw: renders HTML without escaping", async () => {
   const rawHtml = raw("<strong>bold</strong>");
-  const result = await htmlToString(html`
-    <div>${rawHtml}</div>
-  `);
+  const result = await htmlToString(html`<div>${rawHtml}</div>`);
   assertEquals(result, "<div><strong>bold</strong></div>");
 });
 
 Deno.test("unsafeHTML: alias for raw works correctly", async () => {
   const rawHtml = unsafeHTML("<em>italic</em>");
-  const result = await htmlToString(html`
-    <div>${rawHtml}</div>
-  `);
+  const result = await htmlToString(html`<div>${rawHtml}</div>`);
   assertEquals(result, "<div><em>italic</em></div>");
 });
 
 Deno.test("html: handles promises", async () => {
   const asyncValue = Promise.resolve("async content");
-  const result = await htmlToString(html`
-    <div>${asyncValue}</div>
-  `);
+  const result = await htmlToString(html`<div>${asyncValue}</div>`);
   assertEquals(result, "<div>async content</div>");
 });
 
 Deno.test("html: handles functions", async () => {
   const fn = () => "from function";
-  const result = await htmlToString(html`
-    <div>${fn}</div>
-  `);
+  const result = await htmlToString(html`<div>${fn}</div>`);
   assertEquals(result, "<div>from function</div>");
 });
 
 Deno.test("html: handles async functions", async () => {
   // deno-lint-ignore require-await
   const asyncFn = async () => "from async function";
-  const result = await htmlToString(html`
-    <div>${asyncFn}</div>
-  `);
+  const result = await htmlToString(html`<div>${asyncFn}</div>`);
   assertEquals(result, "<div>from async function</div>");
 });
 
@@ -436,4 +406,233 @@ Deno.test("redirect: creates 301 redirect by default", () => {
 Deno.test("redirect: creates redirect with custom status", () => {
   const response = redirect("/test", 302);
   assertEquals(response.status, 302);
+});
+
+// =============================================================================
+// mapApiUser Tests
+// =============================================================================
+
+import { mapApiUser } from "../netlify/edge-functions/lib/hn.ts";
+
+Deno.test("mapApiUser: returns null for null input", () => {
+  assertEquals(mapApiUser(null), null);
+});
+
+Deno.test("mapApiUser: returns null for user with no id", () => {
+  assertEquals(mapApiUser({ id: "", created: 123, karma: 0 }), null);
+});
+
+Deno.test("mapApiUser: maps valid user correctly", () => {
+  const raw = {
+    id: "testuser",
+    created: 1234567890,
+    karma: 500,
+    about: "Hello world",
+  };
+  const result = mapApiUser(raw);
+  assertStrictEquals(result?.id, "testuser");
+  assertStrictEquals(result?.karma, 500);
+  assertStrictEquals(result?.about, "Hello world");
+  assertStrictEquals(result?.created, 1234567890);
+  assertEquals(typeof result?.created_ago, "string");
+});
+
+Deno.test("mapApiUser: handles missing about field", () => {
+  const raw = {
+    id: "testuser",
+    created: 1234567890,
+    karma: 100,
+  };
+  const result = mapApiUser(raw);
+  assertEquals(result?.about, "");
+});
+
+Deno.test("mapApiUser: handles missing karma as 0", () => {
+  const raw = {
+    id: "testuser",
+    created: 1234567890,
+    karma: undefined as unknown as number,
+  };
+  const result = mapApiUser(raw);
+  assertEquals(result?.karma, 0);
+});
+
+// =============================================================================
+// Logger Tests  
+// =============================================================================
+
+import { log } from "../netlify/edge-functions/lib/logger.ts";
+
+Deno.test("log: info outputs JSON with correct fields", () => {
+  const output: string[] = [];
+  const origInfo = console.info;
+  console.info = (msg: string) => output.push(msg);
+  
+  log.info("Test message", { foo: "bar" });
+  
+  console.info = origInfo;
+  
+  assertEquals(output.length, 1);
+  const parsed = JSON.parse(output[0]);
+  assertEquals(parsed.level, "info");
+  assertEquals(parsed.message, "Test message");
+  assertEquals(parsed.context.foo, "bar");
+  assertEquals(typeof parsed.timestamp, "string");
+});
+
+Deno.test("log: error includes error details", () => {
+  const output: string[] = [];
+  const origError = console.error;
+  console.error = (msg: string) => output.push(msg);
+  
+  log.error("Error occurred", {}, new Error("test error"));
+  
+  console.error = origError;
+  
+  const parsed = JSON.parse(output[0]);
+  assertEquals(parsed.level, "error");
+  assertEquals(parsed.error, "test error");
+  assertEquals(typeof parsed.stack, "string");
+});
+
+Deno.test("log: warn outputs correct level", () => {
+  const output: string[] = [];
+  const origWarn = console.warn;
+  console.warn = (msg: string) => output.push(msg);
+  
+  log.warn("Warning message", { key: "value" });
+  
+  console.warn = origWarn;
+  
+  const parsed = JSON.parse(output[0]);
+  assertEquals(parsed.level, "warn");
+  assertEquals(parsed.message, "Warning message");
+});
+
+Deno.test("log: debug outputs correct level", () => {
+  const output: string[] = [];
+  const origDebug = console.debug;
+  console.debug = (msg: string) => output.push(msg);
+  
+  log.debug("Debug message");
+  
+  console.debug = origDebug;
+  
+  const parsed = JSON.parse(output[0]);
+  assertEquals(parsed.level, "debug");
+});
+
+// =============================================================================
+// Comment OP Highlighting Tests
+// =============================================================================
+
+import { renderComment, commentsSection } from "../netlify/edge-functions/lib/render/components.ts";
+import type { HNAPIItem as CommentItem } from "../netlify/edge-functions/lib/hn.ts";
+
+Deno.test("renderComment: adds OP badge when user matches opUser", async () => {
+  const comment: CommentItem = {
+    id: 1,
+    type: "comment",
+    user: "alice",
+    time_ago: "1 hour ago",
+    content: "Test comment",
+    comments: [],
+  };
+  
+  const result = await htmlToString(renderComment(comment, 0, "alice"));
+  
+  // Check for OP badge and is-op class
+  assertEquals(result.includes("is-op"), true);
+  assertEquals(result.includes("OP</abbr>"), true);
+  assertEquals(result.includes('title="Original Poster"'), true);
+});
+
+Deno.test("renderComment: no OP badge when user doesn't match opUser", async () => {
+  const comment: CommentItem = {
+    id: 1,
+    type: "comment",
+    user: "bob",
+    time_ago: "1 hour ago",
+    content: "Test comment",
+    comments: [],
+  };
+  
+  const result = await htmlToString(renderComment(comment, 0, "alice"));
+  
+  assertEquals(result.includes("is-op"), false);
+  assertEquals(result.includes("OP</abbr>"), false);
+});
+
+Deno.test("renderComment: no OP badge when opUser undefined", async () => {
+  const comment: CommentItem = {
+    id: 1,
+    type: "comment",
+    user: "alice",
+    time_ago: "1 hour ago",
+    content: "Test comment",
+    comments: [],
+  };
+  
+  const result = await htmlToString(renderComment(comment, 0, undefined));
+  
+  assertEquals(result.includes("is-op"), false);
+});
+
+Deno.test("commentsSection: passes opUser to nested comments", async () => {
+  const comments: CommentItem[] = [{
+    id: 1,
+    type: "comment",
+    user: "alice",
+    time_ago: "1 hour ago",
+    content: "Parent",
+    comments: [{
+      id: 2,
+      type: "comment",
+      user: "alice",
+      time_ago: "30 min ago",
+      content: "Reply",
+      comments: [],
+    }],
+  }];
+  
+  const result = await htmlToString(commentsSection(comments, "alice"));
+  
+  // Both comments from alice should have OP badge
+  const matches = result.match(/is-op/g);
+  assertEquals(matches?.length, 2);
+});
+
+// =============================================================================
+// Config Constants Tests
+// =============================================================================
+
+import { 
+  MAX_ITEM_ID, 
+  MAX_PAGE_NUMBER, 
+  USER_TTL_SECONDS, 
+  USER_STALE_SECONDS,
+  CIRCUIT_BREAKER_THRESHOLD,
+  CIRCUIT_BREAKER_RESET_MS 
+} from "../netlify/edge-functions/lib/config.ts";
+
+Deno.test("config: MAX_ITEM_ID is reasonable", () => {
+  assertEquals(MAX_ITEM_ID, 100_000_000);
+});
+
+Deno.test("config: MAX_PAGE_NUMBER is reasonable", () => {
+  assertEquals(MAX_PAGE_NUMBER, 100);
+});
+
+Deno.test("config: user caching constants exist", () => {
+  assertEquals(typeof USER_TTL_SECONDS, "number");
+  assertEquals(typeof USER_STALE_SECONDS, "number");
+  assertEquals(USER_TTL_SECONDS > 0, true);
+  assertEquals(USER_STALE_SECONDS > USER_TTL_SECONDS, true);
+});
+
+Deno.test("config: circuit breaker constants exist", () => {
+  assertEquals(typeof CIRCUIT_BREAKER_THRESHOLD, "number");
+  assertEquals(typeof CIRCUIT_BREAKER_RESET_MS, "number");
+  assertEquals(CIRCUIT_BREAKER_THRESHOLD > 0, true);
+  assertEquals(CIRCUIT_BREAKER_RESET_MS > 0, true);
 });

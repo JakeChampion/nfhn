@@ -1,7 +1,7 @@
 // render/pages.ts - Full page templates
 
 import { type HTML, html as tpl, unsafeHTML } from "../html.ts";
-import { type FeedSlug, type Item } from "../hn.ts";
+import { type FeedSlug, type Item, type User } from "../hn.ts";
 import {
   commentsSection,
   getTypeMeta,
@@ -51,6 +51,7 @@ export const home = (
     ${skipLink()}
     <main id="main-content" aria-label="Main content">
       ${headerBar(feed)}
+      <div class="pagination-info">Page ${pageNumber}</div>
       <ol>
         ${content.map((data: Item) => renderStory(data))}
       </ol>
@@ -114,6 +115,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
     ? "jobs"
     : "top";
   const meta = getTypeMeta(item.type);
+  const opUser = item.user ?? undefined;
 
   return shellPage(
     `NFHN: ${item.title}`,
@@ -144,7 +146,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
               </p>
             `}
           <hr />
-          ${unsafeHTML(item.content || "")} ${commentsSection(item.comments)}
+          ${unsafeHTML(item.content || "")} ${commentsSection(item.comments, opUser)}
         </article>
       </main>
       ${turboScript()}
@@ -153,3 +155,36 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
     `Hacker News discussion: ${item.title}`,
   );
 };
+
+// --- User profile page ---
+
+export const userProfile = (user: User, canonicalUrl?: string): HTML =>
+  shellPage(
+    `NFHN: ${user.id}`,
+    tpl`
+      <main id="main-content" aria-label="Main content">
+        ${headerBar("top")}
+        <article class="user-profile">
+          <h1>${user.id}</h1>
+          <dl class="user-stats">
+            <dt>Karma</dt>
+            <dd>${user.karma.toLocaleString()}</dd>
+            <dt>Created</dt>
+            <dd>${user.created_ago}</dd>
+          </dl>
+          ${user.about ? tpl`
+            <div class="user-about">
+              <h2>About</h2>
+              ${unsafeHTML(user.about)}
+            </div>
+          ` : ""}
+          <p class="user-links">
+            <a href="https://news.ycombinator.com/user?id=${user.id}" rel="noopener">View on HN</a>
+          </p>
+        </article>
+      </main>
+      ${turboScript()}
+    `,
+    canonicalUrl,
+    `User profile for ${user.id} on Hacker News`,
+  );
