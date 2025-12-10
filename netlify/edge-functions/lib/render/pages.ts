@@ -3,6 +3,7 @@
 import { type HTML, html as tpl, unsafeHTML } from "../html.ts";
 import { type FeedSlug, type Item, type SubmissionItem, type User } from "../hn.ts";
 import {
+  articleJsonLd,
   bookmarkButton,
   commentsSection,
   countComments,
@@ -21,6 +22,7 @@ import {
   themeScript,
   turboScript,
   userLink,
+  websiteJsonLd,
 } from "./components.ts";
 
 // --- Inline script to set theme before page renders (prevents flash) ---
@@ -56,6 +58,11 @@ export const home = (
     <meta name="twitter:card" content="summary">
     <link rel="icon" type="image/svg+xml" href="/icon.svg">
     ${sharedStyles(pageNumber)}
+    ${websiteJsonLd({
+      name: "NFHN - Hacker News Reader",
+      url: "https://nfhn.netlify.app",
+      description: "A fast, accessible Hacker News reader built with Netlify Edge Functions.",
+    })}
     <title>NFHN: Page ${pageNumber}</title>
   </head>
   <body>
@@ -142,9 +149,20 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
   // Estimate reading time for article content
   const readingTime = estimateReadingTime(item.content);
 
+  // Build JSON-LD structured data for the article
+  const structuredData = articleJsonLd({
+    title: item.title,
+    author: item.user,
+    datePublished: item.time,
+    url: item.url ?? canonicalUrl ?? `https://nfhn.netlify.app/item/${item.id}`,
+    commentCount: totalComments,
+    discussionUrl: `https://news.ycombinator.com/item?id=${item.id}`,
+  });
+
   return shellPage(
     `NFHN: ${item.title}`,
     tpl`
+      ${structuredData}
       <main id="main-content" aria-label="Main content">
         ${headerBar(activeFeed)}
         <article>

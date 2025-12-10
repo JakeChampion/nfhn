@@ -1,8 +1,80 @@
 // render/components.ts - Reusable UI components
 
-import { type HTML, html, unsafeHTML } from "../html.ts";
+import { type HTML, html, raw, unsafeHTML } from "../html.ts";
 import { FEEDS } from "../feeds.ts";
 import { type FeedSlug, type HNAPIItem, type Item, type ItemType } from "../hn.ts";
+
+// --- JSON-LD Structured Data ---
+
+export interface ArticleStructuredData {
+  title: string;
+  author: string | null;
+  datePublished: number; // unix timestamp
+  url: string;
+  commentCount: number;
+  discussionUrl: string;
+}
+
+export const articleJsonLd = (data: ArticleStructuredData): HTML => {
+  const publishedDate = new Date(data.datePublished * 1000).toISOString();
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "DiscussionForumPosting",
+    headline: data.title,
+    author: data.author
+      ? {
+        "@type": "Person",
+        name: data.author,
+        url: `https://news.ycombinator.com/user?id=${data.author}`,
+      }
+      : undefined,
+    datePublished: publishedDate,
+    url: data.url,
+    discussionUrl: data.discussionUrl,
+    interactionStatistic: {
+      "@type": "InteractionCounter",
+      interactionType: "https://schema.org/CommentAction",
+      userInteractionCount: data.commentCount,
+    },
+    isPartOf: {
+      "@type": "WebSite",
+      name: "NFHN - Hacker News Reader",
+      url: "https://nfhn.netlify.app",
+    },
+  };
+
+  // Remove undefined fields
+  const cleanedJsonLd = JSON.stringify(jsonLd, (_, v) => v === undefined ? undefined : v);
+
+  return html`<script type="application/ld+json">${raw(cleanedJsonLd)}</script>`;
+};
+
+export interface WebSiteStructuredData {
+  name: string;
+  url: string;
+  description: string;
+}
+
+export const websiteJsonLd = (data: WebSiteStructuredData): HTML => {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: data.name,
+    url: data.url,
+    description: data.description,
+    potentialAction: {
+      "@type": "SearchAction",
+      target: {
+        "@type": "EntryPoint",
+        urlTemplate: "https://hn.algolia.com/?q={search_term_string}",
+      },
+      "query-input": "required name=search_term_string",
+    },
+  };
+
+  return html`<script type="application/ld+json">${raw(JSON.stringify(jsonLd))}</script>`;
+};
 
 // --- Helper: Count total comments recursively ---
 
@@ -193,12 +265,21 @@ export const renderNav = (activeFeed: FeedSlug | "saved"): HTML =>
     </nav>
   `;
 
+// --- Keyboard shortcut hint ---
+
+export const keyboardHint = (): HTML =>
+  html`
+    <button type="button" class="keyboard-hint" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (press ?)">
+      <kbd>?</kbd>
+    </button>
+  `;
+
 // --- Header bar with nav and theme toggle ---
 
 export const headerBar = (activeFeed: FeedSlug | "saved"): HTML =>
   html`
     <div class="header-bar">
-      ${renderNav(activeFeed)} ${themeToggle()}
+      ${renderNav(activeFeed)} ${keyboardHint()} ${themeToggle()}
     </div>
   `;
 

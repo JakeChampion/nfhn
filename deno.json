@@ -9,6 +9,10 @@
     "noFallthroughCasesInSwitch": true,
     "useUnknownInCatchVariables": true
   },
+  "tasks": {
+    "dev": "netlify dev",
+    "build:css": "deno run --allow-read --allow-write scripts/minify-css.ts"
+  },
   "lint": {
     "rules": {
       "include": ["recommended"]

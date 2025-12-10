@@ -22,6 +22,9 @@
     "*.{ts,tsx,js,jsx}": "deno fmt"
   },
   "scripts": {
+    "dev": "netlify dev",
+    "build": "npm run build:css",
+    "build:css": "deno run --allow-read --allow-write scripts/minify-css.ts",
     "test": "deno test --allow-net --allow-env tests/",
     "test:watch": "deno test --allow-net --allow-env --watch tests/",
     "test:coverage": "deno test --allow-net --allow-env --coverage=coverage tests/ && deno coverage coverage",
