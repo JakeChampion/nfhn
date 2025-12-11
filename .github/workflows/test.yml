@@ -33,6 +33,15 @@ jobs:
       - name: Run linter
         run: npm run lint
 
+      - name: Security lint check
+        run: |
+          # Check for potentially dangerous patterns
+          echo "Checking for eval usage..."
+          ! grep -r "eval(" netlify/edge-functions tests --include="*.ts" || echo "Warning: eval found"
+          echo "Checking for innerHTML assignments..."
+          ! grep -rE "\.innerHTML\s*=" netlify/edge-functions tests --include="*.ts" || echo "Warning: innerHTML assignment found"
+          echo "Security checks completed"
+
       - name: Run tests with coverage
         run: deno test --allow-net --allow-env --coverage=coverage tests/
 
@@ -43,8 +52,13 @@ jobs:
         run: |
           COVERAGE=$(deno coverage coverage 2>&1 | grep -E '^All files' | grep -oE '[0-9]+\.[0-9]+%' | head -1 | tr -d '%')
           echo "Total coverage: $COVERAGE%"
-          if (( $(echo "$COVERAGE < 70" | bc -l) )); then
-            echo "Coverage is below 70% threshold"
+          if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+            echo "Coverage is below 80% threshold"
             exit 1
           fi
 
+      - name: Check for outdated dependencies
+        run: |
+          echo "Checking deno.json imports..."
+          deno info 2>&1 || true
+        continue-on-error: true

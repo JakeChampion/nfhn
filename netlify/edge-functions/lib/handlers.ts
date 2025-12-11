@@ -234,10 +234,11 @@ export function handleNotFound(request: Request): Response {
 }
 
 /**
- * Validate username format - alphanumeric and underscores, 1-15 chars.
+ * Validate username format - alphanumeric, hyphens, underscores, 1-15 chars.
+ * HN usernames follow this pattern.
  */
 const isValidUsername = (username: string): boolean => {
-  return /^[a-zA-Z0-9_]{1,15}$/.test(username);
+  return /^[a-zA-Z0-9_-]{1,15}$/.test(username);
 };
 
 /**

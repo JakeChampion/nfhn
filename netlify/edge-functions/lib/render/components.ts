@@ -150,6 +150,10 @@ export const pwaHeadTags = (): HTML =>
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="NFHN">
     <link rel="apple-touch-icon" href="/icon.svg">
+    <link rel="preconnect" href="https://api.hnpwa.com" crossorigin>
+    <link rel="preconnect" href="https://hacker-news.firebaseio.com" crossorigin>
+    <link rel="dns-prefetch" href="https://api.hnpwa.com">
+    <link rel="dns-prefetch" href="https://hacker-news.firebaseio.com">
   `;
 
 // --- Service worker registration script ---
