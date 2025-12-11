@@ -163,6 +163,52 @@ export const serviceWorkerScript = (): HTML =>
     </script>
   `;
 
+// --- Text justification script (tex-linebreak) ---
+
+export const justifyScript = (): HTML =>
+  html`
+    <script>
+    (function() {
+      // Load tex-linebreak library and hyphenation dictionary
+      var libScript = document.createElement('script');
+      libScript.src = 'https://unpkg.com/tex-linebreak';
+      document.body.appendChild(libScript);
+
+      var dictScript = document.createElement('script');
+      dictScript.src = 'https://unpkg.com/tex-linebreak/dist/hyphens_en-us.js';
+      document.body.appendChild(dictScript);
+
+      var libLoaded = new Promise(function(resolve) { libScript.onload = resolve; });
+      var dictLoaded = new Promise(function(resolve) { dictScript.onload = resolve; });
+
+      function justify() {
+        if (!window.texLineBreak_lib) return;
+        var lib = window.texLineBreak_lib;
+        var hyphenate = lib.createHyphenator(window['texLineBreak_hyphens_en-us']);
+        // Target comment content paragraphs and article text content
+        var paragraphs = Array.from(document.querySelectorAll('details > div p, article > p'));
+        if (paragraphs.length > 0) {
+          lib.justifyContent(paragraphs, hyphenate);
+        }
+      }
+
+      Promise.all([libLoaded, dictLoaded]).then(justify).catch(function(err) {
+        console.error('tex-linebreak error:', err);
+      });
+
+      // Re-justify on window resize (debounced)
+      var resizeTimeout;
+      window.addEventListener('resize', function() {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(justify, 250);
+      });
+
+      // Re-justify after Turbo page loads
+      document.addEventListener('turbo:load', justify);
+    })();
+    </script>
+  `;
+
 // --- External link indicator script ---
 
 export const externalLinkScript = (): HTML =>

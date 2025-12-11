@@ -12,6 +12,7 @@ import {
   favoritesScript,
   getTypeMeta,
   headerBar,
+  justifyScript,
   keyboardNavScript,
   pwaHeadTags,
   readerModeLink,
@@ -125,6 +126,7 @@ const shellPage = (
       ${externalLinkScript()}
       ${themeScript()}
       ${serviceWorkerScript()}
+      ${justifyScript()}
       </body>
       </html>
     `;
