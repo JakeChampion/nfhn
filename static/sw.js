@@ -117,21 +117,39 @@ self.addEventListener('fetch', (event) => {
 function offlineResponse() {
   return new Response(
     `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="auto">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Offline | NFHN</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 100px auto; text-align: center; padding: 1em; }
-    h1 { margin-bottom: 0.5em; }
-    a { color: #ff7a18; }
-  </style>
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <link rel="stylesheet" href="/styles.css">
+  <script>
+    (function() {
+      const stored = localStorage.getItem('theme') || 'auto';
+      document.documentElement.setAttribute('data-theme', stored);
+    })();
+  </script>
 </head>
 <body>
-  <h1>You're offline</h1>
-  <p>Check your connection and <a href="">try again</a>.</p>
-  <p><a href="/saved">View your saved stories</a></p>
+  <main id="main-content" aria-label="Main content">
+    <div class="header-bar">
+      <nav class="nav-feeds" aria-label="Primary">
+        <a href="/top/1">Top</a>
+        <a href="/newest/1">New</a>
+        <a href="/ask/1">Ask</a>
+        <a href="/show/1">Show</a>
+        <a href="/jobs/1">Jobs</a>
+        <a href="/saved">Saved</a>
+      </nav>
+    </div>
+    <article class="offline-message">
+      <h1>You're offline</h1>
+      <p>It looks like you've lost your internet connection.</p>
+      <p>You can still <a href="/saved">view your saved stories</a> while offline.</p>
+      <p><a href="" class="more-link">Try again</a></p>
+    </article>
+  </main>
 </body>
 </html>`,
     { headers: { 'Content-Type': 'text/html' } }

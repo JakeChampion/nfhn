@@ -1230,6 +1230,29 @@ pre {
   margin: 0.5em 0;
 }
 
+.offline-message {
+  text-align: center;
+  padding: 3em 1em;
+}
+
+.offline-message h1 {
+  color: var(--text-strong);
+  margin-bottom: 0.5em;
+}
+
+.offline-message p {
+  margin: 0.75em 0;
+  color: var(--text-muted);
+}
+
+.offline-message a {
+  color: var(--brand, #ff7a18);
+}
+
+.offline-message .more-link {
+  margin-top: 1.5em;
+}
+
 .loading-message {
   text-align: center;
   padding: 2em 1em;
