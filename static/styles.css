@@ -1,8 +1,13 @@
 /* NFHN Styles */
 
+/* =============================================================================
+   Theme system using light-dark() CSS function (Baseline 2024)
+   ============================================================================= */
+
 /* Light theme (default) */
 :root,
 :root[data-theme="light"] {
+  color-scheme: light;
   --background: #f5f5f5;
   --background-elevated: #ffffff;
   --text-strong: #111827;
@@ -14,11 +19,11 @@
   --divider-color: black;
   --badge-bg: rgba(0, 0, 0, 0.04);
   --comment-bg: rgba(0, 0, 0, 0.02);
-  color-scheme: light;
 }
 
 /* Dark theme */
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --background: #0d1117;
   --background-elevated: #161b22;
   --text-strong: #f0f6fc;
@@ -30,31 +35,22 @@
   --divider-color: #30363d;
   --badge-bg: rgba(255, 255, 255, 0.06);
   --comment-bg: rgba(255, 255, 255, 0.03);
-  color-scheme: dark;
 }
 
 /* Auto theme - follows system preference */
-@media (prefers-color-scheme: dark) {
-  :root[data-theme="auto"] {
-    --background: #0d1117;
-    --background-elevated: #161b22;
-    --text-strong: #f0f6fc;
-    --text-primary: #c9d1d9;
-    --text-muted: #8b949e;
-    --text-secondary: #b1bac4;
-    --border-color: rgba(255, 255, 255, 0.1);
-    --border-subtle: rgba(255, 255, 255, 0.08);
-    --divider-color: #30363d;
-    --badge-bg: rgba(255, 255, 255, 0.06);
-    --comment-bg: rgba(255, 255, 255, 0.03);
-    color-scheme: dark;
-  }
-}
-
-@media (prefers-color-scheme: light) {
-  :root[data-theme="auto"] {
-    color-scheme: light;
-  }
+:root[data-theme="auto"] {
+  color-scheme: light dark;
+  --background: light-dark(#f5f5f5, #0d1117);
+  --background-elevated: light-dark(#ffffff, #161b22);
+  --text-strong: light-dark(#111827, #f0f6fc);
+  --text-primary: light-dark(#1f2937, #c9d1d9);
+  --text-muted: light-dark(#4b5563, #8b949e);
+  --text-secondary: light-dark(#374151, #b1bac4);
+  --border-color: light-dark(rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.1));
+  --border-subtle: light-dark(rgba(0, 0, 0, 0.08), rgba(255, 255, 255, 0.08));
+  --divider-color: light-dark(black, #30363d);
+  --badge-bg: light-dark(rgba(0, 0, 0, 0.04), rgba(255, 255, 255, 0.06));
+  --comment-bg: light-dark(rgba(0, 0, 0, 0.02), rgba(255, 255, 255, 0.03));
 }
 
 /* Theme toggle styles */
@@ -1602,4 +1598,92 @@ main {
   ::view-transition-new(*) {
     animation: none !important;
   }
+}
+
+/* =============================================================================
+   text-wrap: balance & pretty - Better text wrapping (Baseline 2024)
+   ============================================================================= */
+
+/* Balance short headings for better visual appearance */
+h1, h2, .story-title-text {
+  text-wrap: balance;
+}
+
+/* Pretty wrap for paragraphs - avoids orphans/widows */
+p, .comment-content, .story-meta {
+  text-wrap: pretty;
+}
+
+/* =============================================================================
+   Popover API styles (Baseline 2024)
+   ============================================================================= */
+
+/* Popover backdrop */
+[popover]::backdrop {
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+}
+
+/* Popover open state animations */
+[popover] {
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  background: var(--background-elevated);
+  color: var(--text-primary);
+  padding: 1.5em;
+  max-width: min(90vw, 400px);
+  
+  /* Entry animation */
+  opacity: 0;
+  transform: scale(0.95) translateY(-10px);
+  transition: 
+    opacity 150ms ease-out,
+    transform 150ms ease-out,
+    overlay 150ms ease-out allow-discrete,
+    display 150ms ease-out allow-discrete;
+}
+
+[popover]:popover-open {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+/* Starting style for entry animation */
+@starting-style {
+  [popover]:popover-open {
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+  }
+}
+
+/* =============================================================================
+   Share button styles
+   ============================================================================= */
+
+.share-btn {
+  display: none; /* Hidden by default, shown via JS if Web Share API available */
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0.25em;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.share-btn:hover {
+  color: var(--text-primary);
+  background: var(--badge-bg);
+}
+
+.share-btn svg {
+  display: block;
+  fill: currentColor;
+}
+
+/* Show share button when Web Share API is available */
+.can-share .share-btn {
+  display: inline-flex;
 }

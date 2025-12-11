@@ -92,6 +92,9 @@ document.querySelectorAll('a[href^="http"]').forEach((link) => {
   const modal = document.getElementById("shortcuts-modal");
   if (!modal) return;
 
+  // Detect if the element uses Popover API or is a dialog
+  const isPopover = modal.hasAttribute("popover");
+
   function announce(message) {
     if (liveRegion) liveRegion.textContent = message;
   }
@@ -147,13 +150,28 @@ document.querySelectorAll('a[href^="http"]').forEach((link) => {
   }
 
   function showModal() {
-    modal.showModal();
+    if (isPopover) {
+      modal.showPopover();
+    } else {
+      modal.showModal();
+    }
     const closeBtn = modal.querySelector(".modal-close");
     if (closeBtn) closeBtn.focus();
   }
 
   function hideModal() {
-    modal.close();
+    if (isPopover) {
+      modal.hidePopover();
+    } else {
+      modal.close();
+    }
+  }
+
+  function isModalOpen() {
+    if (isPopover) {
+      return modal.matches(":popover-open");
+    }
+    return modal.open;
   }
 
   modal.addEventListener("click", function (e) {
@@ -162,13 +180,20 @@ document.querySelectorAll('a[href^="http"]').forEach((link) => {
 
   const settingsMenu = document.getElementById("settings-menu");
   if (settingsMenu) {
+    const isSettingsPopover = settingsMenu.hasAttribute("popover");
     settingsMenu.addEventListener("click", function (e) {
-      if (e.target === settingsMenu) settingsMenu.close();
+      if (e.target === settingsMenu) {
+        if (isSettingsPopover) {
+          settingsMenu.hidePopover();
+        } else {
+          settingsMenu.close();
+        }
+      }
     });
   }
 
   document.addEventListener("keydown", function (e) {
-    if (modal.open && e.key === "Escape") {
+    if (isModalOpen() && e.key === "Escape") {
       e.preventDefault();
       hideModal();
       return;
@@ -396,4 +421,67 @@ document.querySelectorAll('a[href^="http"]').forEach((link) => {
 
     renderSavedStories();
   }
+})();
+
+// --- Web Share API ---
+(function initWebShare() {
+  // Check if Web Share API is supported
+  if (!navigator.share) {
+    // Hide share buttons if not supported
+    document.documentElement.classList.add("no-share");
+    return;
+  }
+
+  // Add class to enable share buttons via CSS
+  document.documentElement.classList.add("can-share");
+
+  // Handle share button clicks
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest(".share-btn");
+    if (!btn) return;
+
+    e.preventDefault();
+
+    const title = btn.dataset.shareTitle || document.title;
+    const url = btn.dataset.shareUrl || window.location.href;
+
+    navigator.share({
+      title: title,
+      url: url,
+    }).catch(function (err) {
+      // User cancelled or share failed silently
+      if (err.name !== "AbortError") {
+        console.error("Share failed:", err);
+      }
+    });
+  });
+})();
+
+// --- Navigation API for View Transitions ---
+(function initNavigationAPI() {
+  // Use Navigation API if available for enhanced view transitions
+  if (!("navigation" in window)) return;
+
+  let lastDirection = null;
+
+  navigation.addEventListener("navigate", function (e) {
+    // Determine navigation direction for view transition animations
+    const currentIndex = navigation.currentEntry?.index ?? 0;
+    const destinationIndex = e.destination?.index ?? currentIndex;
+
+    if (destinationIndex < currentIndex) {
+      lastDirection = "backward";
+    } else if (destinationIndex > currentIndex) {
+      lastDirection = "forward";
+    } else {
+      lastDirection = null;
+    }
+
+    // Set direction as data attribute for CSS view transitions
+    if (lastDirection) {
+      document.documentElement.dataset.navDirection = lastDirection;
+    } else {
+      delete document.documentElement.dataset.navDirection;
+    }
+  });
 })();

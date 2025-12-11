@@ -15,12 +15,48 @@ import {
   pwaHeadTags,
   readerModeLink,
   renderStory,
+  shareButton,
   sharedStyles,
   skipLink,
   themeScript,
   userLink,
   websiteJsonLd,
 } from "./components.ts";
+
+// --- Speculation Rules for prefetching/prerendering ---
+// Uses the declarative Speculation Rules API (Chrome 109+)
+// Replaces JavaScript-based prefetch with native browser prefetching
+
+const speculationRules = (): HTML =>
+  tpl`<script type="speculationrules">
+{
+  "prerender": [
+    {
+      "where": {
+        "and": [
+          { "href_matches": "/*" },
+          { "not": { "href_matches": "/saved" } },
+          { "not": { "href_matches": "/reader*" } },
+          { "not": { "selector_matches": ".external-link" } }
+        ]
+      },
+      "eagerness": "moderate"
+    }
+  ],
+  "prefetch": [
+    {
+      "where": {
+        "and": [
+          { "href_matches": "/*" },
+          { "not": { "href_matches": "/saved" } },
+          { "not": { "href_matches": "/reader*" } }
+        ]
+      },
+      "eagerness": "conservative"
+    }
+  ]
+}
+</script>`;
 
 // --- Inline script to set theme before page renders (prevents flash) ---
 // This script must match the hash in config.ts CSP_DIRECTIVES
@@ -76,6 +112,7 @@ export const home = (
       <a href="/${feed}/${pageNumber + 1}" class="more-link">More</a>
     </main>
     ${keyboardNavScript()}
+    ${speculationRules()}
     ${themeScript()}
   </body>
 </html>
@@ -191,6 +228,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
             `}
           <div class="article-actions">
             ${item.url ? readerModeLink(item.url) : ""}
+            ${shareButton(item)}
             ${bookmarkButton(item)}
           </div>
           <hr />

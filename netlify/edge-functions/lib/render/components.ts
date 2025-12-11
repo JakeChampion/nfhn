@@ -254,8 +254,7 @@ export const keyboardHint = (): HTML =>
     <button
       type="button"
       class="keyboard-hint"
-      commandfor="shortcuts-modal"
-      command="show-modal"
+      popovertarget="shortcuts-modal"
       aria-label="Keyboard shortcuts"
       title="Keyboard shortcuts (press ?)"
     >
@@ -263,23 +262,23 @@ export const keyboardHint = (): HTML =>
     </button>
   `;
 
-// --- Settings menu dialog ---
+// --- Settings menu popover ---
 
 export const settingsMenu = (): HTML =>
   html`
-    <dialog id="settings-menu" class="settings-menu">
+    <div id="settings-menu" class="settings-menu" popover>
       <h2>Settings</h2>
       ${themeToggle()} ${keyboardHint()}
       <button
         type="button"
         class="modal-close"
-        commandfor="settings-menu"
-        command="close"
+        popovertarget="settings-menu"
+        popovertargetaction="hide"
         aria-label="Close"
       >
         ×
       </button>
-    </dialog>
+    </div>
   `;
 
 // --- Settings menu button ---
@@ -289,8 +288,7 @@ export const settingsMenuButton = (): HTML =>
     <button
       type="button"
       class="settings-menu-btn"
-      commandfor="settings-menu"
-      command="show-modal"
+      popovertarget="settings-menu"
       aria-label="Settings menu"
       title="Settings"
     >
@@ -316,7 +314,7 @@ export const headerBar = (activeFeed: FeedSlug | "saved"): HTML =>
 export const keyboardNavScript = (): HTML =>
   html`
     <div id="aria-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
-    <dialog id="shortcuts-modal" class="shortcuts-modal">
+    <div id="shortcuts-modal" class="shortcuts-modal" popover>
       <h2>Keyboard Shortcuts</h2>
       <dl class="shortcuts-list">
         <dt><kbd>j</kbd></dt>
@@ -333,13 +331,13 @@ export const keyboardNavScript = (): HTML =>
       <button
         type="button"
         class="modal-close"
-        commandfor="shortcuts-modal"
-        command="close"
+        popovertarget="shortcuts-modal"
+        popovertargetaction="hide"
         aria-label="Close"
       >
         ×
       </button>
-    </dialog>
+    </div>
   `;
 
 // --- User link ---
@@ -381,6 +379,26 @@ export const readerModeLink = (url: string | undefined): HTML => {
     </a>
   `;
 };
+
+// --- Share button ---
+
+export const shareButton = (item: Item): HTML =>
+  html`
+    <button
+      type="button"
+      class="share-btn"
+      data-share-title="${item.title}"
+      data-share-url="${item.url || `https://nfhn.netlify.app/item/${item.id}`}"
+      title="Share story"
+      aria-label="Share story"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+        <path
+          d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"
+        />
+      </svg>
+    </button>
+  `;
 
 // --- Bookmark/Save button ---
 
@@ -436,7 +454,7 @@ export const renderStory = (data: Item): HTML => {
         <a class="comments" href="/item/${data.id}">
           view ${data.comments_count > 0 ? data.comments_count + " comments" : "discussion"}
         </a>
-        ${bookmarkButton(data)}
+        ${shareButton(data)} ${bookmarkButton(data)}
       </div>
     </li>
   `;

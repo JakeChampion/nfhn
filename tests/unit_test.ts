@@ -822,13 +822,13 @@ Deno.test("keyboardNavScript: includes shortcuts modal", async () => {
   assertEquals(result.includes("Keyboard Shortcuts"), true);
 });
 
-// Note: keyboardNavScript now returns only the modal markup, with JS logic moved to external app.js
-// These tests verify the modal HTML is properly generated
+// Note: keyboardNavScript now uses Popover API instead of dialog, with JS logic in external app.js
+// These tests verify the popover HTML is properly generated
 
 Deno.test("keyboardNavScript: modal has proper close button", async () => {
   const result = await htmlToString(keyboardNavScript());
   assertEquals(result.includes('aria-label="Close"'), true);
-  assertEquals(result.includes('command="close"'), true);
+  assertEquals(result.includes('popovertargetaction="hide"'), true);
 });
 
 Deno.test("keyboardNavScript: modal includes all shortcut descriptions", async () => {
