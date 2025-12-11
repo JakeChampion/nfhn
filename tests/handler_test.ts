@@ -1017,10 +1017,10 @@ Deno.test("item page highlights OP comments", async () => {
 // MAX_ITEM_ID Validation Test
 // =============================================================================
 
-Deno.test("returns 404 for item ID above MAX_ITEM_ID", async () => {
+Deno.test("returns 400 for item ID above MAX_ITEM_ID", async () => {
   await withMockedEnv({}, async () => {
     const res = await handler(new Request("https://nfhn.test/item/999999999"));
-    assertEquals(res.status, 404);
+    assertEquals(res.status, 400);
     const body = await res.text();
     assertStringIncludes(body, "too large");
   });
@@ -1209,10 +1209,10 @@ Deno.test("serves jobs stories page", async () => {
   });
 });
 
-Deno.test("returns 404 for page number too large", async () => {
+Deno.test("returns 400 for page number too large", async () => {
   await withMockedEnv({}, async () => {
     const res = await handler(new Request("https://nfhn.test/top/999"));
-    assertEquals(res.status, 404);
+    assertEquals(res.status, 400);
     const body = await res.text();
     assertStringIncludes(body, "too large");
   });
@@ -1289,7 +1289,7 @@ Deno.test("handles invalid username with special characters", async () => {
 Deno.test("handles username too long", async () => {
   await withMockedEnv({}, async () => {
     const res = await handler(new Request("https://nfhn.test/user/thisisaverylongusername"));
-    assertEquals(res.status, 404);
+    assertEquals(res.status, 400);
     const body = await res.text();
     assertStringIncludes(body, "invalid");
   });

@@ -6,11 +6,7 @@ import { escape, html, htmlToString, raw, unsafeHTML } from "../netlify/edge-fun
 import { formatTimeAgo, type HNAPIItem, mapStoryToItem } from "../netlify/edge-functions/lib/hn.ts";
 import { buildContentSecurityPolicy } from "../netlify/edge-functions/lib/security.ts";
 import { parsePositiveInt, redirect } from "../netlify/edge-functions/lib/handlers.ts";
-import {
-  externalLinkScript,
-  pwaHeadTags,
-  serviceWorkerScript,
-} from "../netlify/edge-functions/lib/render/components.ts";
+import { pwaHeadTags } from "../netlify/edge-functions/lib/render/components.ts";
 
 // =============================================================================
 // HTML Escape Tests
@@ -390,9 +386,9 @@ Deno.test("buildContentSecurityPolicy: contains object-src none", () => {
   assertEquals(csp.includes("object-src 'none'"), true);
 });
 
-Deno.test("buildContentSecurityPolicy: contains trusted-types", () => {
+Deno.test("buildContentSecurityPolicy: contains upgrade-insecure-requests", () => {
   const csp = buildContentSecurityPolicy();
-  assertEquals(csp.includes("trusted-types"), true);
+  assertEquals(csp.includes("upgrade-insecure-requests"), true);
 });
 
 Deno.test("buildContentSecurityPolicy: directives are semicolon-separated", () => {
@@ -590,17 +586,18 @@ Deno.test("userLink: escapes username in href and content", async () => {
   assertEquals(result.includes("&lt;script&gt;"), true);
 });
 
-Deno.test("keyboardNavScript: includes j/k navigation", async () => {
+Deno.test("keyboardNavScript: includes shortcuts modal markup", async () => {
   const result = await htmlToString(keyboardNavScript());
-  assertEquals(result.includes("case 'j':"), true);
-  assertEquals(result.includes("case 'k':"), true);
-  assertEquals(result.includes("kbd-focus"), true);
+  assertEquals(result.includes("shortcuts-modal"), true);
+  assertEquals(result.includes("Keyboard Shortcuts"), true);
 });
 
-Deno.test("keyboardNavScript: includes Enter/o to open", async () => {
+Deno.test("keyboardNavScript: documents j/k shortcut keys", async () => {
   const result = await htmlToString(keyboardNavScript());
-  assertEquals(result.includes("case 'Enter':"), true);
-  assertEquals(result.includes("case 'o':"), true);
+  assertEquals(result.includes("<kbd>j</kbd>"), true);
+  assertEquals(result.includes("<kbd>k</kbd>"), true);
+  assertEquals(result.includes("Next item"), true);
+  assertEquals(result.includes("Previous item"), true);
 });
 
 Deno.test("renderComment: links username to profile", async () => {
@@ -825,16 +822,21 @@ Deno.test("keyboardNavScript: includes shortcuts modal", async () => {
   assertEquals(result.includes("Keyboard Shortcuts"), true);
 });
 
-Deno.test("keyboardNavScript: includes ? key handler", async () => {
+// Note: keyboardNavScript now returns only the modal markup, with JS logic moved to external app.js
+// These tests verify the modal HTML is properly generated
+
+Deno.test("keyboardNavScript: modal has proper close button", async () => {
   const result = await htmlToString(keyboardNavScript());
-  assertEquals(result.includes("e.key === '?'"), true);
-  assertEquals(result.includes("showModal()"), true);
+  assertEquals(result.includes('aria-label="Close"'), true);
+  assertEquals(result.includes('command="close"'), true);
 });
 
-Deno.test("keyboardNavScript: includes Escape handler", async () => {
+Deno.test("keyboardNavScript: modal includes all shortcut descriptions", async () => {
   const result = await htmlToString(keyboardNavScript());
-  assertEquals(result.includes("case 'Escape'"), true);
-  assertEquals(result.includes("clearSelection()"), true);
+  assertEquals(result.includes("Next item"), true);
+  assertEquals(result.includes("Previous item"), true);
+  assertEquals(result.includes("Open selected item"), true);
+  assertEquals(result.includes("Show this help"), true);
 });
 
 // =============================================================================
@@ -858,46 +860,11 @@ Deno.test("pwaHeadTags: includes theme-color", async () => {
   assertEquals(result.includes("#ff7a18"), true);
 });
 
-Deno.test("serviceWorkerScript: registers service worker", async () => {
-  const result = await htmlToString(serviceWorkerScript());
-  assertEquals(result.includes("serviceWorker.register"), true);
-  assertEquals(result.includes("/sw.js"), true);
-});
-
-Deno.test("serviceWorkerScript: handles registration errors", async () => {
-  const result = await htmlToString(serviceWorkerScript());
-  assertEquals(result.includes(".catch"), true);
-});
-
-Deno.test("externalLinkScript: detects external links", async () => {
-  const result = await htmlToString(externalLinkScript());
-  assertEquals(result.includes("querySelectorAll('a[href^=\"http\"]')"), true);
-});
-
-Deno.test("externalLinkScript: adds external-link class", async () => {
-  const result = await htmlToString(externalLinkScript());
-  assertEquals(result.includes("classList.add('external-link')"), true);
-});
-
-Deno.test("externalLinkScript: adds screen reader text", async () => {
-  const result = await htmlToString(externalLinkScript());
-  assertEquals(result.includes("sr-only"), true);
-  assertEquals(result.includes("opens in new tab"), true);
-});
-
-Deno.test("externalLinkScript: checks origin for external links", async () => {
-  const result = await htmlToString(externalLinkScript());
-  assertEquals(result.includes("location.origin"), true);
-});
-
 // =============================================================================
 // Circuit Breaker Tests
 // =============================================================================
 
-import {
-  getCircuitBreakerState,
-  resetCircuitBreaker,
-} from "../netlify/edge-functions/lib/hn.ts";
+import { getCircuitBreakerState, resetCircuitBreaker } from "../netlify/edge-functions/lib/hn.ts";
 
 Deno.test("circuit breaker: initial state is closed", () => {
   resetCircuitBreaker();
@@ -1159,9 +1126,15 @@ Deno.test("toNFHNError: wraps string errors", () => {
 // =============================================================================
 
 Deno.test("html: handles deeply nested templates", async () => {
-  const level3 = html`<span>deep</span>`;
-  const level2 = html`<div>${level3}</div>`;
-  const level1 = html`<section>${level2}</section>`;
+  const level3 = html`
+    <span>deep</span>
+  `;
+  const level2 = html`
+    <div>${level3}</div>
+  `;
+  const level1 = html`
+    <section>${level2}</section>
+  `;
   const result = (await htmlToString(level1)).trim();
   assertEquals(result, "<section><div><span>deep</span></div></section>");
 });
@@ -1169,7 +1142,11 @@ Deno.test("html: handles deeply nested templates", async () => {
 Deno.test("html: handles mixed arrays and templates", async () => {
   const items = [1, 2, 3];
   const result = (await htmlToString(html`
-    <ul>${items.map((n) => html`<li>${n}</li>`)}</ul>
+    <ul>${items.map((n) =>
+      html`
+        <li>${n}</li>
+      `
+    )}</ul>
   `)).trim();
   assertEquals(result, "<ul><li>1</li><li>2</li><li>3</li></ul>");
 });
@@ -1178,8 +1155,16 @@ Deno.test("html: handles conditional rendering", async () => {
   const showContent = true;
   const hideContent = false;
   const result = (await htmlToString(html`
-    <div>${showContent ? html`<span>visible</span>` : ""}</div>
-    <div>${hideContent ? html`<span>hidden</span>` : ""}</div>
+    <div>${showContent
+      ? html`
+        <span>visible</span>
+      `
+      : ""}</div>
+    <div>${hideContent
+      ? html`
+        <span>hidden</span>
+      `
+      : ""}</div>
   `)).trim();
   assertEquals(result.includes("visible"), true);
   assertEquals(result.includes("hidden"), false);

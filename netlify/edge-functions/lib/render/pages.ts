@@ -8,8 +8,6 @@ import {
   commentsSection,
   countComments,
   estimateReadingTime,
-  externalLinkScript,
-  favoritesScript,
   getTypeMeta,
   headerBar,
   justifyScript,
@@ -17,19 +15,19 @@ import {
   pwaHeadTags,
   readerModeLink,
   renderStory,
-  serviceWorkerScript,
   sharedStyles,
   skipLink,
   themeScript,
-  turboScript,
   userLink,
   websiteJsonLd,
 } from "./components.ts";
 
 // --- Inline script to set theme before page renders (prevents flash) ---
+// This script must match the hash in config.ts CSP_DIRECTIVES
+// Hash: sha256-aa72PHEwNOBVTHaG/ayYpxdOJImxtHfAuO+pszB1UHA=
 
 const themeInitScript = (): HTML =>
-  tpl`<script>document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'auto');</script>`;
+  tpl`<script>document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'auto');</script>`;
 
 // --- Home page (feed listing) ---
 
@@ -77,12 +75,8 @@ export const home = (
       </ol>
       <a href="/${feed}/${pageNumber + 1}" class="more-link">More</a>
     </main>
-    ${turboScript()}
     ${keyboardNavScript()}
-    ${externalLinkScript()}
     ${themeScript()}
-    ${favoritesScript()}
-    ${serviceWorkerScript()}
   </body>
 </html>
 `;
@@ -123,9 +117,7 @@ const shellPage = (
     yield* body;
 
     yield* tpl`
-      ${externalLinkScript()}
       ${themeScript()}
-      ${serviceWorkerScript()}
       ${justifyScript()}
       </body>
       </html>
@@ -205,9 +197,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
           ${unsafeHTML(item.content || "")} ${commentsSection(item.comments, opUser)}
         </article>
       </main>
-      ${turboScript()}
       ${keyboardNavScript()}
-      ${favoritesScript()}
     `,
     canonicalUrl,
     `Hacker News discussion: ${item.title}`,
@@ -286,7 +276,6 @@ export const userProfile = (
           </p>
         </article>
       </main>
-      ${turboScript()}
       ${keyboardNavScript()}
     `,
     canonicalUrl,
@@ -328,12 +317,9 @@ export const savedPage = (canonicalUrl?: string): HTML =>
         <p class="loading-message">Loading saved stories...</p>
       </div>
     </main>
-    ${turboScript()}
     ${keyboardNavScript()}
-    ${externalLinkScript()}
     ${themeScript()}
     ${savedPageScript()}
-    ${serviceWorkerScript()}
   </body>
 </html>
 `;

@@ -1,39 +1,27 @@
 // Service Worker for NFHN
-const CACHE_NAME = 'nfhn-__DEPLOY_ID__';
-const SAVED_CACHE_NAME = 'nfhn-saved-v1';
+const CACHE_NAME = "nfhn-__DEPLOY_ID__";
+const SAVED_CACHE_NAME = "nfhn-saved-v1";
 const STATIC_ASSETS = [
-  '/styles.css',
-  '/icon.svg',
-  '/manifest.json',
-  '/saved'
+  "/styles.css",
+  "/icon.svg",
+  "/manifest.json",
+  "/app.js",
+  "/offline.html",
+  "/saved",
 ];
 
 // Install - cache static assets
-self.addEventListener('install', (event) => {
+self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(STATIC_ASSETS);
-    })
+    }),
   );
   self.skipWaiting();
 });
 
-// Activate - clean up old caches
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME && name !== SAVED_CACHE_NAME)
-          .map((name) => caches.delete(name))
-      );
-    })
-  );
-  self.clients.claim();
-});
-
 // Fetch - network first, fallback to cache
-self.addEventListener('fetch', (event) => {
+self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
@@ -46,13 +34,13 @@ self.addEventListener('fetch', (event) => {
         return caches.open(SAVED_CACHE_NAME).then((cache) => {
           return cache.match(request);
         });
-      })
+      }),
     );
     return;
   }
 
   // Static assets - cache first
-  if (STATIC_ASSETS.some(asset => url.pathname === asset)) {
+  if (STATIC_ASSETS.some((asset) => url.pathname === asset)) {
     event.respondWith(
       caches.match(request).then((cached) => {
         return cached || fetch(request).then((response) => {
@@ -60,13 +48,13 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
           return response;
         });
-      })
+      }),
     );
     return;
   }
 
   // Item pages - cache aggressively for saved stories
-  if (url.pathname.startsWith('/item/')) {
+  if (url.pathname.startsWith("/item/")) {
     event.respondWith(
       fetch(request)
         .then((response) => {
@@ -89,13 +77,13 @@ self.addEventListener('fetch', (event) => {
               });
             });
           });
-        })
+        }),
     );
     return;
   }
 
   // HTML pages - network first with offline fallback
-  if (request.headers.get('accept')?.includes('text/html')) {
+  if (request.headers.get("accept")?.includes("text/html")) {
     event.respondWith(
       fetch(request)
         .then((response) => {
@@ -111,23 +99,28 @@ self.addEventListener('fetch', (event) => {
           return caches.match(request).then((cached) => {
             if (cached) return cached;
             // If this is the saved page, serve it from cache
-            if (url.pathname === '/saved') {
-              return caches.match('/saved').then((savedPage) => {
+            if (url.pathname === "/saved") {
+              return caches.match("/saved").then((savedPage) => {
                 if (savedPage) return savedPage;
                 return offlineResponse();
               });
             }
             return offlineResponse();
           });
-        })
+        }),
     );
     return;
   }
 });
 
 function offlineResponse() {
-  return new Response(
-    `<!DOCTYPE html>
+  // Try to serve the cached offline page first
+  return caches.match("/offline.html").then((cached) => {
+    if (cached) return cached;
+
+    // Fallback inline offline page if offline.html isn't cached
+    return new Response(
+      `<!DOCTYPE html>
 <html lang="en" data-theme="auto">
 <head>
   <meta charset="UTF-8">
@@ -135,12 +128,7 @@ function offlineResponse() {
   <title>Offline | NFHN</title>
   <link rel="icon" type="image/svg+xml" href="/icon.svg">
   <link rel="stylesheet" href="/styles.css">
-  <script>
-    (function() {
-      const stored = localStorage.getItem('theme') || 'auto';
-      document.documentElement.setAttribute('data-theme', stored);
-    })();
-  </script>
+  <script>document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'auto');</script>
 </head>
 <body>
   <main id="main-content" aria-label="Main content">
@@ -154,25 +142,26 @@ function offlineResponse() {
         <a href="/saved">Saved</a>
       </nav>
     </div>
-    <article class="offline-message">
+    <div style="max-width:600px;margin:2rem auto;padding:1rem;text-align:center">
       <h1>You're offline</h1>
       <p>It looks like you've lost your internet connection.</p>
       <p>You can still <a href="/saved">view your saved stories</a> while offline.</p>
-      <p><a href="" class="more-link">Try again</a></p>
-    </article>
+      <p><a href="" onclick="location.reload();return false">Try again</a></p>
+    </div>
   </main>
 </body>
 </html>`,
-    { headers: { 'Content-Type': 'text/html' } }
-  );
+      { headers: { "Content-Type": "text/html" } },
+    );
+  });
 }
 
 // Listen for messages from clients to cache specific item pages
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'CACHE_ITEM') {
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "CACHE_ITEM") {
     const itemUrl = event.data.url;
     const externalUrl = event.data.externalUrl;
-    
+
     caches.open(SAVED_CACHE_NAME).then((cache) => {
       // Cache the item page
       fetch(itemUrl).then((response) => {
@@ -180,19 +169,20 @@ self.addEventListener('message', (event) => {
           cache.put(itemUrl, response);
         }
       }).catch(() => {
-        // Silently fail if offline
+        // Silently fail if offline - queue for background sync
+        queueCacheAction("cache", itemUrl, externalUrl);
       });
-      
+
       // Cache the external URL if it exists
       if (externalUrl) {
-        fetch(externalUrl, { mode: 'no-cors' }).then((response) => {
+        fetch(externalUrl, { mode: "no-cors" }).then((response) => {
           cache.put(externalUrl, response);
         }).catch(() => {
           // Silently fail - external site may block requests
         });
-        
+
         // Cache the reader version (same-origin, so no special mode needed)
-        const readerUrl = '/reader/' + externalUrl;
+        const readerUrl = "/reader/" + externalUrl;
         fetch(readerUrl).then((response) => {
           if (response.ok) {
             cache.put(readerUrl, response);
@@ -203,18 +193,137 @@ self.addEventListener('message', (event) => {
       }
     });
   }
-  
-  if (event.data && event.data.type === 'UNCACHE_ITEM') {
+
+  if (event.data && event.data.type === "UNCACHE_ITEM") {
     const itemUrl = event.data.url;
     const externalUrl = event.data.externalUrl;
-    
+
     caches.open(SAVED_CACHE_NAME).then((cache) => {
       cache.delete(itemUrl);
-      
+
       if (externalUrl) {
         cache.delete(externalUrl);
-        cache.delete('/reader/' + externalUrl);
+        cache.delete("/reader/" + externalUrl);
       }
     });
   }
+});
+
+// --- Background Sync Support ---
+// Queue actions for when connectivity is restored
+
+const SYNC_QUEUE_NAME = "nfhn-sync-queue";
+
+// Store pending actions in IndexedDB for persistence
+function openSyncDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open("nfhn-sync", 1);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains("queue")) {
+        db.createObjectStore("queue", { keyPath: "id", autoIncrement: true });
+      }
+    };
+  });
+}
+
+async function queueCacheAction(action, itemUrl, externalUrl) {
+  try {
+    const db = await openSyncDB();
+    const tx = db.transaction("queue", "readwrite");
+    const store = tx.objectStore("queue");
+    store.add({
+      action,
+      itemUrl,
+      externalUrl,
+      timestamp: Date.now(),
+    });
+
+    // Request background sync if available
+    if ("sync" in self.registration) {
+      await self.registration.sync.register("cache-items");
+    }
+  } catch (e) {
+    console.error("Failed to queue cache action:", e);
+  }
+}
+
+async function processQueuedActions() {
+  try {
+    const db = await openSyncDB();
+    const tx = db.transaction("queue", "readwrite");
+    const store = tx.objectStore("queue");
+    const queue = await new Promise((resolve, reject) => {
+      const request = store.getAll();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+
+    const cache = await caches.open(SAVED_CACHE_NAME);
+
+    for (const item of queue) {
+      try {
+        if (item.action === "cache") {
+          const response = await fetch(item.itemUrl);
+          if (response.ok) {
+            await cache.put(item.itemUrl, response);
+          }
+
+          if (item.externalUrl) {
+            try {
+              const extResponse = await fetch(item.externalUrl, { mode: "no-cors" });
+              await cache.put(item.externalUrl, extResponse);
+            } catch {
+              // External URL may be blocked
+            }
+
+            try {
+              const readerResponse = await fetch("/reader/" + item.externalUrl);
+              if (readerResponse.ok) {
+                await cache.put("/reader/" + item.externalUrl, readerResponse);
+              }
+            } catch {
+              // Reader service may be unavailable
+            }
+          }
+        }
+
+        // Remove processed item from queue
+        store.delete(item.id);
+      } catch (e) {
+        console.error("Failed to process queued action:", e);
+        // Keep in queue for retry
+      }
+    }
+  } catch (e) {
+    console.error("Failed to process sync queue:", e);
+  }
+}
+
+// Handle background sync event
+self.addEventListener("sync", (event) => {
+  if (event.tag === "cache-items") {
+    event.waitUntil(processQueuedActions());
+  }
+});
+
+// Also process queue when service worker activates (user comes back)
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    Promise.all([
+      // Clean up old caches
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames
+            .filter((name) => name !== CACHE_NAME && name !== SAVED_CACHE_NAME)
+            .map((name) => caches.delete(name)),
+        );
+      }),
+      // Process any queued actions
+      processQueuedActions(),
+    ]),
+  );
+  self.clients.claim();
 });

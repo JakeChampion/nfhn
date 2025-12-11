@@ -20,6 +20,10 @@ export const applySecurityHeaders = (headers: Headers): Headers => {
     "Strict-Transport-Security",
     "max-age=63072000; includeSubDomains; preload",
   );
+  // Early hint for CSS preload - improves LCP by starting CSS download before HTML parsing
+  if (!headers.has("Link")) {
+    headers.set("Link", "</styles.css>; rel=preload; as=style");
+  }
   return headers;
 };
 

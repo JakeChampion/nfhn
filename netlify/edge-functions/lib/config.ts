@@ -43,7 +43,13 @@ export const CIRCUIT_BREAKER_RESET_MS = 30_000; // 30 seconds
 export const RATE_LIMIT_REQUESTS_PER_MINUTE = 60;
 export const RATE_LIMIT_BURST = 10;
 
+// SHA-256 hash of the critical theme init inline script
+// Script: document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'auto');
+export const THEME_SCRIPT_HASH = "'sha256-aa72PHEwNOBVTHaG/ayYpxdOJImxtHfAuO+pszB1UHA='";
+
 // Content Security Policy directives
+// Note: unsafe-inline for styles is needed for dynamic counter-set on <ol>
+// Script unsafe-inline is replaced with a hash for the critical theme init script
 export const CSP_DIRECTIVES = [
   "default-src 'self'",
   "style-src 'self' 'unsafe-inline'",
@@ -51,13 +57,11 @@ export const CSP_DIRECTIVES = [
   "font-src 'self'",
   "img-src 'self' data:",
   "connect-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  `script-src 'self' ${THEME_SCRIPT_HASH}`,
   "script-src-attr 'none'",
   "object-src 'none'",
   "frame-ancestors 'none'",
   "base-uri 'none'",
   "form-action 'none'",
-  "require-trusted-types-for 'script'",
-  "trusted-types nfhn",
   "upgrade-insecure-requests",
 ] as const;
