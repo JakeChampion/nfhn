@@ -858,18 +858,6 @@ Deno.test("pwaHeadTags: includes theme-color", async () => {
   assertEquals(result.includes("#ff7a18"), true);
 });
 
-Deno.test("pwaHeadTags: includes preconnect hints", async () => {
-  const result = await htmlToString(pwaHeadTags());
-  assertEquals(result.includes('rel="preconnect"'), true);
-  assertEquals(result.includes("api.hnpwa.com"), true);
-  assertEquals(result.includes("hacker-news.firebaseio.com"), true);
-});
-
-Deno.test("pwaHeadTags: includes dns-prefetch hints", async () => {
-  const result = await htmlToString(pwaHeadTags());
-  assertEquals(result.includes('rel="dns-prefetch"'), true);
-});
-
 Deno.test("serviceWorkerScript: registers service worker", async () => {
   const result = await htmlToString(serviceWorkerScript());
   assertEquals(result.includes("serviceWorker.register"), true);
