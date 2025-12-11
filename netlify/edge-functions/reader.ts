@@ -2,12 +2,13 @@ import { Readability } from "./lib/readability.js";
 // deno-lint-ignore no-import-prefix
 import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.45/deno-dom-wasm.ts";
 
-export default async (req) => {
+export default async (req: Request) => {
   let status = 200;
   let contents = "Append a URL in the address bar to begin.";
 
+  // need to slice off /reader/
   const requestUrl = new URL(req.url);
-  const url = requestUrl.pathname.slice(1);
+  const url = requestUrl.pathname.slice(8);
 
   if (url) {
     const pageUrl = new URL(url);
