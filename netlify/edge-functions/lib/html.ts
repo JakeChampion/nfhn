@@ -2,21 +2,56 @@ type Primitive = string | number | boolean | null | undefined;
 
 const RAW_HTML_SYMBOL = Symbol("RawHTML");
 
+/**
+ * Represents pre-escaped HTML that should not be escaped again.
+ * Created via the `raw()` or `unsafeHTML()` functions.
+ */
 export interface RawHTML {
   readonly [RAW_HTML_SYMBOL]: true;
   readonly __raw: string;
 }
 
+/**
+ * Create a RawHTML object from a trusted HTML string.
+ * The content will NOT be escaped when interpolated into templates.
+ *
+ * @param html - The trusted HTML string
+ * @returns A RawHTML object that bypasses escaping
+ *
+ * @example
+ * ```ts
+ * const trusted = raw("<strong>Bold</strong>");
+ * html`<div>${trusted}</div>`; // <div><strong>Bold</strong></div>
+ * ```
+ */
 export const raw = (html: string): RawHTML => ({
   [RAW_HTML_SYMBOL]: true,
   __raw: html,
 });
 
+/**
+ * Alias for `raw()`. Creates a RawHTML object from a trusted HTML string.
+ * Use with caution - content is NOT escaped.
+ *
+ * @param htmlString - The trusted HTML string
+ * @returns A RawHTML object that bypasses escaping
+ */
 export const unsafeHTML = (htmlString: string): RawHTML => raw(htmlString);
+
+/**
+ * Alias for `unsafeHTML()` for React-style naming.
+ */
 export const dangerouslySetInnerHTML = unsafeHTML;
 
+/**
+ * Represents a streamable HTML fragment.
+ * Can be iterated asynchronously to get HTML string chunks.
+ */
 export interface HTML extends AsyncIterable<string> {}
 
+/**
+ * Valid values that can be interpolated into HTML templates.
+ */
 export type HTMLValue =
   | Primitive
   | RawHTML
@@ -26,6 +61,20 @@ export type HTMLValue =
   | AsyncIterable<HTMLValue>
   | (() => HTMLValue | Promise<HTMLValue>);
 
+/**
+ * Escape a value for safe HTML output.
+ * Converts special characters to HTML entities to prevent XSS.
+ *
+ * @param value - The value to escape
+ * @returns The escaped string, safe for HTML output
+ *
+ * @example
+ * ```ts
+ * escape("<script>"); // "&lt;script&gt;"
+ * escape("Tom & Jerry"); // "Tom &amp; Jerry"
+ * escape(null); // ""
+ * ```
+ */
 export const escape = (value: unknown): string => {
   if (value == null || value === false) return "";
   const str = String(value);
@@ -150,6 +199,35 @@ export function dedent(str: string): string {
     .join("\n");
 }
 
+/**
+ * Tagged template literal for creating streamable HTML.
+ * Automatically escapes interpolated values to prevent XSS.
+ *
+ * @param strings - The static parts of the template
+ * @param values - The interpolated values
+ * @returns An async iterable that yields HTML string chunks
+ *
+ * @example
+ * ```ts
+ * const name = "<script>alert('xss')</script>";
+ * const page = html`<h1>Hello ${name}</h1>`;
+ * // Yields: <h1>Hello &lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;</h1>
+ * ```
+ *
+ * @example
+ * ```ts
+ * // Nest templates
+ * const header = html`<header>Nav</header>`;
+ * const page = html`<!DOCTYPE html><html>${header}<main>Content</main></html>`;
+ * ```
+ *
+ * @example
+ * ```ts
+ * // Stream arrays
+ * const items = ["a", "b", "c"];
+ * const list = html`<ul>${items.map(i => html`<li>${i}</li>`)}</ul>`;
+ * ```
+ */
 export function html(
   strings: TemplateStringsArray,
   ...values: HTMLValue[]
@@ -187,12 +265,40 @@ export function html(
   })();
 }
 
+/**
+ * Convert an HTML fragment to a string by collecting all chunks.
+ * Useful for testing or when you need the complete HTML synchronously.
+ *
+ * @param fragment - The HTML fragment to convert
+ * @returns The complete HTML as a string
+ *
+ * @example
+ * ```ts
+ * const page = html`<h1>Hello</h1>`;
+ * const str = await htmlToString(page); // "<h1>Hello</h1>"
+ * ```
+ */
 export const htmlToString = async (fragment: HTML): Promise<string> => {
   let out = "";
   for await (const chunk of fragment) out += chunk;
   return out;
 };
 
+/**
+ * Convert an HTML fragment to a ReadableStream for streaming responses.
+ * Encodes chunks as UTF-8 bytes.
+ *
+ * @param fragment - The HTML fragment to stream
+ * @param encoder - Optional TextEncoder to use (defaults to shared instance)
+ * @returns A ReadableStream of Uint8Array chunks
+ *
+ * @example
+ * ```ts
+ * const page = html`<h1>Hello</h1>`;
+ * const stream = htmlToStream(page);
+ * return new Response(stream, { headers: { "content-type": "text/html" } });
+ * ```
+ */
 export function htmlToStream(
   fragment: HTML,
   encoder: TextEncoder = sharedEncoder,

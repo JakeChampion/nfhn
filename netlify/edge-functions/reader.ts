@@ -95,7 +95,7 @@ export default async (req: Request) => {
       {
         status: 500,
         headers: getHeaders(),
-      }
+      },
     );
   }
 };

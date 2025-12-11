@@ -8,8 +8,6 @@ import {
   commentsSection,
   countComments,
   estimateReadingTime,
-  externalLinkScript,
-  favoritesScript,
   getTypeMeta,
   headerBar,
   justifyScript,
@@ -17,19 +15,55 @@ import {
   pwaHeadTags,
   readerModeLink,
   renderStory,
-  serviceWorkerScript,
+  shareButton,
   sharedStyles,
   skipLink,
   themeScript,
-  turboScript,
   userLink,
   websiteJsonLd,
 } from "./components.ts";
 
+// --- Speculation Rules for prefetching/prerendering ---
+// Uses the declarative Speculation Rules API (Chrome 109+)
+// Replaces JavaScript-based prefetch with native browser prefetching
+
+const speculationRules = (): HTML =>
+  tpl`<script type="speculationrules">
+{
+  "prerender": [
+    {
+      "where": {
+        "and": [
+          { "href_matches": "/*" },
+          { "not": { "href_matches": "/saved" } },
+          { "not": { "href_matches": "/reader*" } },
+          { "not": { "selector_matches": ".external-link" } }
+        ]
+      },
+      "eagerness": "moderate"
+    }
+  ],
+  "prefetch": [
+    {
+      "where": {
+        "and": [
+          { "href_matches": "/*" },
+          { "not": { "href_matches": "/saved" } },
+          { "not": { "href_matches": "/reader*" } }
+        ]
+      },
+      "eagerness": "conservative"
+    }
+  ]
+}
+</script>`;
+
 // --- Inline script to set theme before page renders (prevents flash) ---
+// This script must match the hash in config.ts CSP_DIRECTIVES
+// Hash: sha256-aa72PHEwNOBVTHaG/ayYpxdOJImxtHfAuO+pszB1UHA=
 
 const themeInitScript = (): HTML =>
-  tpl`<script>document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'auto');</script>`;
+  tpl`<script>document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'auto');</script>`;
 
 // --- Home page (feed listing) ---
 
@@ -77,12 +111,9 @@ export const home = (
       </ol>
       <a href="/${feed}/${pageNumber + 1}" class="more-link">More</a>
     </main>
-    ${turboScript()}
     ${keyboardNavScript()}
-    ${externalLinkScript()}
+    ${speculationRules()}
     ${themeScript()}
-    ${favoritesScript()}
-    ${serviceWorkerScript()}
   </body>
 </html>
 `;
@@ -123,9 +154,7 @@ const shellPage = (
     yield* body;
 
     yield* tpl`
-      ${externalLinkScript()}
       ${themeScript()}
-      ${serviceWorkerScript()}
       ${justifyScript()}
       </body>
       </html>
@@ -199,15 +228,14 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
             `}
           <div class="article-actions">
             ${item.url ? readerModeLink(item.url) : ""}
+            ${shareButton(item)}
             ${bookmarkButton(item)}
           </div>
           <hr />
           ${unsafeHTML(item.content || "")} ${commentsSection(item.comments, opUser)}
         </article>
       </main>
-      ${turboScript()}
       ${keyboardNavScript()}
-      ${favoritesScript()}
     `,
     canonicalUrl,
     `Hacker News discussion: ${item.title}`,
@@ -286,7 +314,6 @@ export const userProfile = (
           </p>
         </article>
       </main>
-      ${turboScript()}
       ${keyboardNavScript()}
     `,
     canonicalUrl,
@@ -328,116 +355,8 @@ export const savedPage = (canonicalUrl?: string): HTML =>
         <p class="loading-message">Loading saved stories...</p>
       </div>
     </main>
-    ${turboScript()}
     ${keyboardNavScript()}
-    ${externalLinkScript()}
     ${themeScript()}
-    ${savedPageScript()}
-    ${serviceWorkerScript()}
   </body>
 </html>
 `;
-
-// --- Script for rendering saved stories on client ---
-
-const savedPageScript = (): HTML =>
-  tpl`
-    <script>
-    (function() {
-      const STORAGE_KEY = 'nfhn-saved-stories';
-      const container = document.getElementById('saved-stories-container');
-
-      const TYPE_META = {
-        ask: { label: 'Ask HN', badgeClass: 'badge-ask', href: (item) => '/item/' + item.id },
-        show: { label: 'Show HN', badgeClass: 'badge-show', href: (item) => '/item/' + item.id },
-        job: { label: 'Job', badgeClass: 'badge-job', href: (item) => item.url || '/item/' + item.id },
-        link: { label: '', badgeClass: '', href: (item) => item.url || '/item/' + item.id },
-        comment: { label: 'Comment', badgeClass: 'badge-default', href: (item) => '/item/' + item.id }
-      };
-
-      function getSavedStories() {
-        try {
-          return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-        } catch { return {}; }
-      }
-
-      function saveStories(stories) {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(stories));
-        } catch (e) { console.error('Failed to save:', e); }
-      }
-
-      function removeStory(id) {
-        const stories = getSavedStories();
-        delete stories[id];
-        saveStories(stories);
-        renderStories();
-      }
-
-      function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-      }
-
-      function renderStory(item) {
-        const meta = TYPE_META[item.type] || TYPE_META.link;
-        const href = meta.href(item);
-        
-        return '<li data-story-id="' + item.id + '">' +
-          '<a class="title" href="' + escapeHtml(href) + '">' +
-            (meta.label ? '<span class="badge ' + meta.badgeClass + '">' + meta.label + '</span>' : '') +
-            '<span class="story-title-text">' + escapeHtml(item.title) + '</span>' +
-            (item.domain ? '<span class="story-meta">(' + escapeHtml(item.domain) + ')</span>' : '') +
-          '</a>' +
-          '<div class="story-actions">' +
-            '<a class="comments" href="/item/' + item.id + '">' +
-              'view ' + (item.comments_count > 0 ? item.comments_count + ' comments' : 'discussion') +
-            '</a>' +
-            '<button type="button" class="bookmark-btn is-saved" ' +
-              'data-story-id="' + item.id + '" ' +
-              'title="Remove from saved" aria-label="Remove from saved">' +
-              '<svg class="bookmark-icon-outline" viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">' +
-                '<path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z"/>' +
-              '</svg>' +
-              '<svg class="bookmark-icon-filled" viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">' +
-                '<path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/>' +
-              '</svg>' +
-              '<span class="sr-only">Remove</span>' +
-            '</button>' +
-          '</div>' +
-        '</li>';
-      }
-
-      function renderStories() {
-        const stories = getSavedStories();
-        const items = Object.values(stories);
-        
-        if (items.length === 0) {
-          container.innerHTML = 
-            '<div class="empty-saved">' +
-              '<p>No saved stories yet.</p>' +
-              '<p>Click the bookmark icon on any story to save it for offline reading.</p>' +
-            '</div>';
-          return;
-        }
-
-        // Sort by saved_at descending (most recently saved first)
-        items.sort((a, b) => (b.saved_at || 0) - (a.saved_at || 0));
-
-        container.innerHTML = 
-          '<p class="saved-count">' + items.length + ' saved stor' + (items.length === 1 ? 'y' : 'ies') + '</p>' +
-          '<ol class="stories">' + items.map(renderStory).join('') + '</ol>';
-
-        // Add click handlers for remove buttons
-        container.querySelectorAll('.bookmark-btn').forEach(btn => {
-          btn.addEventListener('click', function() {
-            removeStory(this.dataset.storyId);
-          });
-        });
-      }
-
-      renderStories();
-    })();
-    </script>
-  `;

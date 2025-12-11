@@ -11,17 +11,27 @@
     },
     "assert": {
       "assertions": {
-        "categories:performance": ["warn", { "minScore": 0.8 }],
-        "categories:accessibility": ["error", { "minScore": 0.9 }],
-        "categories:best-practices": ["warn", { "minScore": 0.8 }],
-        "categories:seo": ["warn", { "minScore": 0.8 }],
-        "first-contentful-paint": ["warn", { "maxNumericValue": 2000 }],
-        "largest-contentful-paint": ["warn", { "maxNumericValue": 3000 }],
+        "categories:performance": ["warn", { "minScore": 0.85 }],
+        "categories:accessibility": ["error", { "minScore": 0.95 }],
+        "categories:best-practices": ["warn", { "minScore": 0.9 }],
+        "categories:seo": ["warn", { "minScore": 0.9 }],
+        "first-contentful-paint": ["error", { "maxNumericValue": 1800 }],
+        "largest-contentful-paint": ["error", { "maxNumericValue": 2500 }],
         "cumulative-layout-shift": ["error", { "maxNumericValue": 0.1 }],
-        "total-blocking-time": ["warn", { "maxNumericValue": 300 }],
-        "interactive": ["warn", { "maxNumericValue": 4000 }],
+        "total-blocking-time": ["error", { "maxNumericValue": 200 }],
+        "interactive": ["warn", { "maxNumericValue": 3500 }],
+        "speed-index": ["warn", { "maxNumericValue": 3400 }],
+        "max-potential-fid": ["warn", { "maxNumericValue": 130 }],
+        "server-response-time": ["warn", { "maxNumericValue": 600 }],
+        "dom-size": ["warn", { "maxNumericValue": 1500 }],
+        "mainthread-work-breakdown": ["warn", { "maxNumericValue": 4000 }],
+        "bootup-time": ["warn", { "maxNumericValue": 3500 }],
+        "uses-text-compression": "warn",
         "uses-responsive-images": "off",
-        "unsized-images": "off"
+        "unsized-images": "off",
+        "render-blocking-resources": "warn",
+        "unused-javascript": "warn",
+        "uses-long-cache-ttl": "warn"
       }
     },
     "upload": {

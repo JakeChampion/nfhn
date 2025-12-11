@@ -152,47 +152,26 @@ export const pwaHeadTags = (): HTML =>
     <link rel="apple-touch-icon" href="/icon.svg">
   `;
 
-// --- Service worker registration script ---
-
-export const serviceWorkerScript = (): HTML =>
-  html`
-    <script>
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
-    }
-    </script>
-  `;
-
 // --- Text justification script (tex-linebreak) ---
+// SRI hashes ensure integrity of third-party libraries
 
 export const justifyScript = (): HTML =>
   html`
-    <script src="/tex-linebreak.js"></script>
-    <script src="/hyphens_en-us.js"></script>
-    <script src="/justify.js"></script>
-  `;
-
-// --- External link indicator script ---
-
-export const externalLinkScript = (): HTML =>
-  html`
-    <script>
-    document.querySelectorAll('a[href^="http"]').forEach(link => {
-      const url = new URL(link.href);
-      if (url.origin !== location.origin) {
-        link.classList.add('external-link');
-        link.setAttribute('target', '_blank');
-        link.setAttribute('rel', 'noopener noreferrer');
-        // Add screen reader text
-        if (!link.querySelector('.sr-only')) {
-          const sr = document.createElement('span');
-          sr.className = 'sr-only';
-          sr.textContent = ' (opens in new tab)';
-          link.appendChild(sr);
-        }
-      }
-    });
-    </script>
+    <script
+      src="/tex-linebreak.js"
+      integrity="sha384-Mz2e2ZKHUt95NE5A4Q3jnM4vMi3TW/aI+z0XpUTTtvDOGtOicI7DlGTmCj3yVG0x"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="/hyphens_en-us.js"
+      integrity="sha384-O18JzLDtmRj8lMDKjQ/VZOo09Ye41get5V+PDYP1atYLjrMbCO390FdScF4XAZts"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="/justify.js"
+      integrity="sha384-FI/M0Xsdr+Yk/caRCCNCvazelNiHYTHJDbPjVQ+5tt+AIoP2DoNt9Suks7KP+Mc8"
+      crossorigin="anonymous"
+    ></script>
   `;
 
 // --- Shared styles link ---
@@ -243,25 +222,11 @@ export const themeToggle = (): HTML =>
     </div>
   `;
 
+// Main application script - loaded with defer to not block rendering
+// Note: app.js is first-party code; SRI would require build-time hash generation
 export const themeScript = (): HTML =>
   html`
-    <script>
-    (function() {
-      const root = document.documentElement;
-      const stored = localStorage.getItem('theme') || 'auto';
-      root.setAttribute('data-theme', stored);
-
-      const radios = document.querySelectorAll('input[name="theme"]');
-      radios.forEach(radio => {
-        if (radio.value === stored) radio.checked = true;
-        radio.addEventListener('change', (e) => {
-          const theme = e.target.value;
-          root.setAttribute('data-theme', theme);
-          localStorage.setItem('theme', theme);
-        });
-      });
-    })();
-    </script>
+    <script src="/app.js" defer></script>
   `;
 
 // --- Navigation ---
@@ -289,8 +254,7 @@ export const keyboardHint = (): HTML =>
     <button
       type="button"
       class="keyboard-hint"
-      commandfor="shortcuts-modal"
-      command="show-modal"
+      popovertarget="shortcuts-modal"
       aria-label="Keyboard shortcuts"
       title="Keyboard shortcuts (press ?)"
     >
@@ -298,23 +262,23 @@ export const keyboardHint = (): HTML =>
     </button>
   `;
 
-// --- Settings menu dialog ---
+// --- Settings menu popover ---
 
 export const settingsMenu = (): HTML =>
   html`
-    <dialog id="settings-menu" class="settings-menu">
+    <div id="settings-menu" class="settings-menu" popover>
       <h2>Settings</h2>
       ${themeToggle()} ${keyboardHint()}
       <button
         type="button"
         class="modal-close"
-        commandfor="settings-menu"
-        command="close"
+        popovertarget="settings-menu"
+        popovertargetaction="hide"
         aria-label="Close"
       >
         ×
       </button>
-    </dialog>
+    </div>
   `;
 
 // --- Settings menu button ---
@@ -324,8 +288,7 @@ export const settingsMenuButton = (): HTML =>
     <button
       type="button"
       class="settings-menu-btn"
-      commandfor="settings-menu"
-      command="show-modal"
+      popovertarget="settings-menu"
       aria-label="Settings menu"
       title="Settings"
     >
@@ -345,66 +308,13 @@ export const headerBar = (activeFeed: FeedSlug | "saved"): HTML =>
     ${settingsMenu()}
   `;
 
-// --- Prefetch/prerender script ---
-
-export const turboScript = (): HTML =>
-  html`
-    <script>
-    const used = new Set();
-
-    function supportsRel(rel) {
-      const link = document.createElement("link");
-      return !!(link.relList && link.relList.supports && link.relList.supports(rel));
-    }
-
-    const canPrerender = supportsRel("prerender");
-    const canPrefetch = supportsRel("prefetch");
-
-    function warm(url) {
-      const u = new URL(url, location.href);
-      if (u.origin !== location.origin) return;
-
-      const href = u.toString();
-      if (used.has(href)) return;
-      used.add(href);
-
-      const link = document.createElement("link");
-      if (canPrerender) {
-        link.rel = "prerender";
-      } else if (canPrefetch) {
-        link.rel = "prefetch";
-        link.as = "document"; // hint, safe to omit if you like
-      } else {
-        // No supported rel, give up quietly.
-        return;
-      }
-
-      link.href = href;
-      document.head.appendChild(link);
-      console.debug("Warming link:", link.rel, link.href);
-    }
-
-    function onIntent(e) {
-      const a = e.target.closest("a[href]");
-      if (!a) return;
-      if (a.target && a.target !== "_self") return;
-      if (a.hasAttribute("download")) return;
-
-      warm(a.href);
-    }
-
-    // Hover (desktop) + first touch (mobile)
-    document.addEventListener("mouseover", onIntent, { passive: true });
-    document.addEventListener("touchstart", onIntent, { passive: true });
-    </script>
-  `;
-
 // --- Keyboard navigation script ---
+// The script logic is now in /app.js, but we keep the HTML structure here
 
 export const keyboardNavScript = (): HTML =>
   html`
     <div id="aria-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
-    <dialog id="shortcuts-modal" class="shortcuts-modal">
+    <div id="shortcuts-modal" class="shortcuts-modal" popover>
       <h2>Keyboard Shortcuts</h2>
       <dl class="shortcuts-list">
         <dt><kbd>j</kbd></dt>
@@ -421,152 +331,13 @@ export const keyboardNavScript = (): HTML =>
       <button
         type="button"
         class="modal-close"
-        commandfor="shortcuts-modal"
-        command="close"
+        popovertarget="shortcuts-modal"
+        popovertargetaction="hide"
         aria-label="Close"
       >
         ×
       </button>
-    </dialog>
-    <script>
-    (function() {
-    let currentIndex = -1;
-    const liveRegion = document.getElementById('aria-live');
-    const modal = document.getElementById('shortcuts-modal');
-
-    function announce(message) {
-      if (liveRegion) liveRegion.textContent = message;
-    }
-
-    function getItems() {
-      // On feed pages: list items; on item pages: top-level comments
-      const listItems = document.querySelectorAll('main ol > li');
-      if (listItems.length) return Array.from(listItems);
-      const comments = document.querySelectorAll('section[aria-label="Comments"] > details');
-      return Array.from(comments);
-    }
-
-    function getItemLabel(item, index, total) {
-      // Try to get a meaningful label for the item
-      const title = item.querySelector('.story-title-text, .title, summary');
-      const text = title ? title.textContent.trim().slice(0, 50) : 'Item';
-      return text + ' (' + (index + 1) + ' of ' + total + ')';
-    }
-
-    function highlightItem(index) {
-      const items = getItems();
-      if (!items.length) return;
-
-      // Remove previous highlight
-      items.forEach(item => item.classList.remove('kbd-focus'));
-
-      // Clamp index
-      if (index < 0) index = 0;
-      if (index >= items.length) index = items.length - 1;
-      currentIndex = index;
-
-      // Add highlight and scroll into view
-      const item = items[currentIndex];
-      item.classList.add('kbd-focus');
-      item.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-      // Set focus for keyboard accessibility
-      item.setAttribute('tabindex', '-1');
-      item.focus({ preventScroll: true });
-
-      // Announce for screen readers
-      announce(getItemLabel(item, currentIndex, items.length));
-    }
-
-    function clearSelection() {
-      const items = getItems();
-      items.forEach(item => {
-        item.classList.remove('kbd-focus');
-        item.removeAttribute('tabindex');
-      });
-      currentIndex = -1;
-      announce('Selection cleared');
-    }
-
-    function openCurrentItem() {
-      const items = getItems();
-      if (currentIndex < 0 || currentIndex >= items.length) return;
-
-      const item = items[currentIndex];
-      // Find first link in item
-      const link = item.querySelector('a.title, a.comments, a[href^="/item/"]');
-      if (link) link.click();
-    }
-
-    function showModal() {
-      modal.showModal();
-      modal.querySelector('.modal-close').focus();
-    }
-
-    function hideModal() {
-      modal.close();
-    }
-
-    // Close modal on backdrop click
-    modal.addEventListener('click', function(e) {
-      if (e.target === modal) hideModal();
-    });
-
-    // Close settings menu on backdrop click
-    const settingsMenu = document.getElementById('settings-menu');
-    if (settingsMenu) {
-      settingsMenu.addEventListener('click', function(e) {
-        if (e.target === settingsMenu) settingsMenu.close();
-      });
-    }
-
-    document.addEventListener('keydown', function(e) {
-      // Handle modal close
-      if (modal.open && e.key === 'Escape') {
-        e.preventDefault();
-        hideModal();
-        return;
-      }
-
-      // Ignore if typing in input/textarea
-      if (e.target.matches('input, textarea, select')) return;
-
-      // Show help modal on ?
-      if (e.key === '?') {
-        e.preventDefault();
-        showModal();
-        return;
-      }
-
-      const items = getItems();
-      if (!items.length) return;
-
-      switch (e.key) {
-        case 'j':
-          e.preventDefault();
-          highlightItem(currentIndex + 1);
-          break;
-        case 'k':
-          e.preventDefault();
-          highlightItem(currentIndex - 1);
-          break;
-        case 'o':
-        case 'Enter':
-          if (currentIndex >= 0) {
-            e.preventDefault();
-            openCurrentItem();
-          }
-          break;
-        case 'Escape':
-          if (currentIndex >= 0) {
-            e.preventDefault();
-            clearSelection();
-          }
-          break;
-        }
-      });
-    })();
-    </script>
+    </div>
   `;
 
 // --- User link ---
@@ -609,6 +380,26 @@ export const readerModeLink = (url: string | undefined): HTML => {
   `;
 };
 
+// --- Share button ---
+
+export const shareButton = (item: Item): HTML =>
+  html`
+    <button
+      type="button"
+      class="share-btn"
+      data-share-title="${item.title}"
+      data-share-url="${item.url || `https://nfhn.netlify.app/item/${item.id}`}"
+      title="Share story"
+      aria-label="Share story"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+        <path
+          d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"
+        />
+      </svg>
+    </button>
+  `;
+
 // --- Bookmark/Save button ---
 
 export const bookmarkButton = (item: Item): HTML =>
@@ -639,92 +430,6 @@ export const bookmarkButton = (item: Item): HTML =>
     </button>
   `;
 
-// --- Favorites/Bookmarks script ---
-
-export const favoritesScript = (): HTML =>
-  html`
-    <script>
-    (function() {
-      const STORAGE_KEY = 'nfhn-saved-stories';
-
-      function getSavedStories() {
-        try {
-          return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-        } catch { return {}; }
-      }
-
-      function saveStories(stories) {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(stories));
-        } catch (e) { console.error('Failed to save:', e); }
-      }
-
-      function notifyServiceWorker(type, id, externalUrl) {
-        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-          navigator.serviceWorker.controller.postMessage({
-            type: type,
-            url: '/item/' + id,
-            externalUrl: externalUrl || null
-          });
-        }
-      }
-
-      function toggleStory(btn) {
-        const id = btn.dataset.storyId;
-        const externalUrl = btn.dataset.storyUrl || null;
-        const stories = getSavedStories();
-
-        if (stories[id]) {
-          delete stories[id];
-          btn.classList.remove('is-saved');
-          btn.title = 'Save story';
-          btn.setAttribute('aria-label', 'Save story');
-          notifyServiceWorker('UNCACHE_ITEM', id, externalUrl);
-        } else {
-          stories[id] = {
-            id: parseInt(id, 10),
-            title: btn.dataset.storyTitle,
-            url: externalUrl,
-            domain: btn.dataset.storyDomain || null,
-            type: btn.dataset.storyType,
-            points: parseInt(btn.dataset.storyPoints, 10) || 0,
-            user: btn.dataset.storyUser || null,
-            time: parseInt(btn.dataset.storyTime, 10) || 0,
-            time_ago: btn.dataset.storyTimeAgo,
-            comments_count: parseInt(btn.dataset.storyComments, 10) || 0,
-            saved_at: Date.now()
-          };
-          btn.classList.add('is-saved');
-          btn.title = 'Remove from saved';
-          btn.setAttribute('aria-label', 'Remove from saved');
-          notifyServiceWorker('CACHE_ITEM', id, externalUrl);
-        }
-
-        saveStories(stories);
-      }
-
-      function initBookmarks() {
-        const saved = getSavedStories();
-        document.querySelectorAll('.bookmark-btn').forEach(btn => {
-          const id = btn.dataset.storyId;
-          if (saved[id]) {
-            btn.classList.add('is-saved');
-            btn.title = 'Remove from saved';
-            btn.setAttribute('aria-label', 'Remove from saved');
-          }
-          btn.addEventListener('click', () => toggleStory(btn));
-        });
-      }
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initBookmarks);
-      } else {
-        initBookmarks();
-      }
-    })();
-    </script>
-  `;
-
 // --- Story list item ---
 
 export const renderStory = (data: Item): HTML => {
@@ -749,7 +454,7 @@ export const renderStory = (data: Item): HTML => {
         <a class="comments" href="/item/${data.id}">
           view ${data.comments_count > 0 ? data.comments_count + " comments" : "discussion"}
         </a>
-        ${bookmarkButton(data)}
+        ${shareButton(data)} ${bookmarkButton(data)}
       </div>
     </li>
   `;

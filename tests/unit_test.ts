@@ -6,11 +6,7 @@ import { escape, html, htmlToString, raw, unsafeHTML } from "../netlify/edge-fun
 import { formatTimeAgo, type HNAPIItem, mapStoryToItem } from "../netlify/edge-functions/lib/hn.ts";
 import { buildContentSecurityPolicy } from "../netlify/edge-functions/lib/security.ts";
 import { parsePositiveInt, redirect } from "../netlify/edge-functions/lib/handlers.ts";
-import {
-  externalLinkScript,
-  pwaHeadTags,
-  serviceWorkerScript,
-} from "../netlify/edge-functions/lib/render/components.ts";
+import { pwaHeadTags } from "../netlify/edge-functions/lib/render/components.ts";
 
 // =============================================================================
 // HTML Escape Tests
@@ -390,9 +386,9 @@ Deno.test("buildContentSecurityPolicy: contains object-src none", () => {
   assertEquals(csp.includes("object-src 'none'"), true);
 });
 
-Deno.test("buildContentSecurityPolicy: contains trusted-types", () => {
+Deno.test("buildContentSecurityPolicy: contains upgrade-insecure-requests", () => {
   const csp = buildContentSecurityPolicy();
-  assertEquals(csp.includes("trusted-types"), true);
+  assertEquals(csp.includes("upgrade-insecure-requests"), true);
 });
 
 Deno.test("buildContentSecurityPolicy: directives are semicolon-separated", () => {
@@ -590,17 +586,18 @@ Deno.test("userLink: escapes username in href and content", async () => {
   assertEquals(result.includes("&lt;script&gt;"), true);
 });
 
-Deno.test("keyboardNavScript: includes j/k navigation", async () => {
+Deno.test("keyboardNavScript: includes shortcuts modal markup", async () => {
   const result = await htmlToString(keyboardNavScript());
-  assertEquals(result.includes("case 'j':"), true);
-  assertEquals(result.includes("case 'k':"), true);
-  assertEquals(result.includes("kbd-focus"), true);
+  assertEquals(result.includes("shortcuts-modal"), true);
+  assertEquals(result.includes("Keyboard Shortcuts"), true);
 });
 
-Deno.test("keyboardNavScript: includes Enter/o to open", async () => {
+Deno.test("keyboardNavScript: documents j/k shortcut keys", async () => {
   const result = await htmlToString(keyboardNavScript());
-  assertEquals(result.includes("case 'Enter':"), true);
-  assertEquals(result.includes("case 'o':"), true);
+  assertEquals(result.includes("<kbd>j</kbd>"), true);
+  assertEquals(result.includes("<kbd>k</kbd>"), true);
+  assertEquals(result.includes("Next item"), true);
+  assertEquals(result.includes("Previous item"), true);
 });
 
 Deno.test("renderComment: links username to profile", async () => {
@@ -825,16 +822,21 @@ Deno.test("keyboardNavScript: includes shortcuts modal", async () => {
   assertEquals(result.includes("Keyboard Shortcuts"), true);
 });
 
-Deno.test("keyboardNavScript: includes ? key handler", async () => {
+// Note: keyboardNavScript now uses Popover API instead of dialog, with JS logic in external app.js
+// These tests verify the popover HTML is properly generated
+
+Deno.test("keyboardNavScript: modal has proper close button", async () => {
   const result = await htmlToString(keyboardNavScript());
-  assertEquals(result.includes("e.key === '?'"), true);
-  assertEquals(result.includes("showModal()"), true);
+  assertEquals(result.includes('aria-label="Close"'), true);
+  assertEquals(result.includes('popovertargetaction="hide"'), true);
 });
 
-Deno.test("keyboardNavScript: includes Escape handler", async () => {
+Deno.test("keyboardNavScript: modal includes all shortcut descriptions", async () => {
   const result = await htmlToString(keyboardNavScript());
-  assertEquals(result.includes("case 'Escape'"), true);
-  assertEquals(result.includes("clearSelection()"), true);
+  assertEquals(result.includes("Next item"), true);
+  assertEquals(result.includes("Previous item"), true);
+  assertEquals(result.includes("Open selected item"), true);
+  assertEquals(result.includes("Show this help"), true);
 });
 
 // =============================================================================
@@ -858,34 +860,320 @@ Deno.test("pwaHeadTags: includes theme-color", async () => {
   assertEquals(result.includes("#ff7a18"), true);
 });
 
-Deno.test("serviceWorkerScript: registers service worker", async () => {
-  const result = await htmlToString(serviceWorkerScript());
-  assertEquals(result.includes("serviceWorker.register"), true);
-  assertEquals(result.includes("/sw.js"), true);
+// =============================================================================
+// Circuit Breaker Tests
+// =============================================================================
+
+import { getCircuitBreakerState, resetCircuitBreaker } from "../netlify/edge-functions/lib/hn.ts";
+
+Deno.test("circuit breaker: initial state is closed", () => {
+  resetCircuitBreaker();
+  const state = getCircuitBreakerState();
+  assertEquals(state.isOpen, false);
+  assertEquals(state.failures, 0);
 });
 
-Deno.test("serviceWorkerScript: handles registration errors", async () => {
-  const result = await htmlToString(serviceWorkerScript());
-  assertEquals(result.includes(".catch"), true);
+Deno.test("circuit breaker: reset clears state", () => {
+  resetCircuitBreaker();
+  const state = getCircuitBreakerState();
+  assertEquals(state.isOpen, false);
+  assertEquals(state.failures, 0);
 });
 
-Deno.test("externalLinkScript: detects external links", async () => {
-  const result = await htmlToString(externalLinkScript());
-  assertEquals(result.includes("querySelectorAll('a[href^=\"http\"]')"), true);
+// =============================================================================
+// Routes Module Tests
+// =============================================================================
+
+import {
+  feedUrl,
+  isValidItemId,
+  isValidPageNumber,
+  isValidUsername,
+  itemUrl,
+  matchFeedRoute,
+  matchItemRoute,
+  matchRedirect,
+  matchUserRoute,
+  userUrl,
+} from "../netlify/edge-functions/lib/routes.ts";
+
+Deno.test("matchFeedRoute: matches valid feed routes", () => {
+  const result = matchFeedRoute("/top/1");
+  assertEquals(result?.feed, "top");
+  assertEquals(result?.page, 1);
 });
 
-Deno.test("externalLinkScript: adds external-link class", async () => {
-  const result = await htmlToString(externalLinkScript());
-  assertEquals(result.includes("classList.add('external-link')"), true);
+Deno.test("matchFeedRoute: matches all feed types", () => {
+  assertEquals(matchFeedRoute("/top/1")?.feed, "top");
+  assertEquals(matchFeedRoute("/newest/1")?.feed, "newest");
+  assertEquals(matchFeedRoute("/ask/1")?.feed, "ask");
+  assertEquals(matchFeedRoute("/show/1")?.feed, "show");
+  assertEquals(matchFeedRoute("/jobs/1")?.feed, "jobs");
 });
 
-Deno.test("externalLinkScript: adds screen reader text", async () => {
-  const result = await htmlToString(externalLinkScript());
-  assertEquals(result.includes("sr-only"), true);
-  assertEquals(result.includes("opens in new tab"), true);
+Deno.test("matchFeedRoute: handles multi-digit pages", () => {
+  const result = matchFeedRoute("/top/42");
+  assertEquals(result?.page, 42);
 });
 
-Deno.test("externalLinkScript: checks origin for external links", async () => {
-  const result = await htmlToString(externalLinkScript());
-  assertEquals(result.includes("location.origin"), true);
+Deno.test("matchFeedRoute: returns null for invalid routes", () => {
+  assertEquals(matchFeedRoute("/invalid/1"), null);
+  assertEquals(matchFeedRoute("/top"), null);
+  assertEquals(matchFeedRoute("/top/"), null);
+  assertEquals(matchFeedRoute("/top/abc"), null);
+});
+
+Deno.test("matchItemRoute: matches valid item routes", () => {
+  const result = matchItemRoute("/item/12345");
+  assertEquals(result?.id, 12345);
+});
+
+Deno.test("matchItemRoute: returns null for invalid routes", () => {
+  assertEquals(matchItemRoute("/item"), null);
+  assertEquals(matchItemRoute("/item/"), null);
+  assertEquals(matchItemRoute("/item/abc"), null);
+  assertEquals(matchItemRoute("/items/123"), null);
+});
+
+Deno.test("matchUserRoute: matches valid user routes", () => {
+  const result = matchUserRoute("/user/dang");
+  assertEquals(result?.username, "dang");
+});
+
+Deno.test("matchUserRoute: handles usernames with underscores and hyphens", () => {
+  assertEquals(matchUserRoute("/user/test_user")?.username, "test_user");
+  assertEquals(matchUserRoute("/user/test-user")?.username, "test-user");
+});
+
+Deno.test("matchUserRoute: returns null for invalid routes", () => {
+  assertEquals(matchUserRoute("/user"), null);
+  assertEquals(matchUserRoute("/user/"), null);
+  assertEquals(matchUserRoute("/users/test"), null);
+});
+
+Deno.test("matchRedirect: matches root path", () => {
+  const result = matchRedirect("/");
+  assertEquals(result?.location, "/top/1");
+  assertEquals(result?.status, 301);
+});
+
+Deno.test("matchRedirect: matches feed roots", () => {
+  assertEquals(matchRedirect("/top")?.location, "/top/1");
+  assertEquals(matchRedirect("/newest")?.location, "/newest/1");
+  assertEquals(matchRedirect("/ask")?.location, "/ask/1");
+  assertEquals(matchRedirect("/show")?.location, "/show/1");
+  assertEquals(matchRedirect("/jobs")?.location, "/jobs/1");
+});
+
+Deno.test("matchRedirect: returns null for non-redirect paths", () => {
+  assertEquals(matchRedirect("/top/1"), null);
+  assertEquals(matchRedirect("/item/123"), null);
+});
+
+Deno.test("feedUrl: generates correct URLs", () => {
+  assertEquals(feedUrl("top", 1), "/top/1");
+  assertEquals(feedUrl("newest", 42), "/newest/42");
+});
+
+Deno.test("itemUrl: generates correct URLs", () => {
+  assertEquals(itemUrl(12345), "/item/12345");
+});
+
+Deno.test("userUrl: generates correct URLs", () => {
+  assertEquals(userUrl("dang"), "/user/dang");
+});
+
+Deno.test("userUrl: encodes special characters", () => {
+  assertEquals(userUrl("test user"), "/user/test%20user");
+});
+
+Deno.test("isValidUsername: accepts valid usernames", () => {
+  assertEquals(isValidUsername("dang"), true);
+  assertEquals(isValidUsername("test_user"), true);
+  assertEquals(isValidUsername("test-user"), true);
+  assertEquals(isValidUsername("a"), true);
+  assertEquals(isValidUsername("123456789012345"), true);
+});
+
+Deno.test("isValidUsername: rejects invalid usernames", () => {
+  assertEquals(isValidUsername(""), false);
+  assertEquals(isValidUsername("1234567890123456"), false); // 16 chars
+  assertEquals(isValidUsername("user@example"), false);
+  assertEquals(isValidUsername("user.name"), false);
+});
+
+Deno.test("isValidPageNumber: validates page numbers", () => {
+  assertEquals(isValidPageNumber(1, 100), true);
+  assertEquals(isValidPageNumber(50, 100), true);
+  assertEquals(isValidPageNumber(100, 100), true);
+  assertEquals(isValidPageNumber(0, 100), false);
+  assertEquals(isValidPageNumber(-1, 100), false);
+  assertEquals(isValidPageNumber(101, 100), false);
+  assertEquals(isValidPageNumber(NaN, 100), false);
+  assertEquals(isValidPageNumber(Infinity, 100), false);
+});
+
+Deno.test("isValidItemId: validates item IDs", () => {
+  assertEquals(isValidItemId(1, 100000000), true);
+  assertEquals(isValidItemId(12345678, 100000000), true);
+  assertEquals(isValidItemId(0, 100000000), false);
+  assertEquals(isValidItemId(-1, 100000000), false);
+  assertEquals(isValidItemId(100000001, 100000000), false);
+});
+
+// =============================================================================
+// Error Types Tests
+// =============================================================================
+
+import {
+  APIUnavailableError,
+  CircuitBreakerOpenError,
+  isNFHNError,
+  NFHNError,
+  NotFoundError,
+  RateLimitError,
+  TimeoutError,
+  toNFHNError,
+  ValidationError,
+} from "../netlify/edge-functions/lib/errors/types.ts";
+
+Deno.test("NFHNError: creates error with all properties", () => {
+  const error = new NFHNError("test", 500, "Title", "Description", true, "req-123");
+  assertEquals(error.message, "test");
+  assertEquals(error.statusCode, 500);
+  assertEquals(error.title, "Title");
+  assertEquals(error.description, "Description");
+  assertEquals(error.recoverable, true);
+  assertEquals(error.requestId, "req-123");
+});
+
+Deno.test("NotFoundError: creates 404 error for item", () => {
+  const error = new NotFoundError("item");
+  assertEquals(error.statusCode, 404);
+  assertEquals(error.title, "Item not found");
+});
+
+Deno.test("NotFoundError: creates 404 error for user", () => {
+  const error = new NotFoundError("user", "Username is invalid");
+  assertEquals(error.statusCode, 404);
+  assertEquals(error.title, "User not found");
+  assertEquals(error.description, "Username is invalid");
+});
+
+Deno.test("ValidationError: creates 400 error", () => {
+  const error = new ValidationError("page", "abc", "Page must be a number");
+  assertEquals(error.statusCode, 400);
+  assertEquals(error.field, "page");
+  assertEquals(error.value, "abc");
+});
+
+Deno.test("APIUnavailableError: creates 502 error", () => {
+  const cause = new Error("connection refused");
+  const error = new APIUnavailableError("/item/123", cause);
+  assertEquals(error.statusCode, 502);
+  assertEquals(error.endpoint, "/item/123");
+  assertEquals(error.originalError, cause);
+  assertEquals(error.recoverable, true);
+});
+
+Deno.test("RateLimitError: creates 429 error", () => {
+  const error = new RateLimitError(30);
+  assertEquals(error.statusCode, 429);
+  assertEquals(error.retryAfter, 30);
+});
+
+Deno.test("CircuitBreakerOpenError: creates 503 error", () => {
+  const error = new CircuitBreakerOpenError(30000);
+  assertEquals(error.statusCode, 503);
+  assertEquals(error.resetAfterMs, 30000);
+});
+
+Deno.test("TimeoutError: creates 504 error", () => {
+  const error = new TimeoutError("fetch", 5000);
+  assertEquals(error.statusCode, 504);
+  assertEquals(error.timeoutMs, 5000);
+  assertEquals(error.operation, "fetch");
+});
+
+Deno.test("isNFHNError: identifies NFHN errors", () => {
+  assertEquals(isNFHNError(new NFHNError("test", 500, "T", "D")), true);
+  assertEquals(isNFHNError(new NotFoundError("item")), true);
+  assertEquals(isNFHNError(new Error("test")), false);
+  assertEquals(isNFHNError("string"), false);
+  assertEquals(isNFHNError(null), false);
+});
+
+Deno.test("toNFHNError: returns existing NFHN errors unchanged", () => {
+  const error = new NotFoundError("item");
+  assertEquals(toNFHNError(error), error);
+});
+
+Deno.test("toNFHNError: wraps regular errors", () => {
+  const error = new Error("Something broke");
+  const wrapped = toNFHNError(error);
+  assertEquals(wrapped.statusCode, 500);
+  assertEquals(wrapped.message, "Something broke");
+});
+
+Deno.test("toNFHNError: wraps string errors", () => {
+  const wrapped = toNFHNError("oops");
+  assertEquals(wrapped.statusCode, 500);
+  assertEquals(wrapped.message, "oops");
+});
+
+// =============================================================================
+// Additional HTML Template Edge Cases
+// =============================================================================
+
+Deno.test("html: handles deeply nested templates", async () => {
+  const level3 = html`
+    <span>deep</span>
+  `;
+  const level2 = html`
+    <div>${level3}</div>
+  `;
+  const level1 = html`
+    <section>${level2}</section>
+  `;
+  const result = (await htmlToString(level1)).trim();
+  assertEquals(result, "<section><div><span>deep</span></div></section>");
+});
+
+Deno.test("html: handles mixed arrays and templates", async () => {
+  const items = [1, 2, 3];
+  const result = (await htmlToString(html`
+    <ul>${items.map((n) =>
+      html`
+        <li>${n}</li>
+      `
+    )}</ul>
+  `)).trim();
+  assertEquals(result, "<ul><li>1</li><li>2</li><li>3</li></ul>");
+});
+
+Deno.test("html: handles conditional rendering", async () => {
+  const showContent = true;
+  const hideContent = false;
+  const result = (await htmlToString(html`
+    <div>${showContent
+      ? html`
+        <span>visible</span>
+      `
+      : ""}</div>
+    <div>${hideContent
+      ? html`
+        <span>hidden</span>
+      `
+      : ""}</div>
+  `)).trim();
+  assertEquals(result.includes("visible"), true);
+  assertEquals(result.includes("hidden"), false);
+});
+
+Deno.test("escape: handles unicode characters", () => {
+  assertEquals(escape("Hello 👋 World 🌍"), "Hello 👋 World 🌍");
+});
+
+Deno.test("escape: handles newlines and tabs", () => {
+  assertEquals(escape("line1\nline2\ttab"), "line1\nline2\ttab");
 });

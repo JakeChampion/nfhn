@@ -26,6 +26,13 @@ import { applySecurityHeaders, getRequestId } from "./security.ts";
 import { withProgrammableCache } from "./cache.ts";
 import { renderErrorPage, renderOfflinePage } from "./errors.ts";
 import { log } from "./logger.ts";
+import {
+  APIUnavailableError,
+  isNFHNError,
+  NotFoundError,
+  toNFHNError,
+  ValidationError,
+} from "./errors/types.ts";
 
 const encoder = new TextEncoder();
 
@@ -101,12 +108,18 @@ export function handleFeed(
   const startTime = performance.now();
 
   if (!Number.isFinite(pageNumber) || pageNumber < 1 || pageNumber > MAX_PAGE_NUMBER) {
-    return Promise.resolve(renderErrorPage(
-      404,
-      "Page not found",
+    const error = new ValidationError(
+      "pageNumber",
+      pageNumber,
       pageNumber > MAX_PAGE_NUMBER
         ? "That page number is too large."
         : "That page number is invalid.",
+      requestId,
+    );
+    return Promise.resolve(renderErrorPage(
+      error.statusCode,
+      error.title,
+      error.description,
       requestId,
     ));
   }
@@ -123,10 +136,11 @@ export function handleFeed(
         const fetchDuration = performance.now() - fetchStart;
 
         if (results === null) {
-          throw new Error(`${slug} feed fetch failed`);
+          throw new APIUnavailableError(`${slug} feed`, undefined, requestId);
         }
         if (!results.length) {
-          return renderErrorPage(404, emptyTitle, emptyDescription, requestId);
+          const error = new NotFoundError("feed", emptyDescription, requestId);
+          return renderErrorPage(error.statusCode, emptyTitle, emptyDescription, requestId);
         }
         const canonical = computeCanonical(request, `/${slug}/${pageNumber}`);
         const response = new HTMLResponse(home(results, pageNumber, slug, canonical));
@@ -143,12 +157,12 @@ export function handleFeed(
         addServerTiming(response, "total", startTime, "Total");
         return response;
       } catch (e) {
-        const error = e instanceof Error ? e : new Error(String(e));
-        log.error("Feed fetch error", { slug, requestId }, error);
+        const nfhnError = isNFHNError(e) ? e : toNFHNError(e, requestId);
+        log.error("Feed fetch error", { slug, requestId }, nfhnError);
         return renderErrorPage(
-          502,
-          "Hacker News is unavailable",
-          "Please try again in a moment.",
+          nfhnError.statusCode,
+          nfhnError.title,
+          nfhnError.description,
           requestId,
         );
       }
@@ -165,11 +179,17 @@ export function handleItem(request: Request, id: number): Promise<Response> {
   const startTime = performance.now();
 
   if (!Number.isFinite(id) || id < 1 || id > MAX_ITEM_ID) {
+    const error = new ValidationError(
+      "itemId",
+      id,
+      id > MAX_ITEM_ID ? "That item ID is too large." : "That story ID looks invalid.",
+      requestId,
+    );
     return Promise.resolve(
       renderErrorPage(
-        404,
-        "Item not found",
-        id > MAX_ITEM_ID ? "That item ID is too large." : "That story ID looks invalid.",
+        error.statusCode,
+        error.title,
+        error.description,
         requestId,
       ),
     );
@@ -187,12 +207,14 @@ export function handleItem(request: Request, id: number): Promise<Response> {
         const fetchDuration = performance.now() - fetchStart;
 
         if (!raw || raw.deleted || raw.dead) {
-          return renderErrorPage(404, "Item not found", "That story is unavailable.", requestId);
+          const error = new NotFoundError("item", "That story is unavailable.", requestId);
+          return renderErrorPage(error.statusCode, error.title, error.description, requestId);
         }
 
         const story = mapStoryToItem(raw);
         if (!story) {
-          return renderErrorPage(404, "Item not found", "That story is unavailable.", requestId);
+          const error = new NotFoundError("item", "That story is unavailable.", requestId);
+          return renderErrorPage(error.statusCode, error.title, error.description, requestId);
         }
         story.comments = raw.comments ?? [];
 
@@ -207,12 +229,12 @@ export function handleItem(request: Request, id: number): Promise<Response> {
         addServerTiming(response, "total", startTime, "Total");
         return response;
       } catch (e) {
-        const error = e instanceof Error ? e : new Error(String(e));
-        log.error("Item fetch error", { itemId: id, requestId }, error);
+        const nfhnError = isNFHNError(e) ? e : toNFHNError(e, requestId);
+        log.error("Item fetch error", { itemId: id, requestId }, nfhnError);
         return renderErrorPage(
-          502,
-          "Hacker News is unavailable",
-          "Please try again in a moment.",
+          nfhnError.statusCode,
+          nfhnError.title,
+          nfhnError.description,
           requestId,
         );
       }
@@ -225,19 +247,25 @@ export function handleItem(request: Request, id: number): Promise<Response> {
  * Handle a 404 not found request.
  */
 export function handleNotFound(request: Request): Response {
-  return renderErrorPage(
-    404,
-    "Page not found",
+  const error = new NotFoundError(
+    "page",
     "We couldn't find what you're looking for.",
     getRequestId(request),
+  );
+  return renderErrorPage(
+    error.statusCode,
+    error.title,
+    error.description,
+    error.requestId,
   );
 }
 
 /**
- * Validate username format - alphanumeric and underscores, 1-15 chars.
+ * Validate username format - alphanumeric, hyphens, underscores, 1-15 chars.
+ * HN usernames follow this pattern.
  */
 const isValidUsername = (username: string): boolean => {
-  return /^[a-zA-Z0-9_]{1,15}$/.test(username);
+  return /^[a-zA-Z0-9_-]{1,15}$/.test(username);
 };
 
 /**
@@ -248,11 +276,17 @@ export function handleUser(request: Request, username: string): Promise<Response
   const startTime = performance.now();
 
   if (!username || !isValidUsername(username)) {
+    const error = new ValidationError(
+      "username",
+      username,
+      "That username looks invalid.",
+      requestId,
+    );
     return Promise.resolve(
       renderErrorPage(
-        404,
-        "User not found",
-        "That username looks invalid.",
+        error.statusCode,
+        error.title,
+        error.description,
         requestId,
       ),
     );
@@ -271,7 +305,8 @@ export function handleUser(request: Request, username: string): Promise<Response
 
         const user = mapApiUser(rawUser);
         if (!user) {
-          return renderErrorPage(404, "User not found", "That user doesn't exist.", requestId);
+          const error = new NotFoundError("user", "That user doesn't exist.", requestId);
+          return renderErrorPage(error.statusCode, error.title, error.description, requestId);
         }
 
         // Fetch recent submissions (stories only)
@@ -297,12 +332,12 @@ export function handleUser(request: Request, username: string): Promise<Response
         addServerTiming(response, "total", startTime, "Total");
         return response;
       } catch (e) {
-        const error = e instanceof Error ? e : new Error(String(e));
-        log.error("User fetch error", { username, requestId }, error);
+        const nfhnError = isNFHNError(e) ? e : toNFHNError(e, requestId);
+        log.error("User fetch error", { username, requestId }, nfhnError);
         return renderErrorPage(
-          502,
-          "Hacker News is unavailable",
-          "Please try again in a moment.",
+          nfhnError.statusCode,
+          nfhnError.title,
+          nfhnError.description,
           requestId,
         );
       }
