@@ -1,5 +1,6 @@
 [build]
   publish = "static"
+  command = "npm run build"
 
 # Redirects for bare feed URLs to page 1
 [[redirects]]

@@ -27,6 +27,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
-        run: npm run lint && npm test
+      - name: Type check
+        run: deno check netlify/edge-functions/**/*.ts tests/**/*.ts
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Run tests with coverage
+        run: deno test --allow-net --allow-env --coverage=coverage tests/
+
+      - name: Generate coverage report
+        run: deno coverage coverage --lcov > coverage/lcov.info
+
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=$(deno coverage coverage 2>&1 | grep -E '^All files' | grep -oE '[0-9]+\.[0-9]+%' | head -1 | tr -d '%')
+          echo "Total coverage: $COVERAGE%"
+          if (( $(echo "$COVERAGE < 70" | bc -l) )); then
+            echo "Coverage is below 70% threshold"
+            exit 1
+          fi
 

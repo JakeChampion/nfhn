@@ -1,8 +1,80 @@
 // render/components.ts - Reusable UI components
 
-import { type HTML, html, unsafeHTML } from "../html.ts";
+import { type HTML, html, raw, unsafeHTML } from "../html.ts";
 import { FEEDS } from "../feeds.ts";
 import { type FeedSlug, type HNAPIItem, type Item, type ItemType } from "../hn.ts";
+
+// --- JSON-LD Structured Data ---
+
+export interface ArticleStructuredData {
+  title: string;
+  author: string | null;
+  datePublished: number; // unix timestamp
+  url: string;
+  commentCount: number;
+  discussionUrl: string;
+}
+
+export const articleJsonLd = (data: ArticleStructuredData): HTML => {
+  const publishedDate = new Date(data.datePublished * 1000).toISOString();
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "DiscussionForumPosting",
+    headline: data.title,
+    author: data.author
+      ? {
+        "@type": "Person",
+        name: data.author,
+        url: `https://news.ycombinator.com/user?id=${data.author}`,
+      }
+      : undefined,
+    datePublished: publishedDate,
+    url: data.url,
+    discussionUrl: data.discussionUrl,
+    interactionStatistic: {
+      "@type": "InteractionCounter",
+      interactionType: "https://schema.org/CommentAction",
+      userInteractionCount: data.commentCount,
+    },
+    isPartOf: {
+      "@type": "WebSite",
+      name: "NFHN - Hacker News Reader",
+      url: "https://nfhn.netlify.app",
+    },
+  };
+
+  // Remove undefined fields
+  const cleanedJsonLd = JSON.stringify(jsonLd, (_, v) => v === undefined ? undefined : v);
+
+  return html`<script type="application/ld+json">${raw(cleanedJsonLd)}</script>`;
+};
+
+export interface WebSiteStructuredData {
+  name: string;
+  url: string;
+  description: string;
+}
+
+export const websiteJsonLd = (data: WebSiteStructuredData): HTML => {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: data.name,
+    url: data.url,
+    description: data.description,
+    potentialAction: {
+      "@type": "SearchAction",
+      target: {
+        "@type": "EntryPoint",
+        urlTemplate: "https://hn.algolia.com/?q={search_term_string}",
+      },
+      "query-input": "required name=search_term_string",
+    },
+  };
+
+  return html`<script type="application/ld+json">${raw(JSON.stringify(jsonLd))}</script>`;
+};
 
 // --- Helper: Count total comments recursively ---
 
@@ -106,15 +178,13 @@ export const externalLinkScript = (): HTML =>
     </script>
   `;
 
-
-
 // --- Shared styles link ---
 
 export const sharedStyles = (pageNumber = 1): HTML => {
-  // Only the dynamic counter-set needs to be inline; all other styles are in /styles.css
+  // Only the dynamic counter-set needs to be inline; all other styles are in /styles.min.css
   const counterStart = pageNumber === 1 ? 0 : (pageNumber - 1) * 30;
   return html`
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/styles.min.css">
     <style>
     ol { counter-set: section ${counterStart}; }
     </style>
@@ -179,7 +249,7 @@ export const themeScript = (): HTML =>
 
 // --- Navigation ---
 
-export const renderNav = (activeFeed: FeedSlug): HTML =>
+export const renderNav = (activeFeed: FeedSlug | "saved"): HTML =>
   html`
     <nav class="nav-feeds" aria-label="Primary">
       ${FEEDS.map(({ slug, label }) =>
@@ -189,15 +259,27 @@ export const renderNav = (activeFeed: FeedSlug): HTML =>
             : ""}" aria-current="${activeFeed === slug ? "page" : undefined}">${label}</a>
         `
       )}
+      <a href="/saved" class="${activeFeed === "saved"
+        ? "active"
+        : ""}" aria-current="${activeFeed === "saved" ? "page" : undefined}">Saved</a>
     </nav>
+  `;
+
+// --- Keyboard shortcut hint ---
+
+export const keyboardHint = (): HTML =>
+  html`
+    <button type="button" class="keyboard-hint" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (press ?)">
+      <kbd>?</kbd>
+    </button>
   `;
 
 // --- Header bar with nav and theme toggle ---
 
-export const headerBar = (activeFeed: FeedSlug): HTML =>
+export const headerBar = (activeFeed: FeedSlug | "saved"): HTML =>
   html`
     <div class="header-bar">
-      ${renderNav(activeFeed)} ${themeToggle()}
+      ${renderNav(activeFeed)} ${keyboardHint()} ${themeToggle()}
     </div>
   `;
 
@@ -423,53 +505,138 @@ export const userLink = (username: string | null | undefined): HTML => {
   `;
 };
 
-// --- Share buttons ---
+// --- Reader mode link ---
 
-export const shareButtons = (title: string, url: string): HTML =>
+export const readerModeLink = (url: string | undefined): HTML => {
+  if (!url) return html``;
+  const readerUrl = `https://reader.jakechampion.name/${url}`;
+  return html`
+    <a
+      href="${readerUrl}"
+      class="reader-mode-link"
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Open in Reader Mode"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+        <path d="M21 5c-1.11-.35-2.33-.5-3.5-.5-1.95 0-4.05.4-5.5 1.5-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5V6c-.6-.45-1.25-.75-2-1zm0 13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5v11.5z"/>
+      </svg>
+      <span>Reader</span>
+    </a>
+  `;
+};
+
+// --- Bookmark/Save button ---
+
+export const bookmarkButton = (item: Item): HTML =>
   html`
-    <div class="share-buttons" aria-label="Share this story">
-      <a
-        href="https://twitter.com/intent/tweet?text=${encodeURIComponent(
-          title,
-        )}&url=${encodeURIComponent(url)}"
-        class="share-btn share-twitter"
-        target="_blank"
-        rel="noopener noreferrer"
-        title="Share on Twitter"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16">
-          <path
-            d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
-          />
-        </svg>
-        <span class="sr-only">Twitter</span>
-      </a>
-      <button type="button" class="share-btn share-copy" data-url="${url}" title="Copy link">
-        <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16">
-          <path
-            d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
-          />
-        </svg>
-        <span class="sr-only">Copy link</span>
-      </button>
-    </div>
+    <button
+      type="button"
+      class="bookmark-btn"
+      data-story-id="${item.id}"
+      data-story-title="${item.title}"
+      data-story-url="${item.url || ""}"
+      data-story-domain="${item.domain || ""}"
+      data-story-type="${item.type}"
+      data-story-points="${item.points ?? 0}"
+      data-story-user="${item.user || ""}"
+      data-story-time="${item.time ?? 0}"
+      data-story-time-ago="${item.time_ago || ""}"
+      data-story-comments="${item.comments_count ?? 0}"
+      title="Save story"
+      aria-label="Save story"
+    >
+      <svg class="bookmark-icon-outline" viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+        <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z" />
+      </svg>
+      <svg class="bookmark-icon-filled" viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+        <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z" />
+      </svg>
+      <span class="sr-only">Save</span>
+    </button>
+  `;
+
+// --- Favorites/Bookmarks script ---
+
+export const favoritesScript = (): HTML =>
+  html`
     <script>
-    document.querySelectorAll('.share-copy').forEach(btn => {
-      btn.addEventListener('click', async function() {
-        const url = this.dataset.url;
+    (function() {
+      const STORAGE_KEY = 'nfhn-saved-stories';
+
+      function getSavedStories() {
         try {
-          await navigator.clipboard.writeText(url);
-          this.classList.add('copied');
-          this.title = 'Copied!';
-          setTimeout(() => {
-            this.classList.remove('copied');
-            this.title = 'Copy link';
-          }, 2000);
-        } catch (err) {
-          console.error('Failed to copy:', err);
+          return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        } catch { return {}; }
+      }
+
+      function saveStories(stories) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(stories));
+        } catch (e) { console.error('Failed to save:', e); }
+      }
+
+      function notifyServiceWorker(type, id) {
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            type: type,
+            url: '/item/' + id
+          });
         }
-      });
-    });
+      }
+
+      function toggleStory(btn) {
+        const id = btn.dataset.storyId;
+        const stories = getSavedStories();
+
+        if (stories[id]) {
+          delete stories[id];
+          btn.classList.remove('is-saved');
+          btn.title = 'Save story';
+          btn.setAttribute('aria-label', 'Save story');
+          notifyServiceWorker('UNCACHE_ITEM', id);
+        } else {
+          stories[id] = {
+            id: parseInt(id, 10),
+            title: btn.dataset.storyTitle,
+            url: btn.dataset.storyUrl || null,
+            domain: btn.dataset.storyDomain || null,
+            type: btn.dataset.storyType,
+            points: parseInt(btn.dataset.storyPoints, 10) || 0,
+            user: btn.dataset.storyUser || null,
+            time: parseInt(btn.dataset.storyTime, 10) || 0,
+            time_ago: btn.dataset.storyTimeAgo,
+            comments_count: parseInt(btn.dataset.storyComments, 10) || 0,
+            saved_at: Date.now()
+          };
+          btn.classList.add('is-saved');
+          btn.title = 'Remove from saved';
+          btn.setAttribute('aria-label', 'Remove from saved');
+          notifyServiceWorker('CACHE_ITEM', id);
+        }
+
+        saveStories(stories);
+      }
+
+      function initBookmarks() {
+        const saved = getSavedStories();
+        document.querySelectorAll('.bookmark-btn').forEach(btn => {
+          const id = btn.dataset.storyId;
+          if (saved[id]) {
+            btn.classList.add('is-saved');
+            btn.title = 'Remove from saved';
+            btn.setAttribute('aria-label', 'Remove from saved');
+          }
+          btn.addEventListener('click', () => toggleStory(btn));
+        });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initBookmarks);
+      } else {
+        initBookmarks();
+      }
+    })();
     </script>
   `;
 
@@ -479,7 +646,7 @@ export const renderStory = (data: Item): HTML => {
   const meta = getTypeMeta(data.type);
 
   return html`
-    <li>
+    <li data-story-id="${data.id}">
       <a class="title" href="${meta.href(data)}">
         <span class="badge ${meta.badgeClass}">${meta.label}</span>
         <span class="story-title-text">${data.title}</span>
@@ -489,9 +656,12 @@ export const renderStory = (data: Item): HTML => {
           `
           : ""}
       </a>
-      <a class="comments" href="/item/${data.id}">
-        view ${data.comments_count > 0 ? data.comments_count + " comments" : "discussion"}
-      </a>
+      <div class="story-actions">
+        <a class="comments" href="/item/${data.id}">
+          view ${data.comments_count > 0 ? data.comments_count + " comments" : "discussion"}
+        </a>
+        ${bookmarkButton(data)}
+      </div>
     </li>
   `;
 };

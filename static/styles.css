@@ -155,6 +155,37 @@
   outline-offset: 2px;
 }
 
+/* Keyboard hint button */
+.keyboard-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--badge-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0.2em 0.4em;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.85em;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.keyboard-hint:hover,
+.keyboard-hint:focus {
+  background: var(--border-color);
+  border-color: var(--text-muted);
+  outline: none;
+}
+
+.keyboard-hint kbd {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  font-size: 0.9em;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
 /* Pagination info */
 .pagination-info {
   font-size: 0.85em;
@@ -628,44 +659,6 @@ pre {
   color: var(--text-primary);
 }
 
-/* Share buttons */
-.share-buttons {
-  display: flex;
-  gap: 0.5em;
-  margin: 0.5em 0;
-}
-
-.share-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2em;
-  height: 2em;
-  padding: 0;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  background: var(--badge-bg);
-  color: var(--text-muted);
-  cursor: pointer;
-  text-decoration: none;
-  transition: background-color 0.15s, color 0.15s;
-}
-
-.share-btn:hover {
-  background: var(--background-elevated);
-  color: var(--text-primary);
-}
-
-.share-btn svg {
-  fill: currentColor;
-}
-
-.share-copy.copied {
-  background: rgba(34, 197, 94, 0.15);
-  border-color: rgba(34, 197, 94, 0.5);
-  color: rgb(34, 197, 94);
-}
-
 /* External link indicators */
 .external-link {
   position: relative;
@@ -687,82 +680,236 @@ pre {
 
 /* Mobile improvements - larger touch targets */
 @media (max-width: 600px) {
+  /* Reduce base font size slightly for more content */
   body {
-    padding: 0 15px;
-    margin: 20px auto;
+    font-size: 16px;
+    padding: 0 12px;
+    margin: 16px auto;
   }
-  
+
+  /* Improve story list layout for narrow screens */
+  ol > li {
+    display: block;
+    padding-left: 2.5em;
+    margin-bottom: 1.25em;
+    padding-bottom: 1em;
+  }
+
+  ol > li:before {
+    font-size: 1.3em;
+    left: 0;
+    top: 0.1em;
+  }
+
+  ol > li:after {
+    left: 0;
+    width: 100%;
+  }
+
+  ol > li > * {
+    margin-left: 0;
+  }
+
+  /* Stack title and meta for better readability */
+  .title {
+    margin-bottom: 0.5em;
+  }
+
+  .story-meta {
+    font-size: 0.8em;
+    line-height: 1.5;
+  }
+
+  /* Compact badges on mobile */
+  .badge {
+    font-size: 0.65em;
+    padding: 0.15em 0.35em;
+  }
+
+  /* Better header layout */
+  .header-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75em;
+  }
+
+  .theme-toggle {
+    width: auto;
+    justify-content: center;
+    order: 2;
+  }
+
+  /* Scrollable nav with visual indicators */
   .nav-feeds {
-    gap: 0.5em;
+    margin: 0 -12px;
+    padding: 0 12px 0.75em;
+    gap: 0.4em;
     overflow-x: auto;
-    padding-bottom: 0.5em;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
   }
-  
+
+  .nav-feeds::-webkit-scrollbar {
+    display: none;
+  }
+
   .nav-feeds a {
-    padding: 0.5em 0.75em;
-    min-height: 44px;
+    scroll-snap-align: start;
+    padding: 0.4em 0.6em;
+    min-height: 40px;
+    font-size: 0.85em;
     display: flex;
     align-items: center;
     white-space: nowrap;
     background: var(--badge-bg);
     border-radius: 6px;
   }
-  
+
   .nav-feeds a.active {
     background: var(--background-elevated);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
-  
-  .header-bar {
-    flex-wrap: wrap;
-    gap: 0.5em;
+
+  /* Reduce heading sizes */
+  h1, h2, h3 {
+    font-size: 1.25em;
   }
-  
-  .theme-toggle {
-    width: 100%;
-    justify-content: flex-end;
-  }
-  
+
   .page-controls {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.5em;
   }
-  
+
+  /* Optimize comment layout */
+  details {
+    margin: 20px auto;
+    font-size: 16px;
+  }
+
   summary {
     min-height: 56px;
-    padding: 1em;
+    padding: 0.75em 0.5em;
+    gap: 0.4em;
   }
-  
+
+  .comment-meta {
+    gap: 0.35em;
+    font-size: 0.85em;
+  }
+
   .comment-permalink {
     min-height: 48px;
     min-width: 48px;
   }
-  
+
+  /* Reduce comment indentation on mobile */
+  .comment {
+    --indent-unit: 12px;
+  }
+
+  /* Full-width pagination button */
   .more-link {
-    display: block;
-    padding: 1em;
-    background: var(--badge-bg);
-    border-radius: 8px;
-    text-align: center;
-    font-weight: 600;
-    min-height: 48px;
     display: flex;
     align-items: center;
     justify-content: center;
+    margin: 1em -12px 0;
+    padding: 1em;
+    background: var(--badge-bg);
+    border-radius: 0;
+    text-align: center;
+    font-weight: 600;
+    min-height: 48px;
   }
-  
+
+  /* Share buttons - horizontal scroll */
+  .share-buttons {
+    gap: 0.4em;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.5em;
+  }
+
   .share-btn {
+    flex-shrink: 0;
     width: 2.5em;
     height: 2.5em;
     min-width: 44px;
     min-height: 44px;
   }
-  
+
+  /* User profile adjustments */
+  .user-stats {
+    gap: 0.2em 0.75em;
+    padding: 0.75em;
+  }
+
+  /* Modal adjustments */
+  .shortcuts-modal {
+    max-width: calc(100vw - 2em);
+    padding: 1em;
+  }
+
   .font-btn {
     min-width: 44px;
     min-height: 44px;
+  }
+}
+
+/* Extra small screens (< 400px) */
+@media (max-width: 400px) {
+  body {
+    font-size: 15px;
+    padding: 0 10px;
+  }
+
+  ol > li {
+    padding-left: 2em;
+  }
+
+  ol > li:before {
+    font-size: 1.1em;
+  }
+
+  .nav-feeds a {
+    padding: 0.35em 0.5em;
+    font-size: 0.8em;
+  }
+
+  .badge {
+    font-size: 0.6em;
+  }
+
+  .story-heading {
+    margin-left: 0.2em;
+  }
+
+  /* Stack metadata on very small screens */
+  .story-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25em;
+  }
+
+  .link-sep {
+    display: none;
+  }
+}
+
+/* Landscape phone orientation */
+@media (max-width: 600px) and (orientation: landscape) {
+  body {
+    margin: 10px auto;
+  }
+
+  .header-bar {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  summary {
+    min-height: 48px;
   }
 }
 
@@ -892,3 +1039,399 @@ pre {
   }
 }
 
+/* Bookmark/Save button */
+.bookmark-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.2em;
+  height: 2.2em;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--badge-bg);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, transform 0.1s;
+  flex-shrink: 0;
+}
+
+.bookmark-btn:hover {
+  background: var(--background-elevated);
+  color: var(--text-primary);
+  transform: scale(1.05);
+}
+
+.bookmark-btn:focus-visible {
+  outline: 2px solid #ff7a18;
+  outline-offset: 2px;
+}
+
+.bookmark-btn svg {
+  fill: currentColor;
+}
+
+.bookmark-btn .bookmark-icon-filled {
+  display: none;
+}
+
+.bookmark-btn .bookmark-icon-outline {
+  display: block;
+}
+
+.bookmark-btn.is-saved {
+  background: rgba(255, 122, 24, 0.15);
+  border-color: rgba(255, 122, 24, 0.5);
+  color: #ff7a18;
+}
+
+.bookmark-btn.is-saved .bookmark-icon-filled {
+  display: block;
+}
+
+.bookmark-btn.is-saved .bookmark-icon-outline {
+  display: none;
+}
+
+.bookmark-btn.is-saved:hover {
+  background: rgba(255, 122, 24, 0.25);
+}
+
+/* Story actions container */
+.story-actions {
+  grid-area: footer;
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+}
+
+/* Article actions (bookmark on article page) */
+.article-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin: 0.5em 0;
+}
+
+.article-actions .bookmark-btn {
+  width: 2em;
+  height: 2em;
+}
+
+/* Reader mode link */
+.reader-mode-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.4em 0.7em;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--badge-bg);
+  color: var(--text-muted);
+  font-size: 0.85em;
+  text-decoration: none;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.reader-mode-link:hover {
+  background: var(--background-elevated);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.reader-mode-link:focus-visible {
+  outline: 2px solid #ff7a18;
+  outline-offset: 2px;
+}
+
+.reader-mode-link svg {
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
+/* Saved stories page */
+.saved-header {
+  margin-bottom: 1.5em;
+  padding-left: 0.5em;
+}
+
+.saved-header h1 {
+  margin: 0 0 0.25em;
+}
+
+.saved-description {
+  font-size: 0.9em;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.saved-count {
+  font-size: 0.85em;
+  color: var(--text-muted);
+  margin-bottom: 0.5em;
+  padding-left: 0.5em;
+}
+
+.empty-saved {
+  text-align: center;
+  padding: 3em 1em;
+  color: var(--text-muted);
+}
+
+.empty-saved p {
+  margin: 0.5em 0;
+}
+
+.loading-message {
+  text-align: center;
+  padding: 2em 1em;
+  color: var(--text-muted);
+}
+
+/* Mobile touch target improvements for bookmark */
+@media (max-width: 600px) {
+  .bookmark-btn {
+    min-width: 44px;
+    min-height: 44px;
+    width: 2.5em;
+    height: 2.5em;
+  }
+  
+  .story-actions {
+    gap: 0.5em;
+  }
+}
+
+/* =============================================================================
+   Print Stylesheet - Optimized for article pages
+   ============================================================================= */
+
+@media print {
+  /* Reset colors to black and white for printing */
+  :root,
+  :root[data-theme="light"],
+  :root[data-theme="dark"],
+  :root[data-theme="auto"] {
+    --background: #ffffff;
+    --background-elevated: #ffffff;
+    --text-strong: #000000;
+    --text-primary: #000000;
+    --text-muted: #333333;
+    --text-secondary: #333333;
+    --border-color: #cccccc;
+    --border-subtle: #dddddd;
+    --divider-color: #000000;
+    --badge-bg: #f0f0f0;
+    --comment-bg: #f5f5f5;
+    color-scheme: light;
+  }
+  
+  /* Page setup */
+  @page {
+    margin: 1.5cm;
+    size: auto;
+  }
+  
+  /* Basic print resets */
+  body {
+    font-size: 12pt;
+    line-height: 1.5;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    background: white;
+    color: black;
+  }
+  
+  /* Hide non-essential UI elements */
+  .nav-feeds,
+  .header-bar,
+  .theme-toggle,
+  .skip-link,
+  .share-buttons,
+  .bookmark-btn,
+  .reader-mode-link,
+  .story-actions .bookmark-btn,
+  .article-actions .bookmark-btn,
+  .article-actions .reader-mode-link,
+  .more-link,
+  .pagination-info,
+  .shortcuts-modal,
+  .saved-header,
+  .saved-description,
+  .saved-count,
+  #aria-live {
+    display: none !important;
+  }
+  
+  /* Show URLs for links */
+  article a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    color: #666;
+    word-break: break-all;
+  }
+  
+  /* Don't show URL for internal links */
+  article a[href^="/"]::after,
+  article a[href^="#"]::after {
+    content: none;
+  }
+  
+  /* Style the main article heading */
+  .story-heading {
+    font-size: 18pt;
+    margin: 0 0 0.5em;
+    display: block;
+  }
+  
+  /* Badge styling for print */
+  .badge {
+    border: 1px solid #999;
+    background: #f0f0f0;
+    padding: 0.1em 0.4em;
+    font-size: 8pt;
+    color: #333;
+  }
+  
+  /* Meta line styling */
+  .meta-line {
+    font-size: 10pt;
+    color: #333;
+    margin-bottom: 1em;
+  }
+  
+  /* Comments section */
+  details {
+    margin: 1em 0;
+    max-width: none;
+    page-break-inside: avoid;
+  }
+  
+  details[open] {
+    page-break-inside: auto;
+  }
+  
+  summary {
+    font-size: 10pt;
+    padding: 0.5em 0;
+    min-height: auto;
+  }
+  
+  .comment-meta {
+    font-size: 9pt;
+  }
+  
+  .comment-permalink {
+    background: none;
+    padding: 0;
+    min-height: auto;
+    min-width: auto;
+  }
+  
+  /* Nested comment indentation for print */
+  article ul {
+    padding-left: 1.5em;
+    border-left: 1px solid #ccc;
+    margin-left: 0.5em;
+  }
+  
+  /* HR styling */
+  hr {
+    border: none;
+    border-top: 1px solid #000;
+    margin: 1em 0;
+  }
+  
+  /* Code blocks */
+  pre, code {
+    background: #f5f5f5 !important;
+    border: 1px solid #ddd;
+    font-size: 9pt;
+  }
+  
+  pre {
+    padding: 0.5em;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    page-break-inside: avoid;
+  }
+  
+  /* User profile page */
+  .user-profile h1 {
+    font-size: 16pt;
+  }
+  
+  .user-stats {
+    background: #f5f5f5;
+    padding: 0.5em;
+    page-break-inside: avoid;
+  }
+  
+  /* Story list (feed pages) */
+  ol.stories {
+    list-style: decimal;
+    padding-left: 2em;
+  }
+  
+  ol.stories > li {
+    display: list-item;
+    margin-bottom: 0.75em;
+    page-break-inside: avoid;
+  }
+  
+  ol.stories > li::before {
+    display: none;
+  }
+  
+  ol.stories > li::after {
+    display: none;
+  }
+  
+  .title {
+    display: inline;
+  }
+  
+  .comments {
+    display: inline;
+    font-size: 10pt;
+    color: #666;
+  }
+  
+  .comments::before {
+    content: " — ";
+  }
+  
+  /* External link indicator - hide in print */
+  .external-link::after {
+    display: none !important;
+  }
+  
+  /* OP badge */
+  .op-badge {
+    border: 1px solid #666;
+    background: #eee;
+    color: #333;
+  }
+  
+  /* Avoid page breaks in awkward places */
+  h1, h2, h3 {
+    page-break-after: avoid;
+  }
+  
+  article {
+    page-break-before: avoid;
+  }
+  
+  /* Print footer with source URL */
+  body::after {
+    content: "Printed from NFHN (nfhn.netlify.app)";
+    display: block;
+    text-align: center;
+    font-size: 9pt;
+    color: #666;
+    margin-top: 2em;
+    padding-top: 1em;
+    border-top: 1px solid #ccc;
+  }
+}

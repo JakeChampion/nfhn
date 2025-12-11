@@ -2,6 +2,17 @@
   "imports": {
     "std/": "https://deno.land/std@0.224.0/"
   },
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "useUnknownInCatchVariables": true
+  },
+  "tasks": {
+    "dev": "netlify dev",
+    "build:css": "deno run --allow-read --allow-write scripts/minify-css.ts"
+  },
   "lint": {
     "rules": {
       "include": ["recommended"]
