@@ -280,9 +280,9 @@ ol > li > * {
 .title,
 .comments {
   display: flex;
-  justify-content: center;
-  align-content: center;
-  flex-direction: column;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.25em;
 }
 
 a {
@@ -673,7 +673,6 @@ pre {
   vertical-align: super;
 }
 
-.title .external-link::after,
 .story-link.external-link::after {
   display: none;
 }

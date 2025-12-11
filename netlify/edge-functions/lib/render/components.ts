@@ -181,10 +181,10 @@ export const externalLinkScript = (): HTML =>
 // --- Shared styles link ---
 
 export const sharedStyles = (pageNumber = 1): HTML => {
-  // Only the dynamic counter-set needs to be inline; all other styles are in /styles.min.css
+  // Only the dynamic counter-set needs to be inline; all other styles are in /styles.css
   const counterStart = pageNumber === 1 ? 0 : (pageNumber - 1) * 30;
   return html`
-    <link rel="stylesheet" href="/styles.min.css">
+    <link rel="stylesheet" href="/styles.css">
     <style>
     ol { counter-set: section ${counterStart}; }
     </style>

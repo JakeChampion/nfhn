@@ -60,7 +60,6 @@ nfhn/
 │       └── sitemap.ts      # /sitemap.xml endpoint
 ├── static/                 # Static assets served by Netlify CDN
 │   ├── styles.css          # Source CSS
-│   ├── styles.min.css      # Minified CSS (generated)
 │   ├── icon.svg            # Favicon
 │   ├── manifest.json       # PWA manifest
 │   ├── robots.txt          # Robots.txt
