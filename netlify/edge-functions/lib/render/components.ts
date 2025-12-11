@@ -541,7 +541,7 @@ export const userLink = (username: string | null | undefined): HTML => {
 
 export const readerModeLink = (url: string | undefined): HTML => {
   if (!url) return html``;
-  const readerUrl = `https://reader.jakechampion.name/${url}`;
+  const readerUrl = `/reader/${url}`;
   return html`
     <a
       href="${readerUrl}"

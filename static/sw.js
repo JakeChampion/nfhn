@@ -39,7 +39,7 @@ self.addEventListener('fetch', (event) => {
 
   // Handle cross-origin requests for saved external content
   if (url.origin !== location.origin) {
-    // Check if this is a reader.jakechampion.name URL or an external URL we might have cached
+    // Check if this is an external URL we might have cached
     event.respondWith(
       fetch(request).catch(() => {
         // If network fails, try to serve from saved cache
@@ -191,9 +191,9 @@ self.addEventListener('message', (event) => {
           // Silently fail - external site may block requests
         });
         
-        // Cache the reader version
-        const readerUrl = 'https://reader.jakechampion.name/' + externalUrl;
-        fetch(readerUrl, { mode: 'cors' }).then((response) => {
+        // Cache the reader version (same-origin, so no special mode needed)
+        const readerUrl = '/reader/' + externalUrl;
+        fetch(readerUrl).then((response) => {
           if (response.ok) {
             cache.put(readerUrl, response);
           }
@@ -213,7 +213,7 @@ self.addEventListener('message', (event) => {
       
       if (externalUrl) {
         cache.delete(externalUrl);
-        cache.delete('https://reader.jakechampion.name/' + externalUrl);
+        cache.delete('/reader/' + externalUrl);
       }
     });
   }
