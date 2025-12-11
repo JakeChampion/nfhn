@@ -270,7 +270,30 @@ export const renderNav = (activeFeed: FeedSlug | "saved"): HTML =>
 export const keyboardHint = (): HTML =>
   html`
     <button type="button" class="keyboard-hint" commandfor="shortcuts-modal" command="show-modal" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (press ?)">
-      <kbd>?</kbd>
+      <kbd>?</kbd> Keyboard shortcuts
+    </button>
+  `;
+
+// --- Settings menu dialog ---
+
+export const settingsMenu = (): HTML =>
+  html`
+    <dialog id="settings-menu" class="settings-menu">
+      <h2>Settings</h2>
+      ${themeToggle()}
+      ${keyboardHint()}
+      <button type="button" class="modal-close" commandfor="settings-menu" command="close" aria-label="Close">×</button>
+    </dialog>
+  `;
+
+// --- Settings menu button ---
+
+export const settingsMenuButton = (): HTML =>
+  html`
+    <button type="button" class="settings-menu-btn" commandfor="settings-menu" command="show-modal" aria-label="Settings menu" title="Settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true" width="20" height="20">
+        <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+      </svg>
     </button>
   `;
 
@@ -279,8 +302,10 @@ export const keyboardHint = (): HTML =>
 export const headerBar = (activeFeed: FeedSlug | "saved"): HTML =>
   html`
     <div class="header-bar">
-      ${renderNav(activeFeed)} ${keyboardHint()} ${themeToggle()}
+      ${settingsMenuButton()}
+      ${renderNav(activeFeed)}
     </div>
+    ${settingsMenu()}
   `;
 
 // --- Prefetch/prerender script ---
@@ -441,6 +466,14 @@ export const keyboardNavScript = (): HTML =>
     modal.addEventListener('click', function(e) {
       if (e.target === modal) hideModal();
     });
+
+    // Close settings menu on backdrop click
+    const settingsMenu = document.getElementById('settings-menu');
+    if (settingsMenu) {
+      settingsMenu.addEventListener('click', function(e) {
+        if (e.target === settingsMenu) settingsMenu.close();
+      });
+    }
 
     document.addEventListener('keydown', function(e) {
       // Handle modal close

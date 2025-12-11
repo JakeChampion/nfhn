@@ -128,8 +128,8 @@
 
 .header-bar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 0.75em;
   margin-bottom: 1em;
 }
 
@@ -184,14 +184,6 @@
   background: transparent;
   border: none;
   box-shadow: none;
-}
-
-/* Pagination info */
-.pagination-info {
-  font-size: 0.85em;
-  color: var(--text-muted);
-  margin-bottom: 0.5em;
-  padding-left: 0.5em;
 }
 
 * {
@@ -354,7 +346,7 @@ a:focus-visible {
 .nav-feeds {
   display: flex;
   gap: 0.75em;
-  margin-bottom: 1.5em;
+  padding: 1.5em 0;
   font-size: 0.9em;
   color: var(--text-primary);
 }
@@ -659,6 +651,63 @@ pre {
   color: var(--text-primary);
 }
 
+/* Settings menu button */
+.settings-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--badge-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 0.3em;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.settings-menu-btn:hover,
+.settings-menu-btn:focus {
+  background: var(--border-color);
+  border-color: var(--text-muted);
+  outline: none;
+}
+
+.settings-menu-btn svg {
+  fill: currentColor;
+}
+
+/* Settings menu dialog */
+.settings-menu {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1.5em;
+  max-width: 300px;
+  background: var(--background-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.settings-menu::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.settings-menu h2 {
+  margin: 0 0 1em;
+  font-size: 1.2em;
+  color: var(--text-strong);
+}
+
+.settings-menu .theme-toggle {
+  margin-bottom: 1em;
+}
+
+.settings-menu .keyboard-hint {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 0.5em;
+  padding: 0.5em 0.75em;
+}
+
 /* External link indicators */
 .external-link {
   position: relative;
@@ -727,21 +776,20 @@ pre {
 
   /* Better header layout */
   .header-bar {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
     gap: 0.75em;
   }
 
   .theme-toggle {
     width: auto;
     justify-content: center;
-    order: 2;
   }
 
   /* Scrollable nav with visual indicators */
   .nav-feeds {
     margin: 0 -12px;
-    padding: 0 12px 0.75em;
+    padding: 0 12px;
     gap: 0.4em;
     overflow-x: auto;
     scroll-snap-type: x mandatory;
@@ -761,7 +809,7 @@ pre {
     display: flex;
     align-items: center;
     white-space: nowrap;
-    background: var(--badge-bg);
+    /* background: var(--badge-bg); */
     border-radius: 6px;
   }
 
@@ -845,7 +893,8 @@ pre {
   }
 
   /* Modal adjustments */
-  .shortcuts-modal {
+  .shortcuts-modal,
+  .settings-menu {
     max-width: calc(100vw - 2em);
     padding: 1em;
   }
@@ -1254,8 +1303,8 @@ pre {
   .article-actions .bookmark-btn,
   .article-actions .reader-mode-link,
   .more-link,
-  .pagination-info,
   .shortcuts-modal,
+  .settings-menu,
   .saved-header,
   .saved-description,
   .saved-count,

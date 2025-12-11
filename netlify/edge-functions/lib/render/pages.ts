@@ -69,7 +69,6 @@ export const home = (
     ${skipLink()}
     <main id="main-content" aria-label="Main content">
       ${headerBar(feed)}
-      <div class="pagination-info">Page ${pageNumber}</div>
       <ol class="stories">
         ${content.map((data: Item) => renderStory(data))}
       </ol>
