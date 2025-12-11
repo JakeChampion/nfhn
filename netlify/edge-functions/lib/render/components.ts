@@ -269,7 +269,7 @@ export const renderNav = (activeFeed: FeedSlug | "saved"): HTML =>
 
 export const keyboardHint = (): HTML =>
   html`
-    <button type="button" class="keyboard-hint" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (press ?)">
+    <button type="button" class="keyboard-hint" commandfor="shortcuts-modal" command="show-modal" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (press ?)">
       <kbd>?</kbd>
     </button>
   `;
@@ -356,7 +356,7 @@ export const keyboardNavScript = (): HTML =>
         <dt><kbd>Esc</kbd></dt>
         <dd>Close modal / clear selection</dd>
       </dl>
-      <button type="button" class="modal-close" aria-label="Close">×</button>
+      <button type="button" class="modal-close" commandfor="shortcuts-modal" command="close" aria-label="Close">×</button>
     </dialog>
     <script>
     (function() {
@@ -437,17 +437,10 @@ export const keyboardNavScript = (): HTML =>
       modal.close();
     }
 
-    // Close modal on button click or backdrop click
-    modal.querySelector('.modal-close').addEventListener('click', hideModal);
+    // Close modal on backdrop click
     modal.addEventListener('click', function(e) {
       if (e.target === modal) hideModal();
     });
-
-    // Open modal on keyboard-hint button click
-    const hintBtn = document.querySelector('.keyboard-hint');
-    if (hintBtn) {
-      hintBtn.addEventListener('click', showModal);
-    }
 
     document.addEventListener('keydown', function(e) {
       // Handle modal close
