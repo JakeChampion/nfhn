@@ -1239,10 +1239,8 @@ pre {
 /* Mobile touch target improvements for bookmark */
 @media (max-width: 600px) {
   .bookmark-btn {
-    min-width: 44px;
-    min-height: 44px;
-    width: 2.5em;
-    height: 2.5em;
+    width: 2em;
+    height: 2em;
   }
   
   .story-actions {
