@@ -170,7 +170,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
         ${headerBar(activeFeed)}
         <article>
           <a href="${meta.href(item)}">
-            <span class="badge ${meta.badgeClass}">${meta.label}</span>
+            ${meta.label ? tpl`<span class="badge ${meta.badgeClass}">${meta.label}</span>` : ""}
             <h1 class="story-heading">${item.title}</h1>
             ${
       item.domain
