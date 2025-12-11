@@ -63,7 +63,14 @@ export class NotFoundError extends NFHNError {
     };
 
     const { title, description } = messages[resource];
-    super(`${resource} not found: ${detail ?? "unknown"}`, 404, title, description, false, requestId);
+    super(
+      `${resource} not found: ${detail ?? "unknown"}`,
+      404,
+      title,
+      description,
+      false,
+      requestId,
+    );
     this.name = "NotFoundError";
   }
 }
