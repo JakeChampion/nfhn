@@ -608,17 +608,19 @@ export const favoritesScript = (): HTML =>
         } catch (e) { console.error('Failed to save:', e); }
       }
 
-      function notifyServiceWorker(type, id) {
+      function notifyServiceWorker(type, id, externalUrl) {
         if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
           navigator.serviceWorker.controller.postMessage({
             type: type,
-            url: '/item/' + id
+            url: '/item/' + id,
+            externalUrl: externalUrl || null
           });
         }
       }
 
       function toggleStory(btn) {
         const id = btn.dataset.storyId;
+        const externalUrl = btn.dataset.storyUrl || null;
         const stories = getSavedStories();
 
         if (stories[id]) {
@@ -626,12 +628,12 @@ export const favoritesScript = (): HTML =>
           btn.classList.remove('is-saved');
           btn.title = 'Save story';
           btn.setAttribute('aria-label', 'Save story');
-          notifyServiceWorker('UNCACHE_ITEM', id);
+          notifyServiceWorker('UNCACHE_ITEM', id, externalUrl);
         } else {
           stories[id] = {
             id: parseInt(id, 10),
             title: btn.dataset.storyTitle,
-            url: btn.dataset.storyUrl || null,
+            url: externalUrl,
             domain: btn.dataset.storyDomain || null,
             type: btn.dataset.storyType,
             points: parseInt(btn.dataset.storyPoints, 10) || 0,
@@ -644,7 +646,7 @@ export const favoritesScript = (): HTML =>
           btn.classList.add('is-saved');
           btn.title = 'Remove from saved';
           btn.setAttribute('aria-label', 'Remove from saved');
-          notifyServiceWorker('CACHE_ITEM', id);
+          notifyServiceWorker('CACHE_ITEM', id, externalUrl);
         }
 
         saveStories(stories);
