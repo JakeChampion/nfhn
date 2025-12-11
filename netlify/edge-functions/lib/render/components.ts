@@ -443,6 +443,12 @@ export const keyboardNavScript = (): HTML =>
       if (e.target === modal) hideModal();
     });
 
+    // Open modal on keyboard-hint button click
+    const hintBtn = document.querySelector('.keyboard-hint');
+    if (hintBtn) {
+      hintBtn.addEventListener('click', showModal);
+    }
+
     document.addEventListener('keydown', function(e) {
       // Handle modal close
       if (modal.open && e.key === 'Escape') {
