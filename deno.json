@@ -15,7 +15,10 @@
     "build": "deno run --allow-read --allow-write --allow-env scripts/build.ts"
   },
   "lint": {
-    "exclude": ["netlify/edge-functions/lib/readability.js"],
+    "exclude": [
+      "netlify/edge-functions/lib/readability.js",
+      "static/"
+    ],
     "rules": {
       "include": ["recommended"]
     }
