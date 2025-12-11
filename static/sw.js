@@ -1,6 +1,6 @@
 // Service Worker for NFHN
-const CACHE_NAME = 'nfhn-v3';
-const SAVED_CACHE_NAME = 'nfhn-saved-v3';
+const CACHE_NAME = 'nfhn-__DEPLOY_ID__';
+const SAVED_CACHE_NAME = 'nfhn-saved-v1';
 const STATIC_ASSETS = [
   '/styles.css',
   '/icon.svg',

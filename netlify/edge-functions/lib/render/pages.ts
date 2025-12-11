@@ -69,7 +69,6 @@ export const home = (
     ${skipLink()}
     <main id="main-content" aria-label="Main content">
       ${headerBar(feed)}
-      <div class="pagination-info">Page ${pageNumber}</div>
       <ol class="stories">
         ${content.map((data: Item) => renderStory(data))}
       </ol>
@@ -348,7 +347,7 @@ const savedPageScript = (): HTML =>
         ask: { label: 'Ask HN', badgeClass: 'badge-ask', href: (item) => '/item/' + item.id },
         show: { label: 'Show HN', badgeClass: 'badge-show', href: (item) => '/item/' + item.id },
         job: { label: 'Job', badgeClass: 'badge-job', href: (item) => item.url || '/item/' + item.id },
-        link: { label: 'Link', badgeClass: 'badge-link', href: (item) => item.url || '/item/' + item.id },
+        link: { label: '', badgeClass: '', href: (item) => item.url || '/item/' + item.id },
         comment: { label: 'Comment', badgeClass: 'badge-default', href: (item) => '/item/' + item.id }
       };
 
@@ -383,7 +382,7 @@ const savedPageScript = (): HTML =>
         
         return '<li data-story-id="' + item.id + '">' +
           '<a class="title" href="' + escapeHtml(href) + '">' +
-            '<span class="badge ' + meta.badgeClass + '">' + meta.label + '</span>' +
+            (meta.label ? '<span class="badge ' + meta.badgeClass + '">' + meta.label + '</span>' : '') +
             '<span class="story-title-text">' + escapeHtml(item.title) + '</span>' +
             (item.domain ? '<span class="story-meta">(' + escapeHtml(item.domain) + ')</span>' : '') +
           '</a>' +

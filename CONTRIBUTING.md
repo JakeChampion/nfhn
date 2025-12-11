@@ -60,7 +60,6 @@ nfhn/
 │       └── sitemap.ts      # /sitemap.xml endpoint
 ├── static/                 # Static assets served by Netlify CDN
 │   ├── styles.css          # Source CSS
-│   ├── styles.min.css      # Minified CSS (generated)
 │   ├── icon.svg            # Favicon
 │   ├── manifest.json       # PWA manifest
 │   ├── robots.txt          # Robots.txt
@@ -122,15 +121,6 @@ The project uses strict TypeScript settings. Check types with:
 deno check netlify/edge-functions/**/*.ts tests/**/*.ts
 ```
 
-### Building
-
-Before deploying, build the minified CSS:
-
-```bash
-npm run build
-# Or just CSS: npm run build:css
-```
-
 ## 🎨 Making Changes
 
 ### Adding a New Page/Route
@@ -162,7 +152,6 @@ The HTML templating uses a custom streaming template literal system (`html.ts`).
 ### Adding Styles
 
 1. Edit `static/styles.css`
-2. Run `npm run build:css` to regenerate the minified version
 3. Test locally with `npm run dev`
 
 ## 📋 Pull Request Guidelines
@@ -182,7 +171,6 @@ The HTML templating uses a custom streaming template literal system (`html.ts`).
    - [ ] Run `npm run lint` - No linting errors
    - [ ] Run `npm test` - All tests pass
    - [ ] Run `deno check netlify/edge-functions/**/*.ts` - No type errors
-   - [ ] Run `npm run build:css` - CSS is minified
 
 4. **PR description**: Explain what changes were made and why
 

@@ -11,7 +11,7 @@
   },
   "tasks": {
     "dev": "netlify dev",
-    "build:css": "deno run --allow-read --allow-write scripts/minify-css.ts"
+    "build": "deno run --allow-read --allow-write --allow-env scripts/build.ts"
   },
   "lint": {
     "rules": {
