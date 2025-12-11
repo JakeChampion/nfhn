@@ -119,7 +119,9 @@ Deno.test("html: handles false as empty", async () => {
 });
 
 Deno.test("html: renders nested html templates", async () => {
-  const inner = html`<span>inner</span>`;
+  const inner = html`
+    <span>inner</span>
+  `;
   const outer = html`
     <div>${inner}</div>
   `;
@@ -132,7 +134,9 @@ Deno.test("html: renders arrays of values", async () => {
   const result = (await htmlToString(
     html`
       <ul>${items.map((i) =>
-        html`<li>${i}</li>`
+        html`
+          <li>${i}</li>
+        `
       )}</ul>
     `,
   )).trim();

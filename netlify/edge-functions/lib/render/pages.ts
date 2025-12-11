@@ -58,11 +58,13 @@ export const home = (
     <meta name="twitter:card" content="summary">
     <link rel="icon" type="image/svg+xml" href="/icon.svg">
     ${sharedStyles(pageNumber)}
-    ${websiteJsonLd({
+    ${
+    websiteJsonLd({
       name: "NFHN - Hacker News Reader",
       url: "https://nfhn.netlify.app",
       description: "A fast, accessible Hacker News reader built with Netlify Edge Functions.",
-    })}
+    })
+  }
     <title>NFHN: Page ${pageNumber}</title>
   </head>
   <body>

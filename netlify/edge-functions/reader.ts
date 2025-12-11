@@ -1,51 +1,50 @@
-
-import { Readability } from './lib/readability.js';
+import { Readability } from "./lib/readability.js";
 import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.45/deno-dom-wasm.ts";
 
 export default async (req) => {
   let status = 200;
-  let contents = 'Append a URL in the address bar to begin.';
+  let contents = "Append a URL in the address bar to begin.";
 
   const requestUrl = new URL(req.url);
   const url = requestUrl.pathname.slice(1);
 
   if (url) {
-      const pageUrl = new URL(url);
-      const fallbackURI = pageUrl.origin + pageUrl.pathname;
+    const pageUrl = new URL(url);
+    const fallbackURI = pageUrl.origin + pageUrl.pathname;
 
-      try {
-        const { data: pageContent, error } = await fetchDocument(url);
-        if (error) throw error;
+    try {
+      const { data: pageContent, error } = await fetchDocument(url);
+      if (error) throw error;
 
-        // get baseURI and documentURI from fetchDocument and attach to doc?
-        const doc = new DOMParser().parseFromString(pageContent, "text/html");
-        if (doc === null) throw Error('Unable to parse page content');
+      // get baseURI and documentURI from fetchDocument and attach to doc?
+      const doc = new DOMParser().parseFromString(pageContent, "text/html");
+      if (doc === null) throw Error("Unable to parse page content");
 
-        const reader = new Readability(doc, { fallbackURI });
-        const parsed = reader.parse();
-        const title = parsed!.title as string;
-        const content = parsed!.content as string;
+      const reader = new Readability(doc, { fallbackURI });
+      const parsed = reader.parse();
+      const title = parsed!.title as string;
+      const content = parsed!.content as string;
 
-        contents = renderHtml(url, title, content);
-      } catch (e) {
-        console.error(e);
-        status = 500;
-        contents = 'Unable to fetch page';
-      }
+      contents = renderHtml(url, title, content);
+    } catch (e) {
+      console.error(e);
+      status = 500;
+      contents = "Unable to fetch page";
+    }
   }
 
   return new Response(contents, {
     status,
-    headers: { 'content-type': 'text/html' },
+    headers: { "content-type": "text/html" },
   });
-}
+};
 
 async function fetchDocument(url: string) {
-  let data = '', error = undefined;
+  let data = "", error = undefined;
 
   // add protocol if it doesn't exist
   if (!/^https?:\/\//.test(url)) {
-    url = 'https://' + url;
+    url = "https://" + url;
   }
 
   try {
@@ -89,4 +88,4 @@ function renderHtml(url: string, title: string, content: string, timestamp?: num
   `;
 }
 
-export const config = { path: "/reader/*" }
+export const config = { path: "/reader/*" };
