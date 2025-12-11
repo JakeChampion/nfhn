@@ -47,7 +47,11 @@ export const articleJsonLd = (data: ArticleStructuredData): HTML => {
   // Remove undefined fields
   const cleanedJsonLd = JSON.stringify(jsonLd, (_, v) => v === undefined ? undefined : v);
 
-  return html`<script type="application/ld+json">${raw(cleanedJsonLd)}</script>`;
+  return html`
+    <script type="application/ld+json">
+    ${raw(cleanedJsonLd)}
+    </script>
+  `;
 };
 
 export interface WebSiteStructuredData {
@@ -73,7 +77,11 @@ export const websiteJsonLd = (data: WebSiteStructuredData): HTML => {
     },
   };
 
-  return html`<script type="application/ld+json">${raw(JSON.stringify(jsonLd))}</script>`;
+  return html`
+    <script type="application/ld+json">
+    ${raw(JSON.stringify(jsonLd))}
+    </script>
+  `;
 };
 
 // --- Helper: Count total comments recursively ---
@@ -153,6 +161,15 @@ export const serviceWorkerScript = (): HTML =>
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
     </script>
+  `;
+
+// --- Text justification script (tex-linebreak) ---
+
+export const justifyScript = (): HTML =>
+  html`
+    <script src="/tex-linebreak.js"></script>
+    <script src="/hyphens_en-us.js"></script>
+    <script src="/justify.js"></script>
   `;
 
 // --- External link indicator script ---
@@ -269,7 +286,14 @@ export const renderNav = (activeFeed: FeedSlug | "saved"): HTML =>
 
 export const keyboardHint = (): HTML =>
   html`
-    <button type="button" class="keyboard-hint" commandfor="shortcuts-modal" command="show-modal" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (press ?)">
+    <button
+      type="button"
+      class="keyboard-hint"
+      commandfor="shortcuts-modal"
+      command="show-modal"
+      aria-label="Keyboard shortcuts"
+      title="Keyboard shortcuts (press ?)"
+    >
       <kbd>?</kbd> Keyboard shortcuts
     </button>
   `;
@@ -280,9 +304,16 @@ export const settingsMenu = (): HTML =>
   html`
     <dialog id="settings-menu" class="settings-menu">
       <h2>Settings</h2>
-      ${themeToggle()}
-      ${keyboardHint()}
-      <button type="button" class="modal-close" commandfor="settings-menu" command="close" aria-label="Close">×</button>
+      ${themeToggle()} ${keyboardHint()}
+      <button
+        type="button"
+        class="modal-close"
+        commandfor="settings-menu"
+        command="close"
+        aria-label="Close"
+      >
+        ×
+      </button>
     </dialog>
   `;
 
@@ -290,9 +321,16 @@ export const settingsMenu = (): HTML =>
 
 export const settingsMenuButton = (): HTML =>
   html`
-    <button type="button" class="settings-menu-btn" commandfor="settings-menu" command="show-modal" aria-label="Settings menu" title="Settings">
+    <button
+      type="button"
+      class="settings-menu-btn"
+      commandfor="settings-menu"
+      command="show-modal"
+      aria-label="Settings menu"
+      title="Settings"
+    >
       <svg viewBox="0 0 24 24" aria-hidden="true" width="20" height="20">
-        <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+        <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" />
       </svg>
     </button>
   `;
@@ -302,8 +340,7 @@ export const settingsMenuButton = (): HTML =>
 export const headerBar = (activeFeed: FeedSlug | "saved"): HTML =>
   html`
     <div class="header-bar">
-      ${settingsMenuButton()}
-      ${renderNav(activeFeed)}
+      ${settingsMenuButton()} ${renderNav(activeFeed)}
     </div>
     ${settingsMenu()}
   `;
@@ -381,7 +418,15 @@ export const keyboardNavScript = (): HTML =>
         <dt><kbd>Esc</kbd></dt>
         <dd>Close modal / clear selection</dd>
       </dl>
-      <button type="button" class="modal-close" commandfor="shortcuts-modal" command="close" aria-label="Close">×</button>
+      <button
+        type="button"
+        class="modal-close"
+        commandfor="shortcuts-modal"
+        command="close"
+        aria-label="Close"
+      >
+        ×
+      </button>
     </dialog>
     <script>
     (function() {
@@ -540,8 +585,12 @@ export const userLink = (username: string | null | undefined): HTML => {
 // --- Reader mode link ---
 
 export const readerModeLink = (url: string | undefined): HTML => {
-  if (!url) return html``;
-  const readerUrl = `https://reader.jakechampion.name/${url}`;
+  if (!url) {
+    return html`
+
+    `;
+  }
+  const readerUrl = `/reader/${url}`;
   return html`
     <a
       href="${readerUrl}"
@@ -551,7 +600,9 @@ export const readerModeLink = (url: string | undefined): HTML => {
       title="Open in Reader Mode"
     >
       <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
-        <path d="M21 5c-1.11-.35-2.33-.5-3.5-.5-1.95 0-4.05.4-5.5 1.5-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5V6c-.6-.45-1.25-.75-2-1zm0 13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5v11.5z"/>
+        <path
+          d="M21 5c-1.11-.35-2.33-.5-3.5-.5-1.95 0-4.05.4-5.5 1.5-1.45-1.1-3.55-1.5-5.5-1.5S2.45 4.9 1 6v14.65c0 .25.25.5.5.5.1 0 .15-.05.25-.05C3.1 20.45 5.05 20 6.5 20c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.3 4.75 1.05.1.05.15.05.25.05.25 0 .5-.25.5-.5V6c-.6-.45-1.25-.75-2-1zm0 13.5c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V8c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5v11.5z"
+        />
       </svg>
       <span>Reader</span>
     </a>
@@ -608,17 +659,19 @@ export const favoritesScript = (): HTML =>
         } catch (e) { console.error('Failed to save:', e); }
       }
 
-      function notifyServiceWorker(type, id) {
+      function notifyServiceWorker(type, id, externalUrl) {
         if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
           navigator.serviceWorker.controller.postMessage({
             type: type,
-            url: '/item/' + id
+            url: '/item/' + id,
+            externalUrl: externalUrl || null
           });
         }
       }
 
       function toggleStory(btn) {
         const id = btn.dataset.storyId;
+        const externalUrl = btn.dataset.storyUrl || null;
         const stories = getSavedStories();
 
         if (stories[id]) {
@@ -626,12 +679,12 @@ export const favoritesScript = (): HTML =>
           btn.classList.remove('is-saved');
           btn.title = 'Save story';
           btn.setAttribute('aria-label', 'Save story');
-          notifyServiceWorker('UNCACHE_ITEM', id);
+          notifyServiceWorker('UNCACHE_ITEM', id, externalUrl);
         } else {
           stories[id] = {
             id: parseInt(id, 10),
             title: btn.dataset.storyTitle,
-            url: btn.dataset.storyUrl || null,
+            url: externalUrl,
             domain: btn.dataset.storyDomain || null,
             type: btn.dataset.storyType,
             points: parseInt(btn.dataset.storyPoints, 10) || 0,
@@ -644,7 +697,7 @@ export const favoritesScript = (): HTML =>
           btn.classList.add('is-saved');
           btn.title = 'Remove from saved';
           btn.setAttribute('aria-label', 'Remove from saved');
-          notifyServiceWorker('CACHE_ITEM', id);
+          notifyServiceWorker('CACHE_ITEM', id, externalUrl);
         }
 
         saveStories(stories);
@@ -681,7 +734,9 @@ export const renderStory = (data: Item): HTML => {
     <li data-story-id="${data.id}">
       <a class="title" href="${meta.href(data)}">
         ${meta.label
-          ? html`<span class="badge ${meta.badgeClass}">${meta.label}</span>`
+          ? html`
+            <span class="badge ${meta.badgeClass}">${meta.label}</span>
+          `
           : ""}
         <span class="story-title-text">${data.title}</span>
         ${data.domain

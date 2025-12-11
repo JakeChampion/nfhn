@@ -37,8 +37,19 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Only handle same-origin requests
-  if (url.origin !== location.origin) return;
+  // Handle cross-origin requests for saved external content
+  if (url.origin !== location.origin) {
+    // Check if this is an external URL we might have cached
+    event.respondWith(
+      fetch(request).catch(() => {
+        // If network fails, try to serve from saved cache
+        return caches.open(SAVED_CACHE_NAME).then((cache) => {
+          return cache.match(request);
+        });
+      })
+    );
+    return;
+  }
 
   // Static assets - cache first
   if (STATIC_ASSETS.some(asset => url.pathname === asset)) {
@@ -117,21 +128,39 @@ self.addEventListener('fetch', (event) => {
 function offlineResponse() {
   return new Response(
     `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="auto">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Offline | NFHN</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 100px auto; text-align: center; padding: 1em; }
-    h1 { margin-bottom: 0.5em; }
-    a { color: #ff7a18; }
-  </style>
+  <link rel="icon" type="image/svg+xml" href="/icon.svg">
+  <link rel="stylesheet" href="/styles.css">
+  <script>
+    (function() {
+      const stored = localStorage.getItem('theme') || 'auto';
+      document.documentElement.setAttribute('data-theme', stored);
+    })();
+  </script>
 </head>
 <body>
-  <h1>You're offline</h1>
-  <p>Check your connection and <a href="">try again</a>.</p>
-  <p><a href="/saved">View your saved stories</a></p>
+  <main id="main-content" aria-label="Main content">
+    <div class="header-bar">
+      <nav class="nav-feeds" aria-label="Primary">
+        <a href="/top/1">Top</a>
+        <a href="/newest/1">New</a>
+        <a href="/ask/1">Ask</a>
+        <a href="/show/1">Show</a>
+        <a href="/jobs/1">Jobs</a>
+        <a href="/saved">Saved</a>
+      </nav>
+    </div>
+    <article class="offline-message">
+      <h1>You're offline</h1>
+      <p>It looks like you've lost your internet connection.</p>
+      <p>You can still <a href="/saved">view your saved stories</a> while offline.</p>
+      <p><a href="" class="more-link">Try again</a></p>
+    </article>
+  </main>
 </body>
 </html>`,
     { headers: { 'Content-Type': 'text/html' } }
@@ -142,7 +171,10 @@ function offlineResponse() {
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'CACHE_ITEM') {
     const itemUrl = event.data.url;
+    const externalUrl = event.data.externalUrl;
+    
     caches.open(SAVED_CACHE_NAME).then((cache) => {
+      // Cache the item page
       fetch(itemUrl).then((response) => {
         if (response.ok) {
           cache.put(itemUrl, response);
@@ -150,13 +182,39 @@ self.addEventListener('message', (event) => {
       }).catch(() => {
         // Silently fail if offline
       });
+      
+      // Cache the external URL if it exists
+      if (externalUrl) {
+        fetch(externalUrl, { mode: 'no-cors' }).then((response) => {
+          cache.put(externalUrl, response);
+        }).catch(() => {
+          // Silently fail - external site may block requests
+        });
+        
+        // Cache the reader version (same-origin, so no special mode needed)
+        const readerUrl = '/reader/' + externalUrl;
+        fetch(readerUrl).then((response) => {
+          if (response.ok) {
+            cache.put(readerUrl, response);
+          }
+        }).catch(() => {
+          // Silently fail if reader service unavailable
+        });
+      }
     });
   }
   
   if (event.data && event.data.type === 'UNCACHE_ITEM') {
     const itemUrl = event.data.url;
+    const externalUrl = event.data.externalUrl;
+    
     caches.open(SAVED_CACHE_NAME).then((cache) => {
       cache.delete(itemUrl);
+      
+      if (externalUrl) {
+        cache.delete(externalUrl);
+        cache.delete('/reader/' + externalUrl);
+      }
     });
   }
 });
