@@ -1,5 +1,5 @@
 import { Readability } from "./lib/readability.js";
-import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.45/deno-dom-wasm.ts";
+import { DOMParser } from "deno-dom";
 
 export default async (req) => {
   let status = 200;
@@ -58,7 +58,7 @@ async function fetchDocument(url: string) {
   return { data, error };
 }
 
-function renderHtml(url: string, title: string, content: string, timestamp?: number) {
+function renderHtml(url: string, title: string, content: string, _timestamp?: number) {
   return `
     <!DOCTYPE html>
     <html>
