@@ -116,8 +116,8 @@ const TYPE_META: Record<ItemType, TypeMeta> = {
     href: (item) => item.url ?? `/item/${item.id}`,
   },
   link: {
-    label: "Link",
-    badgeClass: "badge-link",
+    label: "",
+    badgeClass: "",
     href: (item) => item.url ?? `/item/${item.id}`,
   },
   comment: { label: "Comment", badgeClass: "badge-default", href: (item) => `/item/${item.id}` },
@@ -680,7 +680,9 @@ export const renderStory = (data: Item): HTML => {
   return html`
     <li data-story-id="${data.id}">
       <a class="title" href="${meta.href(data)}">
-        <span class="badge ${meta.badgeClass}">${meta.label}</span>
+        ${meta.label
+          ? html`<span class="badge ${meta.badgeClass}">${meta.label}</span>`
+          : ""}
         <span class="story-title-text">${data.title}</span>
         ${data.domain
           ? html`
