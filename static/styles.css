@@ -1504,3 +1504,102 @@ pre {
     border-top: 1px solid #ccc;
   }
 }
+
+/* =============================================================================
+   View Transitions API - Smooth page navigation
+   ============================================================================= */
+
+/* Opt-in to cross-document view transitions */
+@view-transition {
+  navigation: auto;
+}
+
+/* Main content transition - slides in/out */
+main {
+  view-transition-name: main-content;
+}
+
+/* Header bar persists across pages */
+.header-bar {
+  view-transition-name: header;
+}
+
+/* Navigation stays fixed during transition */
+.nav-feeds {
+  view-transition-name: nav;
+}
+
+/* Customize the default crossfade animations */
+::view-transition-old(main-content) {
+  animation: 150ms ease-out both fade-out,
+             150ms ease-out both slide-to-left;
+}
+
+::view-transition-new(main-content) {
+  animation: 150ms ease-in 50ms both fade-in,
+             150ms ease-in 50ms both slide-from-right;
+}
+
+/* Header and nav should crossfade quickly */
+::view-transition-old(header),
+::view-transition-old(nav) {
+  animation: 100ms ease-out both fade-out;
+}
+
+::view-transition-new(header),
+::view-transition-new(nav) {
+  animation: 100ms ease-in both fade-in;
+}
+
+/* Animation keyframes */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes slide-from-right {
+  from { transform: translateX(30px); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slide-to-left {
+  from { transform: translateX(0); }
+  to { transform: translateX(-30px); }
+}
+
+/* Reverse animation for back navigation */
+:root:active-view-transition-type(backward) {
+  &::view-transition-old(main-content) {
+    animation: 150ms ease-out both fade-out,
+               150ms ease-out both slide-to-right;
+  }
+  
+  &::view-transition-new(main-content) {
+    animation: 150ms ease-in 50ms both fade-in,
+               150ms ease-in 50ms both slide-from-left;
+  }
+}
+
+@keyframes slide-from-left {
+  from { transform: translateX(-30px); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slide-to-right {
+  from { transform: translateX(0); }
+  to { transform: translateX(30px); }
+}
+
+/* Reduce motion preference - disable animations */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
