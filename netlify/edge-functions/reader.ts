@@ -416,6 +416,49 @@ function getThemeScript(): string {
   `;
 }
 
+function getJustifyScript(): string {
+  return `
+    (function() {
+      // Load tex-linebreak library and hyphenation dictionary
+      var libScript = document.createElement('script');
+      libScript.src = 'https://unpkg.com/tex-linebreak';
+      document.body.appendChild(libScript);
+
+      var dictScript = document.createElement('script');
+      dictScript.src = 'https://unpkg.com/tex-linebreak/dist/hyphens_en-us.js';
+      document.body.appendChild(dictScript);
+
+      var libLoaded = new Promise(resolve => libScript.onload = resolve);
+      var dictLoaded = new Promise(resolve => dictScript.onload = resolve);
+
+      Promise.all([libLoaded, dictLoaded]).then(() => {
+        var lib = window.texLineBreak_lib;
+        var hyphenate = lib.createHyphenator(window['texLineBreak_hyphens_en-us']);
+        var paragraphs = Array.from(document.querySelectorAll('#article p'));
+        if (paragraphs.length > 0) {
+          lib.justifyContent(paragraphs, hyphenate);
+        }
+      }).catch(err => console.error('tex-linebreak error:', err));
+
+      // Re-justify on window resize (debounced)
+      var resizeTimeout;
+      window.addEventListener('resize', function() {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(function() {
+          if (window.texLineBreak_lib) {
+            var lib = window.texLineBreak_lib;
+            var hyphenate = lib.createHyphenator(window['texLineBreak_hyphens_en-us']);
+            var paragraphs = Array.from(document.querySelectorAll('#article p'));
+            if (paragraphs.length > 0) {
+              lib.justifyContent(paragraphs, hyphenate);
+            }
+          }
+        }, 250);
+      });
+    })();
+  `;
+}
+
 function getThemeToggle(): string {
   return `
     <div class="theme-toggle">
@@ -479,6 +522,7 @@ function renderHtml(url: string, title: string, content: string, readingTime: nu
   </main>
 
   <script>${getThemeScript()}</script>
+  <script>${getJustifyScript()}</script>
 </body>
 </html>`;
 }
