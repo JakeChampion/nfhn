@@ -397,8 +397,6 @@ export const readerModeLink = (url: string | undefined): HTML => {
     <a
       href="${readerUrl}"
       class="reader-mode-link"
-      target="_blank"
-      rel="noopener noreferrer"
       title="Open in Reader Mode"
     >
       <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
