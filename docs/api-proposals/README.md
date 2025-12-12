@@ -14,7 +14,7 @@ This directory contains detailed proposals for incorporating modern web APIs and
 | [Document PiP](./06-document-picture-in-picture.md) | Chrome only | 🔥 High | High | Proposed |
 | [File System Access](./07-file-system-access-api.md) | Chromium only | Medium | Medium | Proposed |
 | [Web Share API](./08-web-share-api.md) | Baseline | Medium | Low | Proposed |
-| [Priority Hints](./09-priority-hints.md) | Baseline 2023 | Medium | Low | Proposed |
+| [Priority Hints](./09-priority-hints.md) | Baseline 2023 | Medium | Low | ✅ **Implemented** |
 | [CSS :has()](./10-css-has-selector.md) | Baseline 2023 | 🔥 High | Low | ✅ **Implemented** |
 | [Compression Streams](./11-compression-streams-api.md) | Baseline 2023 | Medium | Medium | Proposed |
 
@@ -23,7 +23,7 @@ This directory contains detailed proposals for incorporating modern web APIs and
 ### Phase 1: Quick Wins (CSS-only, well-supported)
 1. **CSS :has()** ✅ - Replace JavaScript state management with pure CSS
 2. **Container Queries** ✅ - Make components responsive to their container
-3. **Priority Hints** - Optimize loading with `fetchpriority`
+3. **Priority Hints** ✅ - Optimize loading with `fetchpriority`
 4. **Relative Color Syntax** - Simplify theme system
 
 ### Phase 2: Enhanced UX (Requires JS, well-supported)
@@ -48,6 +48,7 @@ NFHN already uses these modern APIs:
 - ✅ IndexedDB
 - ✅ **CSS :has() selector** - Parent selection based on descendants/state
 - ✅ **Container Queries** - Components adapt to their container size
+- ✅ **Priority Hints** - `fetchpriority` for optimized resource loading
 
 ## Feature Detection Pattern
 

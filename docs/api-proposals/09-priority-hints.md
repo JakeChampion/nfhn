@@ -1,5 +1,28 @@
 # Priority Hints (fetchpriority)
 
+## Implementation Status
+
+✅ **IMPLEMENTED** - This feature has been implemented in the codebase.
+
+### What was implemented:
+
+1. **Critical CSS** - `fetchpriority="high"` on `/styles.css` link
+2. **Preconnect hints** - High priority preconnect to HN API (`hacker-news.firebaseio.com`), low priority to search API (`hn.algolia.com`)
+3. **Non-critical scripts** - `fetchpriority="low"` on text justification scripts (tex-linebreak.js, hyphens_en-us.js, justify.js)
+
+### Files modified:
+- `netlify/edge-functions/lib/render/components.ts`:
+  - `sharedStyles()` - Added `fetchpriority="high"` to stylesheet
+  - `pwaHeadTags()` - Added preconnect hints with priorities
+  - `justifyScript()` - Added `fetchpriority="low"` to enhancement scripts
+
+### Benefits:
+- **Faster LCP** - Critical CSS loads with high priority
+- **Reduced connection latency** - Early preconnect to API origin
+- **Better resource scheduling** - Non-critical scripts don't compete with critical resources
+
+---
+
 ## Overview
 
 Priority Hints allow developers to indicate the relative importance of resources to the browser, helping optimize loading order. The `fetchpriority` attribute can be set to `high`, `low`, or `auto` on `<img>`, `<link>`, `<script>`, and `<iframe>` elements, as well as in the Fetch API.

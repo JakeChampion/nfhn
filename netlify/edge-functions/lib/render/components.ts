@@ -144,6 +144,8 @@ export const skipLink = (): HTML =>
 
 export const pwaHeadTags = (): HTML =>
   html`
+    <link rel="preconnect" href="https://hacker-news.firebaseio.com" fetchpriority="high">
+    <link rel="preconnect" href="https://hn.algolia.com" fetchpriority="low">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#ff7a18">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -161,16 +163,19 @@ export const justifyScript = (): HTML =>
       src="/tex-linebreak.js"
       integrity="sha384-Mz2e2ZKHUt95NE5A4Q3jnM4vMi3TW/aI+z0XpUTTtvDOGtOicI7DlGTmCj3yVG0x"
       crossorigin="anonymous"
+      fetchpriority="low"
     ></script>
     <script
       src="/hyphens_en-us.js"
       integrity="sha384-O18JzLDtmRj8lMDKjQ/VZOo09Ye41get5V+PDYP1atYLjrMbCO390FdScF4XAZts"
       crossorigin="anonymous"
+      fetchpriority="low"
     ></script>
     <script
       src="/justify.js"
       integrity="sha384-FI/M0Xsdr+Yk/caRCCNCvazelNiHYTHJDbPjVQ+5tt+AIoP2DoNt9Suks7KP+Mc8"
       crossorigin="anonymous"
+      fetchpriority="low"
     ></script>
   `;
 
@@ -180,7 +185,7 @@ export const sharedStyles = (pageNumber = 1): HTML => {
   // Only the dynamic counter-set needs to be inline; all other styles are in /styles.css
   const counterStart = pageNumber === 1 ? 0 : (pageNumber - 1) * 30;
   return html`
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/styles.css" fetchpriority="high">
     <style>
     ol { counter-set: section ${counterStart}; }
     </style>
