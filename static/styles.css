@@ -1876,11 +1876,8 @@ ol.stories {
   container-name: stories;
 }
 
-/* Individual story items as containers */
-ol > li {
-  container-type: inline-size;
-  container-name: story;
-}
+/* Note: Individual li elements cannot have container-type as it breaks CSS counters */
+/* The stories container provides sufficient context for responsive styling */
 
 /* Comment section as a container */
 article {
