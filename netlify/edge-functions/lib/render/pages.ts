@@ -357,6 +357,27 @@ export const savedPage = (canonicalUrl?: string): HTML =>
       <div class="saved-header">
         <h1>Saved Stories</h1>
         <p class="saved-description">Stories saved to your browser for offline reading.</p>
+        <div class="saved-actions">
+          <button id="export-stories-btn" class="saved-action-btn" title="Export saved stories">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M8 1v9M8 1L4 5M8 1l4 4M2 11v2a2 2 0 002 2h8a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Export
+          </button>
+          <button id="import-stories-btn" class="saved-action-btn" title="Import saved stories">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M8 10V1M8 10l4-4M8 10L4 6M2 11v2a2 2 0 002 2h8a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Import
+          </button>
+          <button id="export-html-btn" class="saved-action-btn" title="Export as HTML archive">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M3 1h7l3 3v11H3V1z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+              <path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Archive
+          </button>
+        </div>
       </div>
       <div id="saved-stories-container">
         <p class="loading-message">Loading saved stories...</p>
