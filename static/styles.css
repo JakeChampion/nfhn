@@ -1027,10 +1027,6 @@ pre {
     font-size: 0.6em;
   }
 
-  .story-heading {
-    margin-left: 0.2em;
-  }
-
   /* Stack metadata on very small screens */
   .story-meta {
     display: flex;
