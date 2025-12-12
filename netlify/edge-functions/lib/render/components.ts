@@ -409,6 +409,33 @@ export const readerModeLink = (url: string | undefined): HTML => {
   `;
 };
 
+// --- Picture-in-Picture reader button (Chrome only) ---
+
+export const pipReaderButton = (url: string | undefined, title: string): HTML => {
+  if (!url) {
+    return html`
+
+    `;
+  }
+  return html`
+    <button
+      type="button"
+      class="pip-reader-btn"
+      data-url="${url}"
+      data-title="${title}"
+      title="Open in floating window (Chrome only)"
+      aria-label="Open in Picture-in-Picture reader"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+        <path
+          d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"
+        />
+      </svg>
+      <span class="pip-label">PiP</span>
+    </button>
+  `;
+};
+
 // --- Share button ---
 
 export const shareButton = (item: Item): HTML =>

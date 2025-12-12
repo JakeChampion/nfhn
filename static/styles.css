@@ -1328,6 +1328,52 @@ pre {
   flex-shrink: 0;
 }
 
+/* Picture-in-Picture reader button */
+.pip-reader-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0.1em 0.5em;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--badge-bg);
+  color: var(--text-muted);
+  font-size: 0.85em;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.pip-reader-btn:hover {
+  background: var(--background-elevated);
+  color: var(--text-primary);
+}
+
+.pip-reader-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pip-reader-btn:active {
+  transform: scale(0.95);
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.pip-reader-btn svg {
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
+.pip-reader-btn .pip-label {
+  font-weight: 500;
+}
+
+/* Hide PiP button when not supported */
+.no-pip .pip-reader-btn {
+  display: none;
+}
+
 /* Saved stories page */
 .saved-header {
   margin-bottom: 1.5em;

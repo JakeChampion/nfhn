@@ -13,6 +13,7 @@ import {
   headerBar,
   justifyScript,
   keyboardNavScript,
+  pipReaderButton,
   pwaHeadTags,
   readerModeLink,
   readingProgress,
@@ -234,6 +235,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
             `}
           <div class="article-actions">
             ${item.url ? readerModeLink(item.url) : ""}
+            ${item.url ? pipReaderButton(item.url, item.title) : ""}
             ${shareButton(item)}
             ${bookmarkButton(item)}
           </div>
