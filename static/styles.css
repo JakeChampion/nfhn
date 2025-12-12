@@ -2643,7 +2643,8 @@ details {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: var(--accent-color);
+  /* Use darker accent for good contrast with white icon */
+  background: var(--accent-dark);
   color: white;
   border: none;
   cursor: pointer;
@@ -2667,12 +2668,12 @@ details {
 }
 
 .back-to-top:hover {
-  background: var(--accent-color-hover);
+  background: var(--accent);
   transform: translateY(-2px);
 }
 
 .back-to-top:focus-visible {
-  outline: 2px solid var(--accent-color);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
