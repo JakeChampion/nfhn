@@ -1295,7 +1295,7 @@ pre {
   display: inline-flex;
   align-items: center;
   gap: 0.35em;
-  padding: 0.4em 0.7em;
+  padding: 0.1em 0.5em;
   border: 1px solid var(--border-color);
   border-radius: 4px;
   background: var(--badge-bg);
