@@ -167,6 +167,48 @@
   fill: currentColor;
 }
 
+/* Theme toggle tooltips using CSS Anchor Positioning */
+@supports (anchor-name: --theme-label) {
+  .theme-toggle label {
+    anchor-name: --theme-label;
+    position: relative;
+  }
+
+  .theme-toggle label::after {
+    content: attr(title);
+    position: fixed;
+    position-anchor: --theme-label;
+    
+    top: anchor(bottom);
+    left: anchor(center);
+    translate: -50% 0.35rem;
+    
+    background: var(--text-primary);
+    color: var(--background);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 1000;
+    
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    
+    position-try-fallbacks: --theme-tooltip-above;
+  }
+
+  @position-try --theme-tooltip-above {
+    top: auto;
+    bottom: anchor(top);
+    translate: -50% -0.35rem;
+  }
+
+  .theme-toggle label:hover::after {
+    opacity: 1;
+  }
+}
+
 .header-bar {
   display: flex;
   align-items: center;
@@ -1082,6 +1124,30 @@ pre {
   padding: 1em;
   overflow-x: auto;
   border: 1px solid var(--border-color);
+}
+
+/* Auto theme in light mode (when system prefers light) */
+@media (prefers-color-scheme: light) {
+  :root[data-theme="auto"] pre,
+  :root[data-theme="auto"] code {
+    background: #f6f8fa;
+    border-radius: 4px;
+  }
+  
+  :root[data-theme="auto"] code {
+    padding: 0.1em 0.3em;
+  }
+  
+  :root[data-theme="auto"] pre code {
+    padding: 0;
+    background: transparent;
+  }
+  
+  :root[data-theme="auto"] pre {
+    padding: 1em;
+    overflow-x: auto;
+    border: 1px solid var(--border-color);
+  }
 }
 
 /* Improved contrast for dark mode badges using Relative Color Syntax */
