@@ -407,6 +407,7 @@ export const bookmarkButton = (item: Item): HTML =>
     <button
       type="button"
       class="bookmark-btn"
+      aria-pressed="false"
       data-story-id="${item.id}"
       data-story-title="${item.title}"
       data-story-url="${item.url || ""}"

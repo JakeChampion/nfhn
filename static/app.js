@@ -273,7 +273,7 @@ document.querySelectorAll('a[href^="http"]').forEach((link) => {
 
     if (stories[id]) {
       delete stories[id];
-      btn.classList.remove("is-saved");
+      btn.setAttribute("aria-pressed", "false");
       btn.title = "Save story";
       btn.setAttribute("aria-label", "Save story");
       notifyServiceWorker("UNCACHE_ITEM", id, externalUrl);
@@ -291,7 +291,7 @@ document.querySelectorAll('a[href^="http"]').forEach((link) => {
         comments_count: parseInt(btn.dataset.storyComments, 10) || 0,
         saved_at: Date.now(),
       };
-      btn.classList.add("is-saved");
+      btn.setAttribute("aria-pressed", "true");
       btn.title = "Remove from saved";
       btn.setAttribute("aria-label", "Remove from saved");
       notifyServiceWorker("CACHE_ITEM", id, externalUrl);
@@ -304,7 +304,7 @@ document.querySelectorAll('a[href^="http"]').forEach((link) => {
   document.querySelectorAll(".bookmark-btn").forEach((btn) => {
     const id = btn.dataset.storyId;
     if (saved[id]) {
-      btn.classList.add("is-saved");
+      btn.setAttribute("aria-pressed", "true");
       btn.title = "Remove from saved";
       btn.setAttribute("aria-label", "Remove from saved");
     }
@@ -362,7 +362,8 @@ document.querySelectorAll('a[href^="http"]').forEach((link) => {
         "view " +
         (item.comments_count > 0 ? item.comments_count + " comments" : "discussion") +
         "</a>" +
-        '<button type="button" class="bookmark-btn is-saved" ' +
+        '<button type="button" class="bookmark-btn" ' +
+        'aria-pressed="true" ' +
         'data-story-id="' +
         item.id +
         '" ' +

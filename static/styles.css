@@ -1123,21 +1123,21 @@ pre {
   display: block;
 }
 
-.bookmark-btn.is-saved {
+.bookmark-btn[aria-pressed="true"] {
   background: rgba(255, 122, 24, 0.15);
   border-color: rgba(255, 122, 24, 0.5);
   color: #ff7a18;
 }
 
-.bookmark-btn.is-saved .bookmark-icon-filled {
+.bookmark-btn[aria-pressed="true"] .bookmark-icon-filled {
   display: block;
 }
 
-.bookmark-btn.is-saved .bookmark-icon-outline {
+.bookmark-btn[aria-pressed="true"] .bookmark-icon-outline {
   display: none;
 }
 
-.bookmark-btn.is-saved:hover {
+.bookmark-btn[aria-pressed="true"]:hover {
   background: rgba(255, 122, 24, 0.25);
 }
 
@@ -1686,4 +1686,209 @@ p, .comment-content, .story-meta {
 /* Show share button when Web Share API is available */
 .can-share .share-btn {
   display: inline-flex;
+}
+
+/* =============================================================================
+   CSS :has() Selectors (Baseline 2023)
+   Replace JavaScript state management with pure CSS where possible
+   ============================================================================= */
+
+/* --- Bookmark/Save button using aria-pressed --- */
+/* When bookmark button has aria-pressed="true", show saved state */
+.bookmark-btn[aria-pressed="true"] {
+  background: rgba(255, 122, 24, 0.15);
+  border-color: rgba(255, 122, 24, 0.5);
+  color: #ff7a18;
+}
+
+.bookmark-btn[aria-pressed="true"] .bookmark-icon-filled {
+  display: block;
+}
+
+.bookmark-btn[aria-pressed="true"] .bookmark-icon-outline {
+  display: none;
+}
+
+.bookmark-btn[aria-pressed="true"]:hover {
+  background: rgba(255, 122, 24, 0.25);
+}
+
+/* --- Story item styling based on saved state --- */
+/* Style story items that contain a saved bookmark */
+li:has(.bookmark-btn[aria-pressed="true"]) {
+  background: linear-gradient(
+    to right,
+    rgba(255, 122, 24, 0.08) 0%,
+    transparent 100%
+  );
+}
+
+/* --- Keyboard navigation mode detection --- */
+/* When any element has focus-visible, show keyboard hints */
+body:has(:focus-visible) .kbd-hint {
+  opacity: 1;
+}
+
+/* Alternative: style based on focused item type */
+main:has(li:focus-visible) {
+  /* Subtle indication that keyboard nav is active */
+}
+
+/* --- Popover/Modal open states --- */
+/* Dim main content when any popover is open */
+body:has([popover]:popover-open) main {
+  opacity: 0.6;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+/* Prevent body scroll when modal is open */
+body:has(#shortcuts-modal:popover-open),
+body:has(#settings-menu:popover-open) {
+  overflow: hidden;
+}
+
+/* --- Form validation states --- */
+/* Style form when it has invalid inputs */
+form:has(:invalid) .submit-btn {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Style label when its input is invalid */
+label:has(+ input:invalid),
+label:has(+ select:invalid) {
+  color: var(--error, #dc2626);
+}
+
+/* --- Comment thread states --- */
+/* Style parent comment when any child is focused */
+.comment:has(.comment:focus-within) {
+  border-left-color: var(--brand);
+}
+
+/* Comments with replies get stronger border */
+.comment:has(.comment) {
+  border-left-width: 3px;
+}
+
+/* Collapsed comments (details not open) */
+details.comment:not([open]) {
+  opacity: 0.7;
+}
+
+/* Highlight entire comment thread on hover */
+.comment:has(:hover) {
+  background: var(--comment-bg);
+}
+
+/* --- Story list states --- */
+/* Empty state for saved stories */
+#saved-stories-container:not(:has(.stories li)) .empty-saved {
+  display: block;
+}
+
+#saved-stories-container:has(.stories li) .empty-saved {
+  display: none;
+}
+
+/* --- Feed navigation current state --- */
+/* Highlight nav when viewing that feed */
+nav:has(a[aria-current="page"]) {
+  /* Navigation is active */
+}
+
+/* Style the nav link container when it has current page */
+.nav-links:has([aria-current="page"]) a:not([aria-current="page"]) {
+  opacity: 0.8;
+}
+
+/* --- External links indicator --- */
+/* Style links that go external (have target="_blank") */
+a[target="_blank"]:not(.no-external-icon)::after {
+  content: "";
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  margin-left: 0.2em;
+  background: currentColor;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z'/%3E%3C/svg%3E");
+  mask-size: contain;
+  vertical-align: middle;
+  opacity: 0.6;
+}
+
+/* Don't show icon on buttons or specific elements */
+.share-btn::after,
+.bookmark-btn::after,
+.reader-mode-link::after {
+  display: none;
+}
+
+/* --- Details/Summary states --- */
+/* Style summary when details is open */
+details[open] > summary {
+  margin-bottom: 0.5em;
+  font-weight: 600;
+}
+
+/* Comments section with open details */
+section:has(details.comment[open]) {
+  /* At least one comment is expanded */
+}
+
+/* --- Story with different content types --- */
+/* Stories that link to HN itself (Ask HN, Show HN) */
+li:has(a[href^="/item/"]:only-of-type) .story-meta {
+  /* Self-post indicator */
+}
+
+/* --- Settings and preferences --- */
+/* When a specific theme radio is checked */
+.theme-toggle:has(input[value="dark"]:checked) {
+  /* Dark mode selected */
+}
+
+.theme-toggle:has(input[value="light"]:checked) {
+  /* Light mode selected */
+}
+
+/* --- Loading states --- */
+/* Page with loading indicator */
+main:has(.loading) {
+  min-height: 50vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* --- Quantity-based styling --- */
+/* Stories list with few items - can use larger layout */
+.stories:has(li:nth-child(5)):not(:has(li:nth-child(11))) {
+  /* 5-10 items: comfortable spacing */
+}
+
+/* Stories list with many items - compact layout */
+.stories:has(li:nth-child(20)) li {
+  padding-block: 0.6em;
+}
+
+/* --- Sibling-based styling --- */
+/* Last item in list (no following sibling) */
+.stories li:not(:has(+ li)) {
+  border-bottom: none;
+}
+
+/* First story after pagination */
+.pagination + .stories li:first-child {
+  border-top: 2px solid var(--border-color);
+}
+
+/* --- Reduced motion preference with :has() --- */
+@media (prefers-reduced-motion: reduce) {
+  /* Disable transitions when user prefers reduced motion */
+  body:has(:focus-visible) *,
+  body:has([popover]:popover-open) * {
+    transition-duration: 0.01ms !important;
+  }
 }
