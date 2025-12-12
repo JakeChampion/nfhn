@@ -1731,9 +1731,9 @@ body:has(:focus-visible) .kbd-hint {
 
 /* --- Popover/Modal open states --- */
 /* Dim main content when any popover is open */
+/* Note: pointer-events not disabled because popover may be inside main */
 body:has([popover]:popover-open) main {
   opacity: 0.6;
-  pointer-events: none;
   transition: opacity 0.15s ease;
 }
 
