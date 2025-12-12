@@ -10,7 +10,7 @@ This directory contains detailed proposals for incorporating modern web APIs and
 | [Container Queries](./02-container-queries.md) | Baseline 2023 | 🔥 High | Medium | ✅ **Implemented** |
 | [Scroll-Driven Animations](./03-scroll-driven-animations.md) | Baseline 2024 | Medium | Low | Proposed |
 | [Anchor Positioning](./04-anchor-positioning.md) | Baseline 2024 | Medium | Medium | Proposed |
-| [Relative Color Syntax](./05-relative-color-syntax.md) | Baseline 2024 | Medium | Low | Proposed |
+| [Relative Color Syntax](./05-relative-color-syntax.md) | Baseline 2024 | Medium | Low | ✅ **Implemented** |
 | [Document PiP](./06-document-picture-in-picture.md) | Chrome only | 🔥 High | High | Proposed |
 | [File System Access](./07-file-system-access-api.md) | Chromium only | Medium | Medium | Proposed |
 | [Web Share API](./08-web-share-api.md) | Baseline | Medium | Low | Proposed |
@@ -24,7 +24,7 @@ This directory contains detailed proposals for incorporating modern web APIs and
 1. **CSS :has()** ✅ - Replace JavaScript state management with pure CSS
 2. **Container Queries** ✅ - Make components responsive to their container
 3. **Priority Hints** ✅ - Optimize loading with `fetchpriority`
-4. **Relative Color Syntax** - Simplify theme system
+4. **Relative Color Syntax** ✅ - Simplify theme system with oklch() relative colors
 
 ### Phase 2: Enhanced UX (Requires JS, well-supported)
 5. **View Transitions** - Smooth page navigation animations
@@ -48,6 +48,8 @@ NFHN already uses these modern APIs:
 - ✅ IndexedDB
 - ✅ **CSS :has() selector** - Parent selection based on descendants/state
 - ✅ **Container Queries** - Components adapt to their container size
+- ✅ **Priority Hints** - Optimize resource loading with fetchpriority
+- ✅ **Relative Color Syntax** - Dynamic color variations with oklch()
 - ✅ **Priority Hints** - `fetchpriority` for optimized resource loading
 
 ## Feature Detection Pattern

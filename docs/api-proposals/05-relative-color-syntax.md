@@ -1,23 +1,46 @@
 # Relative Color Syntax
 
+## Status: ✅ IMPLEMENTED
+
 ## Overview
 
 Relative Color Syntax (RCS) allows creating new colors by modifying existing ones using `from` keyword in color functions. This enables dynamic color manipulation like adjusting lightness, saturation, or creating complementary colors directly in CSS.
 
 **Browser Support:** Baseline 2024 (Chrome 119+, Safari 16.4+, Firefox 128+)
 
-## Current State in NFHN
+## Implementation Summary
 
-NFHN currently uses:
+The following features have been implemented in `/static/styles.css`:
+
+### 1. Accent Color System
+- Base accent color `--accent: #ff7a18` (NFHN orange)
+- Derived variations: `--accent-light`, `--accent-dark`, `--accent-muted`, `--accent-subtle`
+- Interactive states: `--accent-hover`, `--accent-active`, `--accent-focus`
+- Color harmonies: `--accent-complement`, `--accent-warm`, `--accent-cool`
+
+### 2. Interactive State Colors
+- Theme-aware `--hover-overlay` and `--active-overlay` derived from accent
+- All focus outlines now use `var(--accent)` instead of hardcoded colors
+- Bookmark button states use `oklch(from var(--accent) ...)` for backgrounds/borders
+
+### 3. Badge Colors with Relative Syntax
+- Each badge type (link, ask, show, job) defines `--badge-color` in oklch
+- Background and border derived: `oklch(from var(--badge-color) l c h / opacity)`
+- Dark mode automatically adjusts lightness for better contrast
+
+### 4. Comment Depth Coloring
+- Nested comments shift hue by 40° per level using `calc(h + 40)`
+- Creates visual rainbow effect for deep threads
+- Dark mode uses higher lightness for visibility
+
+## Previous State
+
+NFHN previously used:
 - CSS custom properties for theme colors
 - `light-dark()` function for automatic theme switching
 - Static color definitions in both light and dark modes
 
-## Proposed Implementation
-
-### 1. Dynamic Color Variations
-
-Create color variations from base accent color:
+## Implemented Code Examples
 
 ```css
 :root {
