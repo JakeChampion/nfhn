@@ -23,7 +23,7 @@ if ("serviceWorker" in navigator) {
 }
 
 // --- External link handling ---
-document.querySelectorAll('a[href^="http"]').forEach((link) => {
+document.querySelectorAll('a[href^="http"]:not(.reader-mode-link)').forEach((link) => {
   const url = new URL(link.href);
   if (url.origin !== location.origin) {
     link.classList.add("external-link");
