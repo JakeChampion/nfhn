@@ -183,8 +183,9 @@
     left: anchor(center);
     translate: -50% 0.35rem;
     
-    background: var(--text-primary);
-    color: var(--background);
+    /* Use solid dark background for good contrast in both light and dark modes */
+    background: oklch(0.25 0 0);
+    color: white;
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
     font-size: 0.75rem;
@@ -609,7 +610,8 @@ pre {
 
 .op-badge {
   font-size: 0.75em;
-  background: var(--badge-show);
+  /* Use a darker green for good contrast with white text */
+  background: oklch(0.45 0.15 145);
   color: white;
   padding: 0.1em 0.4em;
   border-radius: 3px;
@@ -1874,9 +1876,9 @@ p, .comment-content, .story-meta {
     left: anchor(center);
     translate: -50% 0.25rem;
     
-    /* Styling */
-    background: var(--text-primary);
-    color: var(--background);
+    /* Use solid dark background for good contrast in both light and dark modes */
+    background: oklch(0.25 0 0);
+    color: white;
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
     font-size: 0.75rem;
@@ -1921,8 +1923,9 @@ p, .comment-content, .story-meta {
     left: anchor(center);
     translate: -50% 0.25rem;
     
-    background: var(--text-primary);
-    color: var(--background);
+    /* Use solid dark background for good contrast in both light and dark modes */
+    background: oklch(0.25 0 0);
+    color: white;
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
     font-size: 0.75rem;
@@ -1968,8 +1971,9 @@ p, .comment-content, .story-meta {
     right: anchor(left);
     translate: -0.5rem -50%;
     
-    background: var(--text-primary);
-    color: var(--background);
+    /* Use solid dark background for good contrast in both light and dark modes */
+    background: oklch(0.25 0 0);
+    color: white;
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
     font-size: 0.75rem;
