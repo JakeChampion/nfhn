@@ -1316,6 +1316,13 @@ pre {
   outline-offset: 2px;
 }
 
+.reader-mode-link:active {
+  transform: scale(0.95);
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
 .reader-mode-link svg {
   fill: currentColor;
   flex-shrink: 0;
