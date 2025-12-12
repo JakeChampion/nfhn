@@ -1870,14 +1870,9 @@ main {
   container-name: main-content;
 }
 
-/* Story list as a container */
-ol.stories {
-  container-type: inline-size;
-  container-name: stories;
-}
-
-/* Note: Individual li elements cannot have container-type as it breaks CSS counters */
-/* The stories container provides sufficient context for responsive styling */
+/* Note: ol.stories cannot have container-type as it breaks CSS counters.
+   Use main-content container for story list responsive styling instead.
+   The main element already has container-type: inline-size. */
 
 /* Comment section as a container */
 article {
@@ -1892,14 +1887,15 @@ details {
 }
 
 /* --- Story List Container Queries --- */
+/* Uses main-content container since ol cannot have container-type (breaks counters) */
 
 /* Narrow container: compact layout */
-@container stories (max-width: 400px) {
-  li {
+@container main-content (max-width: 400px) {
+  .stories li {
     padding-left: 1.5em;
   }
 
-  li::before {
+  .stories li::before {
     font-size: 1.1em;
   }
 
@@ -1920,8 +1916,8 @@ details {
 }
 
 /* Standard container: balanced layout */
-@container stories (min-width: 400px) and (max-width: 600px) {
-  li {
+@container main-content (min-width: 400px) and (max-width: 600px) {
+  .stories li {
     padding-left: 2.5em;
   }
 
@@ -1931,12 +1927,12 @@ details {
 }
 
 /* Wide container: full layout with more details */
-@container stories (min-width: 600px) {
-  li {
+@container main-content (min-width: 600px) {
+  .stories li {
     padding-left: 3em;
   }
 
-  li::before {
+  .stories li::before {
     font-size: 1.6em;
   }
 
@@ -1951,7 +1947,7 @@ details {
 }
 
 /* Very wide container: grid layout for story actions */
-@container stories (min-width: 800px) {
+@container main-content (min-width: 800px) {
   .story-actions {
     gap: 1.25em;
   }
