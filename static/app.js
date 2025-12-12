@@ -836,7 +836,7 @@ const ReaderPiP = (function () {
   async function openInPiP(articleUrl, articleTitle) {
     // Fallback: open in new tab
     if (!isSupported) {
-      window.open("/reader/" + encodeURIComponent(articleUrl), "_blank");
+      window.open("/reader/" + articleUrl, "_blank");
       return { success: false, reason: "not-supported" };
     }
 
@@ -872,20 +872,20 @@ const ReaderPiP = (function () {
         "</div>";
 
       // Fetch article content
-      const response = await fetch("/reader/" + encodeURIComponent(articleUrl));
+      const response = await fetch("/reader/" + articleUrl);
       const html = await response.text();
 
       // Parse and extract article content
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, "text/html");
-      const articleContent = doc.querySelector("main, article, .reader-content");
+      const articleContent = doc.querySelector("#article, main, article, .reader-content");
 
       if (articleContent) {
         pipWindow.document.querySelector(".pip-content").innerHTML = articleContent.innerHTML;
       } else {
         pipWindow.document.querySelector(".pip-content").innerHTML =
           '<p>Unable to load article content. <a href="/reader/' +
-          encodeURIComponent(articleUrl) +
+          articleUrl +
           '" target="_blank">Open in new tab</a></p>';
       }
 
@@ -893,7 +893,7 @@ const ReaderPiP = (function () {
     } catch (error) {
       console.error("Failed to open PiP:", error);
       // Fallback to new tab
-      window.open("/reader/" + encodeURIComponent(articleUrl), "_blank");
+      window.open("/reader/" + articleUrl, "_blank");
       return { success: false, reason: "error", error: error };
     }
   }
