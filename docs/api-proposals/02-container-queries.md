@@ -1,5 +1,33 @@
 # Container Queries
 
+## Implementation Status
+
+✅ **IMPLEMENTED** - This feature has been implemented in the codebase.
+
+### What was implemented:
+
+1. **Container contexts defined** for main content, story lists, story items, articles, comments, saved stories, and user profiles
+2. **Story list responsive behavior** - adapts padding, font sizes, and layout based on container width
+3. **Comment threading** - adjusts indentation, font size, and spacing based on available space
+4. **Deeply nested comments** - auto-adapts when container becomes narrow (truncated usernames, smaller touch targets)
+5. **Main content queries** - header bar and navigation adapt to container size
+6. **Container query units** - fluid typography using `cqi` units where supported
+7. **User profile layout** - stats grid adapts from 1-column to 4-column based on container
+
+### Files modified:
+- `static/styles.css` - Added comprehensive container query rules (~200 lines)
+
+### Containers defined:
+- `main-content` - Main content area
+- `stories` - Story list (`<ol class="stories">`)
+- `story` - Individual story items (`<li>`)
+- `article-content` - Article/comment section
+- `comment` - Individual comments (`<details>`)
+- `saved-stories` - Saved stories container
+- `user-profile` - User profile page
+
+---
+
 ## Overview
 
 Container Queries allow elements to be styled based on the size of their container rather than the viewport. This enables truly modular, reusable components that adapt to their context.

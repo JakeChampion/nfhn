@@ -1729,11 +1729,6 @@ body:has(:focus-visible) .kbd-hint {
   opacity: 1;
 }
 
-/* Alternative: style based on focused item type */
-main:has(li:focus-visible) {
-  /* Subtle indication that keyboard nav is active */
-}
-
 /* --- Popover/Modal open states --- */
 /* Dim main content when any popover is open */
 body:has([popover]:popover-open) main {
@@ -1793,11 +1788,6 @@ details.comment:not([open]) {
 }
 
 /* --- Feed navigation current state --- */
-/* Highlight nav when viewing that feed */
-nav:has(a[aria-current="page"]) {
-  /* Navigation is active */
-}
-
 /* Style the nav link container when it has current page */
 .nav-links:has([aria-current="page"]) a:not([aria-current="page"]) {
   opacity: 0.8;
@@ -1832,28 +1822,7 @@ details[open] > summary {
   font-weight: 600;
 }
 
-/* Comments section with open details */
-section:has(details.comment[open]) {
-  /* At least one comment is expanded */
-}
-
 /* --- Story with different content types --- */
-/* Stories that link to HN itself (Ask HN, Show HN) */
-li:has(a[href^="/item/"]:only-of-type) .story-meta {
-  /* Self-post indicator */
-}
-
-/* --- Settings and preferences --- */
-/* When a specific theme radio is checked */
-.theme-toggle:has(input[value="dark"]:checked) {
-  /* Dark mode selected */
-}
-
-.theme-toggle:has(input[value="light"]:checked) {
-  /* Light mode selected */
-}
-
-/* --- Loading states --- */
 /* Page with loading indicator */
 main:has(.loading) {
   min-height: 50vh;
@@ -1863,11 +1832,6 @@ main:has(.loading) {
 }
 
 /* --- Quantity-based styling --- */
-/* Stories list with few items - can use larger layout */
-.stories:has(li:nth-child(5)):not(:has(li:nth-child(11))) {
-  /* 5-10 items: comfortable spacing */
-}
-
 /* Stories list with many items - compact layout */
 .stories:has(li:nth-child(20)) li {
   padding-block: 0.6em;
@@ -1890,5 +1854,311 @@ main:has(.loading) {
   body:has(:focus-visible) *,
   body:has([popover]:popover-open) * {
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* =============================================================================
+   Container Queries (Baseline 2023)
+   Components adapt to their container size, not viewport
+   ============================================================================= */
+
+/* --- Define Container Contexts --- */
+
+/* Main content area as a container */
+main {
+  container-type: inline-size;
+  container-name: main-content;
+}
+
+/* Story list as a container */
+ol.stories {
+  container-type: inline-size;
+  container-name: stories;
+}
+
+/* Individual story items as containers */
+ol > li {
+  container-type: inline-size;
+  container-name: story;
+}
+
+/* Comment section as a container */
+article {
+  container-type: inline-size;
+  container-name: article-content;
+}
+
+/* Individual comments as containers */
+details {
+  container-type: inline-size;
+  container-name: comment;
+}
+
+/* --- Story List Container Queries --- */
+
+/* Narrow container: compact layout */
+@container stories (max-width: 400px) {
+  li {
+    padding-left: 1.5em;
+  }
+
+  li::before {
+    font-size: 1.1em;
+  }
+
+  .story-meta {
+    font-size: 0.75em;
+  }
+
+  .badge {
+    font-size: 0.55em;
+    padding: 0.1em 0.3em;
+  }
+
+  /* Hide domain on very narrow containers */
+  .story-meta .link-sep,
+  .story-meta .link-sep + * {
+    display: none;
+  }
+}
+
+/* Standard container: balanced layout */
+@container stories (min-width: 400px) and (max-width: 600px) {
+  li {
+    padding-left: 2.5em;
+  }
+
+  .story-meta {
+    font-size: 0.8em;
+  }
+}
+
+/* Wide container: full layout with more details */
+@container stories (min-width: 600px) {
+  li {
+    padding-left: 3em;
+  }
+
+  li::before {
+    font-size: 1.6em;
+  }
+
+  .story-meta {
+    font-size: 0.85em;
+  }
+
+  /* More prominent actions on wide containers */
+  .story-actions {
+    gap: 1em;
+  }
+}
+
+/* Very wide container: grid layout for story actions */
+@container stories (min-width: 800px) {
+  .story-actions {
+    gap: 1.25em;
+  }
+
+  .bookmark-btn {
+    width: 2.5em;
+    height: 2.5em;
+  }
+}
+
+/* --- Comment Container Queries --- */
+
+/* Narrow comments: reduce indentation */
+@container article-content (max-width: 400px) {
+  details {
+    margin: 20px auto;
+    font-size: 15px;
+  }
+
+  summary {
+    min-height: 48px;
+    padding: 0.5em;
+  }
+
+  .comment-meta {
+    font-size: 0.8em;
+    gap: 0.3em;
+  }
+
+  /* Tighter nested comment indentation */
+  article ul {
+    padding-left: 0.5em;
+  }
+}
+
+/* Standard comments */
+@container article-content (min-width: 400px) and (max-width: 650px) {
+  details {
+    font-size: 16px;
+  }
+
+  article ul {
+    padding-left: 0.75em;
+  }
+}
+
+/* Wide comments: more breathing room */
+@container article-content (min-width: 650px) {
+  details {
+    font-size: 18px;
+  }
+
+  summary {
+    min-height: 56px;
+    padding: 0.75em;
+  }
+
+  .comment-meta {
+    gap: 0.5em;
+  }
+
+  article ul {
+    padding-left: 1em;
+  }
+}
+
+/* --- Individual Comment Depth Queries --- */
+/* As comments get nested deeper (narrower containers), adapt */
+
+@container comment (max-width: 300px) {
+  /* Very narrow nested comment */
+  summary {
+    font-size: 0.9em;
+    min-height: 44px;
+  }
+
+  .comment-permalink {
+    padding: 0.3em 0.5em;
+    min-height: 40px;
+    min-width: 40px;
+    font-size: 0.85em;
+  }
+}
+
+@container comment (max-width: 200px) {
+  /* Extremely narrow - collapse actions */
+  .comment-permalink {
+    padding: 0.25em;
+    min-width: auto;
+  }
+
+  /* Truncate long usernames */
+  .comment-user {
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* --- Main Content Container Queries --- */
+/* For when main is resized (e.g., in a split view or PiP) */
+
+@container main-content (max-width: 500px) {
+  /* Compact header bar */
+  .header-bar {
+    gap: 0.5em;
+  }
+
+  .nav-feeds {
+    gap: 0.3em;
+    font-size: 0.85em;
+  }
+
+  .nav-feeds a {
+    padding: 0.3em 0.5em;
+  }
+
+  /* Compact pagination */
+  .more-link {
+    padding: 0.75em;
+    font-size: 0.9em;
+  }
+}
+
+@container main-content (min-width: 700px) {
+  /* More spacious layout for wide containers */
+  .header-bar {
+    gap: 1em;
+  }
+
+  .nav-feeds {
+    gap: 1em;
+  }
+
+  .more-link {
+    padding: 1.25em;
+    font-size: 1em;
+  }
+}
+
+/* --- Container Query Units --- */
+/* Use container query units for fluid typography */
+
+@supports (font-size: 1cqi) {
+  /* Fluid story title based on container width */
+  .story-title-text {
+    font-size: clamp(0.9rem, 2.5cqi + 0.5rem, 1.2rem);
+  }
+
+  /* Fluid meta text */
+  .story-meta {
+    font-size: clamp(0.7rem, 1.5cqi + 0.4rem, 0.9rem);
+  }
+}
+
+/* --- Saved Stories Container --- */
+/* The saved stories container rendered by JS */
+
+#saved-stories-container {
+  container-type: inline-size;
+  container-name: saved-stories;
+}
+
+@container saved-stories (max-width: 400px) {
+  .saved-count {
+    font-size: 0.8em;
+    padding-left: 0.25em;
+  }
+
+  .empty-saved {
+    padding: 2em 0.5em;
+  }
+
+  .empty-saved p {
+    font-size: 0.9em;
+  }
+}
+
+/* --- User Profile Container Queries --- */
+
+.user-profile {
+  container-type: inline-size;
+  container-name: user-profile;
+}
+
+@container user-profile (max-width: 400px) {
+  .user-stats {
+    grid-template-columns: 1fr;
+    gap: 0.5em;
+  }
+
+  .user-stats dt {
+    font-size: 0.8em;
+  }
+
+  .user-about {
+    margin: 1em 0;
+  }
+}
+
+@container user-profile (min-width: 500px) {
+  .user-stats {
+    grid-template-columns: auto 1fr auto 1fr;
+    gap: 0.5em 1.5em;
   }
 }
