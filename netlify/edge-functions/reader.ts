@@ -230,6 +230,32 @@ function getStyles(): string {
       font-size: 0.875rem;
     }
 
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35em;
+      padding: 0.4em 0.75em;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: var(--background-elevated);
+      color: var(--text-primary);
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: background-color 0.15s, transform 0.1s;
+    }
+
+    .back-btn:hover {
+      background: var(--badge-bg);
+    }
+
+    .back-btn:active {
+      transform: scale(0.95);
+    }
+
+    .back-btn svg {
+      flex-shrink: 0;
+    }
+
     .reader-meta {
       display: flex;
       gap: 1rem;
@@ -507,7 +533,12 @@ function renderHtml(url: string, title: string, content: string, readingTime: nu
 
   <header class="reader-header">
     <nav class="reader-nav">
-      <a href="/">← Back to NFHN</a>
+      <button type="button" class="back-btn" onclick="history.back()" aria-label="Go back">
+        <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+          <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="currentColor"/>
+        </svg>
+        <span>Back</span>
+      </button>
       ${getThemeToggle()}
     </nav>
     <h1>${safeTitle}</h1>

@@ -140,10 +140,38 @@ export const skipLink = (): HTML =>
     <a href="#main-content" class="skip-link">Skip to main content</a>
   `;
 
+// --- Reading Progress Indicator (Scroll-Driven Animations) ---
+
+export const readingProgress = (): HTML =>
+  html`
+    <div class="reading-progress" aria-hidden="true"></div>
+  `;
+
+// --- Back to Top Button (Scroll-Driven Animations) ---
+
+export const backToTop = (): HTML =>
+  html`
+    <a href="#" class="back-to-top" aria-label="Back to top">
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <polyline points="18 15 12 9 6 15"></polyline>
+      </svg>
+    </a>
+  `;
+
 // --- PWA head tags ---
 
 export const pwaHeadTags = (): HTML =>
   html`
+    <link rel="preconnect" href="https://hacker-news.firebaseio.com" fetchpriority="high">
+    <link rel="preconnect" href="https://hn.algolia.com" fetchpriority="low">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#ff7a18">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -161,16 +189,19 @@ export const justifyScript = (): HTML =>
       src="/tex-linebreak.js"
       integrity="sha384-Mz2e2ZKHUt95NE5A4Q3jnM4vMi3TW/aI+z0XpUTTtvDOGtOicI7DlGTmCj3yVG0x"
       crossorigin="anonymous"
+      fetchpriority="low"
     ></script>
     <script
       src="/hyphens_en-us.js"
       integrity="sha384-O18JzLDtmRj8lMDKjQ/VZOo09Ye41get5V+PDYP1atYLjrMbCO390FdScF4XAZts"
       crossorigin="anonymous"
+      fetchpriority="low"
     ></script>
     <script
       src="/justify.js"
       integrity="sha384-FI/M0Xsdr+Yk/caRCCNCvazelNiHYTHJDbPjVQ+5tt+AIoP2DoNt9Suks7KP+Mc8"
       crossorigin="anonymous"
+      fetchpriority="low"
     ></script>
   `;
 
@@ -180,7 +211,7 @@ export const sharedStyles = (pageNumber = 1): HTML => {
   // Only the dynamic counter-set needs to be inline; all other styles are in /styles.css
   const counterStart = pageNumber === 1 ? 0 : (pageNumber - 1) * 30;
   return html`
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/styles.css" fetchpriority="high">
     <style>
     ol { counter-set: section ${counterStart}; }
     </style>
@@ -366,8 +397,6 @@ export const readerModeLink = (url: string | undefined): HTML => {
     <a
       href="${readerUrl}"
       class="reader-mode-link"
-      target="_blank"
-      rel="noopener noreferrer"
       title="Open in Reader Mode"
     >
       <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
@@ -377,6 +406,33 @@ export const readerModeLink = (url: string | undefined): HTML => {
       </svg>
       <span>Reader</span>
     </a>
+  `;
+};
+
+// --- Picture-in-Picture reader button (Chrome only) ---
+
+export const pipReaderButton = (url: string | undefined, title: string): HTML => {
+  if (!url) {
+    return html`
+
+    `;
+  }
+  return html`
+    <button
+      type="button"
+      class="pip-reader-btn"
+      data-url="${url}"
+      data-title="${title}"
+      title="Open in floating window (Chrome only)"
+      aria-label="Open in Picture-in-Picture reader"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+        <path
+          d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"
+        />
+      </svg>
+      <span class="pip-label">PiP</span>
+    </button>
   `;
 };
 
@@ -407,6 +463,7 @@ export const bookmarkButton = (item: Item): HTML =>
     <button
       type="button"
       class="bookmark-btn"
+      aria-pressed="false"
       data-story-id="${item.id}"
       data-story-title="${item.title}"
       data-story-url="${item.url || ""}"
