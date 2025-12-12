@@ -980,8 +980,6 @@ pre {
     flex-shrink: 0;
     width: 2.5em;
     height: 2.5em;
-    min-width: 44px;
-    min-height: 44px;
   }
 
   /* User profile adjustments */
