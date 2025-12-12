@@ -1,19 +1,36 @@
 # CSS Anchor Positioning
 
+## Status: ✅ IMPLEMENTED
+
+**Implementation Date:** Phase 2
+
 ## Overview
 
 CSS Anchor Positioning allows elements to be positioned relative to other elements (anchors) without JavaScript. This is ideal for tooltips, popovers, dropdown menus, and contextual UI elements.
 
 **Browser Support:** Baseline 2024 (Chrome 125+, Safari 18+, Firefox planned)
 
-## Current State in NFHN
+## Implementation Summary
 
-NFHN currently uses:
-- Popover API for modals and settings menus
-- Fixed positioning for various UI elements
-- No anchor-based positioning for tooltips or contextual menus
+CSS Anchor Positioning has been implemented with the following features:
 
-## Proposed Implementation
+### Features Implemented
+1. **Settings Menu Positioning** - The settings popover is now anchored to the settings button with fallback positions (below-left, below-right, above-left, above-right)
+2. **Share Button Tooltips** - Hover tooltips showing "Share" anchored below the button
+3. **Bookmark Button Tooltips** - Hover tooltips showing "Save"/"Saved" with dynamic content based on `aria-pressed` state
+4. **Back to Top Tooltips** - Tooltip anchored to the left of the back-to-top button
+
+### Technical Details
+- All anchor positioning is wrapped in `@supports (anchor-name: ...)` for progressive enhancement
+- Uses `position-try-fallbacks` for automatic flipping when there's not enough space
+- Custom `@position-try` rules define fallback positions
+
+### Location in Codebase
+- CSS: `static/styles.css` (CSS Anchor Positioning section, after Popover API styles)
+
+---
+
+## Original Proposal
 
 ### 1. Story Metadata Tooltips
 

@@ -1,19 +1,38 @@
 # View Transitions API
 
+## Status: ✅ IMPLEMENTED
+
+**Implementation Date:** Phase 2
+
 ## Overview
 
 The View Transitions API provides a mechanism for creating animated transitions between different views of a web application. It can work for both same-document (SPA-style) transitions and cross-document (MPA) transitions.
 
 **Browser Support:** Baseline 2024 (Chrome 111+, Safari 18+, Firefox 129+)
 
+## Implementation Summary
+
+View Transitions were already implemented in NFHN with a comprehensive CSS-based approach:
+
+### Features Implemented
+- **Cross-document transitions** via `@view-transition { navigation: auto; }`
+- **Named transitions** for main content, header, and navigation
+- **Direction-aware animations** using `:active-view-transition-type(backward)`
+- **Slide and fade effects** for smooth page navigation
+- **Reduced motion support** via `@media (prefers-reduced-motion: reduce)`
+
+### Location in Codebase
+- `static/styles.css` (lines ~1577-1666)
+
 ## Current State in NFHN
 
-NFHN already has some foundation work:
-- Navigation API tracking in `app.js` for detecting forward/backward navigation
-- Sets `data-navDirection` attribute for CSS targeting
-- Uses prerender/prefetch on hover for faster navigation
-
-However, **actual view transitions are not yet implemented**.
+NFHN has a complete View Transitions implementation:
+- Cross-document view transitions enabled via CSS `@view-transition` rule
+- Named view transitions for `main`, `.header-bar`, and `.nav-feeds`
+- Forward navigation: content slides right-to-left
+- Backward navigation: content slides left-to-right (using `:active-view-transition-type(backward)`)
+- Header and nav crossfade smoothly
+- Prerender/prefetch on hover for faster perceived navigation
 
 ## Proposed Implementation
 

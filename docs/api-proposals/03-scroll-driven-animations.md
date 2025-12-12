@@ -1,18 +1,34 @@
 # Scroll-Driven Animations
 
+## Status: ✅ IMPLEMENTED
+
+**Implementation Date:** Phase 2
+
 ## Overview
 
 Scroll-Driven Animations allow CSS animations to be linked to scroll progress, enabling scroll-based effects without JavaScript. This includes scroll progress animations and view-based animations triggered when elements enter/exit the viewport.
 
 **Browser Support:** Baseline 2024 (Chrome 115+, Safari 18+, Firefox 132+)
 
-## Current State in NFHN
+## Implementation Summary
 
-NFHN currently has no scroll-driven effects. The reader mode would particularly benefit from:
-- Reading progress indicators
-- Smooth reveal animations as content scrolls into view
+Scroll-Driven Animations have been implemented with the following features:
 
-## Proposed Implementation
+### Features Implemented
+1. **Reading Progress Indicator** - A thin progress bar at the top of every page showing scroll progress through the document using `animation-timeline: scroll(root)`
+2. **Story Item Reveal** - Stories fade in and slide up as they enter the viewport using `animation-timeline: view()`
+3. **Comment Reveal Animations** - Comments subtly animate in when scrolling, with nested comments having staggered delays
+4. **Back to Top Button** - A floating button that appears after scrolling down, using scroll-linked opacity animation
+5. **Reduced Motion Support** - All animations disabled for users who prefer reduced motion
+
+### Location in Codebase
+- CSS: `static/styles.css` (Scroll-Driven Animations section)
+- Components: `netlify/edge-functions/lib/render/components.ts` (`readingProgress()`, `backToTop()`)
+- Pages: `netlify/edge-functions/lib/render/pages.ts` (components added to all pages)
+
+---
+
+## Original Proposal
 
 ### 1. Reading Progress Indicator
 

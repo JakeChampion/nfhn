@@ -4,6 +4,7 @@ import { type HTML, html as tpl, unsafeHTML } from "../html.ts";
 import { type FeedSlug, type Item, type SubmissionItem, type User } from "../hn.ts";
 import {
   articleJsonLd,
+  backToTop,
   bookmarkButton,
   commentsSection,
   countComments,
@@ -14,6 +15,7 @@ import {
   keyboardNavScript,
   pwaHeadTags,
   readerModeLink,
+  readingProgress,
   renderStory,
   shareButton,
   sharedStyles,
@@ -103,6 +105,7 @@ export const home = (
     <title>NFHN: Page ${pageNumber}</title>
   </head>
   <body>
+    ${readingProgress()}
     ${skipLink()}
     <main id="main-content" aria-label="Main content">
       ${headerBar(feed)}
@@ -111,6 +114,7 @@ export const home = (
       </ol>
       <a href="/${feed}/${pageNumber + 1}" class="more-link">More</a>
     </main>
+    ${backToTop()}
     ${keyboardNavScript()}
     ${speculationRules()}
     ${themeScript()}
@@ -148,12 +152,14 @@ const shellPage = (
     <title>${title}</title>
   </head>
   <body>
+    ${readingProgress()}
     ${skipLink()}
     `;
 
     yield* body;
 
     yield* tpl`
+      ${backToTop()}
       ${themeScript()}
       ${justifyScript()}
       </body>
@@ -344,6 +350,7 @@ export const savedPage = (canonicalUrl?: string): HTML =>
     <title>NFHN: Saved Stories</title>
   </head>
   <body>
+    ${readingProgress()}
     ${skipLink()}
     <main id="main-content" aria-label="Main content">
       ${headerBar("saved")}
@@ -355,6 +362,7 @@ export const savedPage = (canonicalUrl?: string): HTML =>
         <p class="loading-message">Loading saved stories...</p>
       </div>
     </main>
+    ${backToTop()}
     ${keyboardNavScript()}
     ${themeScript()}
   </body>

@@ -1,19 +1,39 @@
 # Web Share API (Level 2)
 
+## Status: ✅ IMPLEMENTED
+
+**Implementation Date:** Pre-existing (before Phase 2)
+
 ## Overview
 
 The Web Share API allows websites to share text, URLs, and files to other apps installed on the user's device using the native share dialog. Level 2 adds support for sharing files (images, documents, etc.).
 
 **Browser Support:** Baseline (Chrome 89+, Safari 15+, Firefox 71+ - with varying Level 2 file support)
 
-## Current State in NFHN
+## Implementation Summary
 
-NFHN currently has no native sharing functionality. Users must:
-- Copy URLs manually
-- Use browser's native share (if available in browser UI)
-- No way to share article content or reader mode output
+The Web Share API was already implemented in NFHN with the following features:
 
-## Proposed Implementation
+### Features Implemented
+1. **Share buttons** on all stories (visible only when Web Share API is available)
+2. **Feature detection** - adds `can-share` or `no-share` class to `<html>` element
+3. **Progressive enhancement** - buttons hidden by default, shown via CSS when supported
+4. **Graceful error handling** - AbortError (user cancel) handled silently
+
+### Location in Codebase
+- Component: `netlify/edge-functions/lib/render/components.ts` (`shareButton()`)
+- JavaScript: `static/app.js` (Web Share API section)
+- CSS: `static/styles.css` (Share button styles section)
+
+### How It Works
+1. On page load, JavaScript checks `navigator.share` support
+2. Adds `can-share` class to `<html>` if supported
+3. CSS shows `.share-btn` elements only inside `.can-share`
+4. Click handler uses `navigator.share()` with title and URL from data attributes
+
+---
+
+## Original Proposal
 
 ### 1. Basic Story Sharing
 

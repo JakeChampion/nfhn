@@ -140,6 +140,32 @@ export const skipLink = (): HTML =>
     <a href="#main-content" class="skip-link">Skip to main content</a>
   `;
 
+// --- Reading Progress Indicator (Scroll-Driven Animations) ---
+
+export const readingProgress = (): HTML =>
+  html`
+    <div class="reading-progress" aria-hidden="true"></div>
+  `;
+
+// --- Back to Top Button (Scroll-Driven Animations) ---
+
+export const backToTop = (): HTML =>
+  html`
+    <a href="#" class="back-to-top" aria-label="Back to top">
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <polyline points="18 15 12 9 6 15"></polyline>
+      </svg>
+    </a>
+  `;
+
 // --- PWA head tags ---
 
 export const pwaHeadTags = (): HTML =>
