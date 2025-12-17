@@ -420,6 +420,14 @@ a:focus-visible {
   color: var(--badge-color);
 }
 
+.badge-tell {
+  /* Blue - hue ~240 in oklch */
+  --badge-color: oklch(0.55 0.18 240);
+  background: oklch(from var(--badge-color) l c h / 0.1);
+  border-color: oklch(from var(--badge-color) l c h / 0.3);
+  color: var(--badge-color);
+}
+
 .badge-job {
   /* Orange/Gold - hue ~75 in oklch */
   --badge-color: oklch(0.6 0.18 75);
@@ -1170,6 +1178,13 @@ pre {
   color: var(--badge-color);
 }
 
+:root[data-theme="dark"] .badge-tell {
+  --badge-color: oklch(0.75 0.14 240);
+  background: oklch(from var(--badge-color) l c h / 0.15);
+  border-color: oklch(from var(--badge-color) l c h / 0.4);
+  color: var(--badge-color);
+}
+
 :root[data-theme="dark"] .badge-job {
   --badge-color: oklch(0.8 0.14 75);
   background: oklch(from var(--badge-color) l c h / 0.15);
@@ -1198,6 +1213,13 @@ pre {
   
   :root[data-theme="auto"] .badge-show {
     --badge-color: oklch(0.75 0.14 145);
+    background: oklch(from var(--badge-color) l c h / 0.15);
+    border-color: oklch(from var(--badge-color) l c h / 0.4);
+    color: var(--badge-color);
+  }
+  
+  :root[data-theme="auto"] .badge-tell {
+    --badge-color: oklch(0.75 0.14 240);
     background: oklch(from var(--badge-color) l c h / 0.15);
     border-color: oklch(from var(--badge-color) l c h / 0.4);
     color: var(--badge-color);

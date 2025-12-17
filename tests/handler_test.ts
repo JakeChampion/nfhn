@@ -420,6 +420,32 @@ Deno.test("serves show stories from the mocked API", async () => {
   });
 });
 
+Deno.test("serves tell HN story with correct link", async () => {
+  const routes = {
+    [topStoriesUrl]: [
+      {
+        id: 250,
+        title: "Tell HN: My Story",
+        points: 25,
+        user: "storyteller",
+        time: Math.floor(Date.now() / 1000) - 900,
+        type: "tell",
+        comments_count: 15,
+      },
+    ],
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/1"));
+    const body = await res.text();
+
+    assertEquals(res.status, 200);
+    assertStringIncludes(body, "Tell HN");
+    assertStringIncludes(body, 'href="/item/250"');
+    assert(!body.includes('href="item?id='), "Should not contain malformed relative URL");
+  });
+});
+
 Deno.test("serves jobs from the mocked API", async () => {
   const routes = {
     [jobsStoriesUrl]: [
@@ -1361,6 +1387,35 @@ Deno.test("article page shows keyboard shortcuts modal markup", async () => {
     assertStringIncludes(body, "Keyboard Shortcuts");
   });
 });
+
+Deno.test("tell HN item page renders with correct badge and link", async () => {
+  const tellItemUrl = "https://api.hnpwa.com/v0/item/456.json";
+  const routes = {
+    [tellItemUrl]: {
+      id: 456,
+      title: "Tell HN: Something Interesting",
+      points: 42,
+      user: "tellauthor",
+      time: Math.floor(Date.now() / 1000) - 1800,
+      time_ago: "30 minutes ago",
+      type: "tell",
+      content: "<p>Here's my story</p>",
+      comments_count: 5,
+      comments: [],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/456"));
+    assertEquals(res.status, 200);
+    const body = await res.text();
+    assertStringIncludes(body, "Tell HN");
+    assertStringIncludes(body, "Something Interesting");
+    assertStringIncludes(body, "badge-tell");
+    assertStringIncludes(body, 'href="/item/456"');
+  });
+});
+
 
 Deno.test("article page includes ARIA live region", async () => {
   const routes = {
