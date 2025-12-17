@@ -283,6 +283,8 @@ body {
   font-size: 18px;
   color: var(--text-strong);
   padding: 0 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 main {
@@ -2200,7 +2202,7 @@ body:has([popover]:popover-open) main {
 /* Prevent body scroll when modal is open */
 body:has(#shortcuts-modal:popover-open),
 body:has(#settings-menu:popover-open) {
-  overflow: hidden;
+  overflow-y: hidden;
 }
 
 /* --- Form validation states --- */
