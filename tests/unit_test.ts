@@ -320,6 +320,28 @@ Deno.test("mapStoryToItem: extracts domain from URL when not provided", () => {
   assertEquals(result?.domain, "example.org");
 });
 
+Deno.test("mapStoryToItem: drops relative HN discussion URLs", () => {
+  const raw: HNAPIItem = {
+    id: 321,
+    type: "link",
+    url: "item?id=321",
+  };
+  const result = mapStoryToItem(raw);
+
+  assertEquals(result?.url, undefined);
+});
+
+Deno.test("mapStoryToItem: drops absolute HN discussion URLs", () => {
+  const raw: HNAPIItem = {
+    id: 654,
+    type: "link",
+    url: "https://news.ycombinator.com/item?id=654",
+  };
+  const result = mapStoryToItem(raw);
+
+  assertEquals(result?.url, undefined);
+});
+
 Deno.test("mapStoryToItem: uses provided domain over extracted", () => {
   const raw: HNAPIItem = {
     id: 789,

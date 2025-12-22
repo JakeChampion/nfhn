@@ -124,6 +124,32 @@ function extractDomain(url?: string): string | undefined {
   }
 }
 
+function normalizeItemUrl(rawUrl: string | undefined, id: number): string | undefined {
+  if (!rawUrl) return undefined;
+
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return undefined;
+
+  // Treat relative HN discussion links (e.g. "item?id=123") as internal pages
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    const isHNItemLink = url.hostname === "news.ycombinator.com" &&
+      url.pathname === "/item" &&
+      url.searchParams.get("id") === String(id);
+
+    if (isHNItemLink) return undefined;
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+
+    return url.href;
+  } catch {
+    return undefined;
+  }
+}
+
 function now(): number {
   return Date.now();
 }
@@ -205,12 +231,13 @@ export function formatTimeAgo(unixSeconds: number | undefined): string {
 export function mapStoryToItem(raw: HNAPIItem, level = 0): Item | null {
   if (!raw || typeof raw.id !== "number" || !raw.type) return null;
 
+  const url = normalizeItemUrl(raw.url, raw.id);
   const time = raw.time ?? 0;
   const points = typeof raw.points === "number" ? raw.points : null;
   const user = raw.user ?? null;
   const content = raw.content ?? "";
   const commentsCount = typeof raw.comments_count === "number" ? raw.comments_count : 0;
-  const domain = raw.domain ?? extractDomain(raw.url);
+  const domain = raw.domain ?? extractDomain(url);
 
   return {
     id: raw.id,
@@ -223,7 +250,7 @@ export function mapStoryToItem(raw: HNAPIItem, level = 0): Item | null {
     deleted: raw.deleted,
     dead: raw.dead,
     type: raw.type,
-    url: raw.url,
+    url,
     domain,
     comments: [],
     level,
