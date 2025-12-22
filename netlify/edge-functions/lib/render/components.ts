@@ -118,6 +118,7 @@ export type TypeMeta = {
 const TYPE_META: Record<ItemType, TypeMeta> = {
   ask: { label: "Ask HN", badgeClass: "badge-ask", href: (item) => `/item/${item.id}` },
   show: { label: "Show HN", badgeClass: "badge-show", href: (item) => `/item/${item.id}` },
+  tell: { label: "Tell HN", badgeClass: "badge-tell", href: (item) => `/item/${item.id}` },
   job: {
     label: "Job",
     badgeClass: "badge-job",
