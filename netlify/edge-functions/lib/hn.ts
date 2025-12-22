@@ -75,7 +75,7 @@ const FEED_ENDPOINTS: Record<FeedSlug, "news" | "newest" | "ask" | "show" | "job
   jobs: "jobs",
 };
 
-export type ItemType = "ask" | "show" | "job" | "link" | "comment";
+export type ItemType = "ask" | "show" | "tell" | "job" | "link" | "comment";
 
 export interface HNAPIItem {
   id: number;
