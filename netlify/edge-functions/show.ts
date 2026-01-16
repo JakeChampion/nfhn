@@ -13,7 +13,7 @@ export default (request: Request, context: Context) => {
     "show",
     pageNumber,
     "No stories found",
-    "We couldn't find that page of Show HN posts.",
+    "We could not find that page of Show HN posts.",
   );
 };
 
