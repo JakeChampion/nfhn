@@ -5,7 +5,7 @@ import { handleFeed, handleNotFound, parsePositiveInt } from "./lib/handlers.ts"
 export default (request: Request, context: Context) => {
   console.log(JSON.stringify(context, undefined, 4));
   const pageNumber = parsePositiveInt(context.params.page);
-  return new Response(`ip:${context.ip}\nlength:${context.ip.length}`)
+  return Response.JSON(context)
   if (pageNumber === null) {
     return handleNotFound(request);
   }
