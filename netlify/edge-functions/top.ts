@@ -20,5 +20,4 @@ export default (request: Request, context: Context) => {
 export const config: Config = {
   method: ["GET"],
   path: "/top/:page",
-  cache: "manual",
 };
