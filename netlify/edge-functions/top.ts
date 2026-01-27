@@ -3,7 +3,7 @@ import type { Config, Context } from "@netlify/edge-functions";
 import { handleFeed, handleNotFound, parsePositiveInt } from "./lib/handlers.ts";
 
 export default (request: Request, context: Context) => {
-  console.log(JSON.stringify(context, undefined, 4));
+  // console.log(JSON.stringify(context, undefined, 4));
   const pageNumber = parsePositiveInt(context.params.page);
   return Response.json(context)
   if (pageNumber === null) {
