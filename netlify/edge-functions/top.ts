@@ -3,7 +3,7 @@ import type { Config, Context } from "@netlify/edge-functions";
 import { handleFeed, handleNotFound, parsePositiveInt } from "./lib/handlers.ts";
 
 export default (request: Request, context: Context) => {
-  console.log('meow');
+  console.log('meow x-nf-passthrough-host:', request.headers.get('x-nf-passthrough-host'));
   const pageNumber = parsePositiveInt(context.params.page);
   if (pageNumber === null) {
     return handleNotFound(request);
