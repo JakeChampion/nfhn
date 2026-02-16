@@ -1,9 +1,9 @@
 // top.ts - Top stories feed
 import type { Config, Context } from "@netlify/edge-functions";
-import { handleFeed, handleNotFound, parsePositiveInt } from "./lib/handlers.ts";
+// import { handleFeed, handleNotFound, parsePositiveInt } from "./lib/handlers.ts";
 
-export default (request: Request, context: Context) => {
-  return new Response(`meow x-nf-passthrough-host: ${request.headers.get('x-nf-passthrough-host')}`);
+export default (_request: Request, _context: Context) => {
+  return new Response(`meow`);
   // const pageNumber = parsePositiveInt(context.params.page);
   // if (pageNumber === null) {
   //   return handleNotFound(request);
