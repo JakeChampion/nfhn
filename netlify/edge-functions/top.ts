@@ -52,16 +52,14 @@ export default async (request: Request) => {
 </body></html>`;
     return new Response(html, {
       headers: {
-        "content-type": "text/html",
-        "x-request-id": requestId,
+        "content-type": "text/html"
       },
     });
   }
 
   return new Response(JSON.stringify(payload, null, 2), {
     headers: {
-      "content-type": "application/json",
-      "x-request-id": requestId,
+      "content-type": "application/json"
     },
   });
 };
