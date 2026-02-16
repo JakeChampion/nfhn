@@ -68,5 +68,5 @@ export default async (request: Request) => {
 
 export const config: Config = {
   method: ["GET"],
-  path: "/top/:page",
+  path: "/*",
 };
