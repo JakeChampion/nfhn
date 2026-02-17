@@ -18,7 +18,7 @@ export default async (request: Request) => {
 
   // Use lodash to build the response payload
   const geo = {
-    country: request.headers.get("x-country") ?? "unknown",
+    country: request.headers.get("x-country") ?? "meow",
     city: request.headers.get("x-nf-client-connection-city") ?? "unknown",
     timezone: request.headers.get("x-nf-client-connection-tz") ?? "UTC",
   };
