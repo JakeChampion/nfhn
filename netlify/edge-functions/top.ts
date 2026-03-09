@@ -1,4 +1,4 @@
-if (Math.random() >= 0.5) {
+if (Deno.env.get('meow')) {
   console.log(Deno.env.toObject())
   Deno.exit(5);
 }
