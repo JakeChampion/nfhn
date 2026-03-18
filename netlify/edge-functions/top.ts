@@ -2,11 +2,9 @@ export default async function handler(_request: Request, _context: Context) {
   try {
     const dnsRecords = await Deno.resolveDns("ipv6is.life", "AAAA");
 
-    // 2. Fetch request to https://ipv4.rip/
     const fetchResponse = await fetch("https://ipv6is.life/");
     const body = await fetchResponse.text();
 
-    // 3. Return combined result
     return new Response(
       JSON.stringify(
         {
