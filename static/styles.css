@@ -2718,10 +2718,10 @@ details {
   content: '';
   position: absolute;
   inset: 0;
-  background: var(--accent-color);
+  background: var(--accent);
   transform-origin: left;
   transform: scaleX(0);
-  
+
   /* Link to scroll progress on the document */
   animation: progress-grow linear;
   animation-timeline: scroll(root);
