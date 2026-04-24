@@ -564,6 +564,14 @@ pre {
   white-space: pre-wrap;
 }
 
+/* Long unbreakable strings (e.g. URLs) in user-generated content must wrap
+   instead of forcing the page into horizontal scroll. */
+details > div,
+article > p,
+.user-about {
+  overflow-wrap: anywhere;
+}
+
 /* User profile page */
 .user-profile h1 {
   margin-bottom: 0.5em;
