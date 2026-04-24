@@ -562,14 +562,36 @@ details[open] summary {
 
 pre {
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* Long unbreakable strings (e.g. URLs) in user-generated content must wrap
-   instead of forcing the page into horizontal scroll. */
+   instead of forcing the page into horizontal scroll. Applied to descendants
+   too because some elements (flex/inline-block children, nested blocks) can
+   establish their own min-content width that defeats inherited wrapping. */
 details > div,
-article > p,
-.user-about {
+details > div *,
+article,
+article * {
   overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* Constrain embedded media in user-generated content so wide images or
+   tables don't push the page into horizontal scroll. */
+details > div img,
+details > div video,
+article img,
+article video {
+  max-width: 100%;
+  height: auto;
+}
+
+details > div table,
+article table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 /* User profile page */
