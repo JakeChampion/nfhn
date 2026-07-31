@@ -117,7 +117,7 @@ async function fetchDocument(url: string) {
   try {
     const res = await fetch(url, {
       headers: {
-        "User-Agent": "NFHN Reader (https://e8f3ede5-ab43-42ec-9ebb-007f0f6e7523.netlify.app)",
+        "User-Agent": "hn Reader (https://e8f3ede5-ab43-42ec-9ebb-007f0f6e7523.netlify.app)",
         Accept: "text/html,application/xhtml+xml",
       },
     });
@@ -525,7 +525,7 @@ function renderHtml(url: string, title: string, content: string, readingTime: nu
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${safeTitle} - NFHN Reader</title>
+  <title>${safeTitle} - hn Reader</title>
   <style>${getStyles()}</style>
 </head>
 <body>
@@ -567,14 +567,14 @@ function renderError(title: string, message: string): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${safeTitle} - NFHN Reader</title>
+  <title>${safeTitle} - hn Reader</title>
   <style>${getStyles()}</style>
 </head>
 <body>
   <div class="error-page">
     <h1>${safeTitle}</h1>
     <p>${safeMessage}</p>
-    <p><a href="/">← Back to NFHN</a></p>
+    <p><a href="/">← Back to hn</a></p>
   </div>
   <script>${getThemeScript()}</script>
 </body>
@@ -587,15 +587,15 @@ function renderInstructions(): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NFHN Reader</title>
+  <title>hn Reader</title>
   <style>${getStyles()}</style>
 </head>
 <body>
   <div class="instructions">
-    <h1>NFHN Reader</h1>
+    <h1>hn Reader</h1>
     <p>Append a URL to the address bar to read any article in a clean, distraction-free format.</p>
     <p>Example: <code>/reader/https://example.com/article</code></p>
-    <p><a href="/">← Back to NFHN</a></p>
+    <p><a href="/">← Back to hn</a></p>
   </div>
   <script>${getThemeScript()}</script>
 </body>
