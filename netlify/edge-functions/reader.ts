@@ -117,7 +117,7 @@ async function fetchDocument(url: string) {
   try {
     const res = await fetch(url, {
       headers: {
-        "User-Agent": "NFHN Reader (https://nfhn.netlify.app)",
+        "User-Agent": "NFHN Reader (https://e8f3ede5-ab43-42ec-9ebb-007f0f6e7523.netlify.app)",
         Accept: "text/html,application/xhtml+xml",
       },
     });
