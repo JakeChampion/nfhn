@@ -232,3 +232,31 @@ Deno.test("cache strategies: documents item page strategy", () => {
   const strategy = "network-first-with-saved-cache";
   assertEquals(strategy, "network-first-with-saved-cache");
 });
+
+// =============================================================================
+// No-Vary-Search alignment
+// =============================================================================
+
+// Mirrors pageCacheOptions() in sw.js: the edge functions advertise
+// `No-Vary-Search: params, key-order`, so offline page lookups ignore the query
+// string too - except under /reader/, where the wrapped article URL can carry a
+// query string that genuinely identifies a different article.
+function pageCacheOptions(url: URL): { ignoreSearch: boolean } | undefined {
+  return url.pathname.startsWith("/reader/") ? undefined : { ignoreSearch: true };
+}
+
+Deno.test("pageCacheOptions: ignores the query string for page requests", () => {
+  assertEquals(pageCacheOptions(new URL("https://nfhn.test/top/1")), { ignoreSearch: true });
+  assertEquals(
+    pageCacheOptions(new URL("https://nfhn.test/top/1?utm_source=newsletter")),
+    { ignoreSearch: true },
+  );
+  assertEquals(pageCacheOptions(new URL("https://nfhn.test/item/123")), { ignoreSearch: true });
+});
+
+Deno.test("pageCacheOptions: keeps the query string for reader URLs", () => {
+  assertEquals(
+    pageCacheOptions(new URL("https://nfhn.test/reader/https://example.com/a?id=42")),
+    undefined,
+  );
+});
