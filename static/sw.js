@@ -20,6 +20,16 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
+// Cache lookup options for a same-origin page request.
+// The edge functions send `No-Vary-Search: params, key-order` because no route
+// reads query parameters, so an offline lookup for /top/1?utm_source=newsletter
+// should still find the entry cached for /top/1. Reader URLs are exempt: the
+// wrapped article URL carries its own query string, which does identify the
+// article.
+function pageCacheOptions(url) {
+  return url.pathname.startsWith("/reader/") ? undefined : { ignoreSearch: true };
+}
+
 // Fetch - network first, fallback to cache
 self.addEventListener("fetch", (event) => {
   const { request } = event;
@@ -68,10 +78,11 @@ self.addEventListener("fetch", (event) => {
         })
         .catch(() => {
           // Try saved cache first, then regular cache
+          const options = pageCacheOptions(url);
           return caches.open(SAVED_CACHE_NAME).then((cache) => {
-            return cache.match(request).then((saved) => {
+            return cache.match(request, options).then((saved) => {
               if (saved) return saved;
-              return caches.match(request).then((cached) => {
+              return caches.match(request, options).then((cached) => {
                 if (cached) return cached;
                 return offlineResponse();
               });
@@ -96,7 +107,7 @@ self.addEventListener("fetch", (event) => {
         })
         .catch(() => {
           // Try cache, then offline page
-          return caches.match(request).then((cached) => {
+          return caches.match(request, pageCacheOptions(url)).then((cached) => {
             if (cached) return cached;
             // If this is the saved page, serve it from cache
             if (url.pathname === "/saved") {

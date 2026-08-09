@@ -47,6 +47,16 @@ export const RATE_LIMIT_BURST = 10;
 // Script: document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'auto');
 export const THEME_SCRIPT_HASH = "'sha256-aa72PHEwNOBVTHaG/ayYpxdOJImxtHfAuO+pszB1UHA='";
 
+// No-Vary-Search (draft-ietf-httpbis-no-vary-search)
+// Every route rendered by these edge functions derives its response from the
+// path alone - no handler reads request query parameters, and canonical URLs are
+// built from the pathname - so no query parameter can change the bytes we send.
+// Declaring that lets the browser's HTTP cache and the Speculation Rules
+// prefetch/prerender cache reuse the entry for the clean URL when a link arrives
+// decorated with utm_*, gclid, fbclid or anything else.
+// `key-order` additionally ignores the order parameters appear in.
+export const NO_VARY_SEARCH = "params, key-order";
+
 // Content Security Policy directives
 // Note: unsafe-inline for styles is needed for dynamic counter-set on <ol>
 // Script unsafe-inline is replaced with a hash for the critical theme init script

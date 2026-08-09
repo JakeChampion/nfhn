@@ -7,6 +7,7 @@ import jobsHandler from "../netlify/edge-functions/jobs.ts";
 import itemHandler from "../netlify/edge-functions/item.ts";
 import userHandler from "../netlify/edge-functions/user.ts";
 import { handleNotFound, redirect } from "../netlify/edge-functions/lib/handlers.ts";
+import { cacheKeyFor } from "../netlify/edge-functions/lib/cache.ts";
 import { resetCircuitBreaker } from "../netlify/edge-functions/lib/hn.ts";
 import type { Context } from "@netlify/edge-functions";
 import {
@@ -1439,5 +1440,124 @@ Deno.test("article page includes ARIA live region", async () => {
     const body = await res.text();
     assertStringIncludes(body, 'aria-live="polite"');
     assertStringIncludes(body, 'id="aria-live"');
+  });
+});
+
+// =============================================================================
+// No-Vary-Search (draft-ietf-httpbis-no-vary-search)
+// =============================================================================
+
+const noVarySearchStory = {
+  id: 1,
+  title: "Tracked Story",
+  points: 10,
+  user: "alice",
+  time: Math.floor(Date.now() / 1000) - 60,
+  type: "link",
+  url: "https://example.com/tracked",
+  domain: "example.com",
+  comments_count: 0,
+};
+
+Deno.test("pages advertise No-Vary-Search so decorated URLs reuse the cache", async () => {
+  const routes = {
+    [topStoriesUrl]: [noVarySearchStory],
+    [itemUrl]: {
+      id: 123,
+      title: "Test Story",
+      points: 50,
+      user: "author",
+      time: Math.floor(Date.now() / 1000) - 3600,
+      type: "link",
+      url: "https://example.com",
+      domain: "example.com",
+      comments_count: 0,
+      comments: [],
+    },
+    "https://api.hnpwa.com/v0/user/alice.json": {
+      id: "alice",
+      created: Math.floor(Date.now() / 1000) - 86400,
+      karma: 100,
+      submitted: [],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    for (const path of ["/top/1", "/item/123", "/user/alice"]) {
+      const res = await handler(new Request(`https://nfhn.test${path}`));
+      await res.text();
+      assertEquals(
+        res.headers.get("no-vary-search"),
+        "params, key-order",
+        `${path} should advertise No-Vary-Search`,
+      );
+    }
+  });
+});
+
+Deno.test("tracking parameters reuse the cached entry instead of re-rendering", async () => {
+  const routes = {
+    [topStoriesUrl]: [noVarySearchStory],
+  };
+
+  await withMockedEnv(routes, async ({ counts }) => {
+    const clean = await handler(new Request("https://nfhn.test/top/1"));
+    await clean.text();
+    assertEquals(counts.get(topStoriesUrl) ?? 0, 1);
+
+    const decorated = await handler(
+      new Request("https://nfhn.test/top/1?utm_source=newsletter&utm_medium=email"),
+    );
+    const decoratedBody = await decorated.text();
+
+    assertStringIncludes(decoratedBody, "Tracked Story");
+    assertEquals(
+      counts.get(topStoriesUrl) ?? 0,
+      1,
+      "decorated URL should hit the entry cached for the clean URL",
+    );
+  });
+});
+
+Deno.test("cacheKeyFor drops the query string but preserves the rest of the URL", () => {
+  const decorated = cacheKeyFor(
+    new Request("https://nfhn.test/top/1?utm_source=x&gclid=y"),
+  );
+  assertEquals(decorated.url, "https://nfhn.test/top/1");
+
+  const clean = new Request("https://nfhn.test/item/123");
+  assertEquals(cacheKeyFor(clean).url, "https://nfhn.test/item/123");
+});
+
+// =============================================================================
+// Cookie attributes (RFC 6265bis)
+// =============================================================================
+
+Deno.test("no route sets a cookie", async () => {
+  const routes = {
+    [topStoriesUrl]: [noVarySearchStory],
+    [itemUrl]: {
+      id: 123,
+      title: "Test Story",
+      points: 50,
+      user: "author",
+      time: Math.floor(Date.now() / 1000) - 3600,
+      type: "link",
+      url: "https://example.com",
+      domain: "example.com",
+      comments_count: 0,
+      comments: [],
+    },
+  };
+
+  // NFHN keeps all state client-side (localStorage/IndexedDB), so it has no
+  // cookies to attribute. This guards that: a cookie added later must be
+  // reviewed against the Secure/HttpOnly/SameSite rules before it ships.
+  await withMockedEnv(routes, async () => {
+    for (const path of ["/", "/top/1", "/item/123", "/nope"]) {
+      const res = await handler(new Request(`https://nfhn.test${path}`));
+      await res.text();
+      assertEquals(res.headers.get("set-cookie"), null, `${path} should not set a cookie`);
+    }
   });
 });

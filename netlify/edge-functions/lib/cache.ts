@@ -50,6 +50,22 @@ const prepareResponses = (
   };
 };
 
+/**
+ * Build the key a request is stored under in the programmable cache.
+ *
+ * Responses served through this cache are rendered from the path alone, which is
+ * what the `No-Vary-Search: params, key-order` header we advertise promises.
+ * Dropping the query string from the key makes the edge cache behave the way
+ * that header says it does: `/top/1?utm_source=newsletter` reuses the entry
+ * stored for `/top/1` instead of re-rendering and storing a near-duplicate.
+ */
+export const cacheKeyFor = (request: Request): Request => {
+  const url = new URL(request.url);
+  if (!url.search) return request;
+  url.search = "";
+  return new Request(url.toString(), request);
+};
+
 export const applyConditionalRequest = (request: Request, response: Response): Response => {
   if (request.method !== "GET") return response;
   const etag = response.headers.get("etag");
@@ -90,8 +106,9 @@ export async function withProgrammableCache(
   offlineFallback?: () => Response,
 ): Promise<Response> {
   const requestId = getRequestId(request);
+  const cacheKey = cacheKeyFor(request);
   const cache = await caches.open(cacheName);
-  const cached = await cache.match(request);
+  const cached = await cache.match(cacheKey);
   const cachedAge = cached ? ageSeconds(cached) : Infinity;
 
   const serveFresh = (response: Response): Response => applyConditionalRequest(request, response);
@@ -105,7 +122,7 @@ export async function withProgrammableCache(
           ttlSeconds,
           swrSeconds,
         );
-        cache.put(request, cacheable).catch((err) => {
+        cache.put(cacheKey, cacheable).catch((err) => {
           console.error("Failed to update cache in background:", err);
         });
       })
@@ -126,7 +143,7 @@ export async function withProgrammableCache(
       swrSeconds,
     );
 
-    cache.put(request, cacheable).catch((err) => {
+    cache.put(cacheKey, cacheable).catch((err) => {
       console.error("Failed to cache response:", err);
     });
 
