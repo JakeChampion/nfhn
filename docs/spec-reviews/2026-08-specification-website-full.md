@@ -242,11 +242,15 @@ worth faking with a hand-drawn approximation.
 
 ---
 
-## Unrelated observation
+## Cleanup: precompressed asset copies removed
 
-`static/` contains committed `.br`, `.gz` and `.zst` copies of every asset. Nothing references or
-serves them: Netlify serves the publish directory literally and negotiates compression itself, so
-`/app.js.br` is reachable only as its own URL. They were already dead weight; this pass edited
-`app.js`, `styles.css` and `manifest.json` without regenerating them, so they are now stale dead
-weight. Deleting all 20 is probably right, but that is a call for the repository owner rather than a
-spec-conformance change.
+`static/` held committed `.br`, `.gz` and `.zst` copies of every asset — 28 files. Nothing
+referenced or served them: Netlify serves the publish directory literally and negotiates compression
+itself, so `/app.js.br` was reachable only as its own URL, and the service worker's `STATIC_ASSETS`
+list names only the uncompressed originals.
+
+They were already dead weight, and this review made them actively misleading by editing `app.js`,
+`styles.css` and `manifest.json` without regenerating them. All 28 are deleted. The
+[compression](https://specification.website/spec/performance/compression/) spec is still satisfied —
+by the CDN, which is where it belongs, and which compresses the current bytes rather than a snapshot
+of them.
