@@ -27,9 +27,9 @@
   "scripts": {
     "dev": "netlify dev",
     "build": "deno run --allow-read --allow-write --allow-env scripts/build.ts",
-    "test": "deno test --allow-net --allow-env tests/",
-    "test:watch": "deno test --allow-net --allow-env --watch tests/",
-    "test:coverage": "deno test --allow-net --allow-env --coverage=coverage tests/ && deno coverage coverage",
+    "test": "deno test --allow-net --allow-env --allow-read tests/",
+    "test:watch": "deno test --allow-net --allow-env --allow-read --watch tests/",
+    "test:coverage": "deno test --allow-net --allow-env --allow-read --coverage=coverage tests/ && deno coverage coverage",
     "lint": "deno lint netlify/edge-functions tests",
     "fmt": "deno fmt netlify/edge-functions tests",
     "prepare": "husky"

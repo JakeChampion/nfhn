@@ -11,3 +11,4 @@ spec being re-litigated at the next review.
 | Review | Specs covered | Date |
 | --- | --- | --- |
 | [specification.website: HTTP fields](./2026-08-specification-website.md) | Digest Fields, cookie attributes, No-Vary-Search, Compression Dictionary Transport | 2026-08 |
+| [specification.website: full corpus](./2026-08-specification-website-full.md) | All 168 specs across the ten categories | 2026-08 |

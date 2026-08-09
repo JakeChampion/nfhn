@@ -43,9 +43,12 @@ export const CIRCUIT_BREAKER_RESET_MS = 30_000; // 30 seconds
 export const RATE_LIMIT_REQUESTS_PER_MINUTE = 60;
 export const RATE_LIMIT_BURST = 10;
 
-// SHA-256 hash of the critical theme init inline script
-// Script: document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'auto');
-export const THEME_SCRIPT_HASH = "'sha256-aa72PHEwNOBVTHaG/ayYpxdOJImxtHfAuO+pszB1UHA='";
+// SHA-256 hash of the critical theme init inline script in render/pages.ts,
+// which applies the stored theme and the matching theme-color before first
+// paint. A test hashes the rendered markup and asserts it equals this value, so
+// editing the script without updating the hash fails the suite rather than
+// silently breaking the page under CSP.
+export const THEME_SCRIPT_HASH = "'sha256-6hO62gdSSJDQ6/I94TG7pbIBUb/WZCv/YmMI/Is6yZU='";
 
 // No-Vary-Search (draft-ietf-httpbis-no-vary-search)
 // Every route rendered by these edge functions derives its response from the

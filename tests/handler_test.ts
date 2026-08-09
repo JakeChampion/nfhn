@@ -8,6 +8,10 @@ import itemHandler from "../netlify/edge-functions/item.ts";
 import userHandler from "../netlify/edge-functions/user.ts";
 import { handleNotFound, redirect } from "../netlify/edge-functions/lib/handlers.ts";
 import { cacheKeyFor } from "../netlify/edge-functions/lib/cache.ts";
+import { THEME_SCRIPT_HASH } from "../netlify/edge-functions/lib/config.ts";
+import { FEEDS } from "../netlify/edge-functions/lib/feeds.ts";
+import sitemapHandler from "../netlify/edge-functions/sitemap.ts";
+import savedHandler from "../netlify/edge-functions/saved.ts";
 import { resetCircuitBreaker } from "../netlify/edge-functions/lib/hn.ts";
 import type { Context } from "@netlify/edge-functions";
 import {
@@ -1559,5 +1563,121 @@ Deno.test("no route sets a cookie", async () => {
       await res.text();
       assertEquals(res.headers.get("set-cookie"), null, `${path} should not set a cookie`);
     }
+  });
+});
+
+// =============================================================================
+// Content Security Policy / theme-color
+// =============================================================================
+
+Deno.test("inline theme script matches the hash allowed by CSP", async () => {
+  const routes = {
+    [topStoriesUrl]: [noVarySearchStory],
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/1"));
+    const body = await res.text();
+
+    // The one inline <script> without a src is the pre-paint theme init.
+    const match = body.match(/<script>([\s\S]*?)<\/script>/);
+    if (!match?.[1]) throw new Error("inline theme script not found in rendered page");
+
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(match[1]));
+    const hash = `'sha256-${btoa(String.fromCharCode(...new Uint8Array(digest)))}'`;
+
+    assertEquals(
+      hash,
+      THEME_SCRIPT_HASH,
+      "THEME_SCRIPT_HASH in config.ts must match the inline script actually rendered",
+    );
+    assertStringIncludes(res.headers.get("content-security-policy") ?? "", THEME_SCRIPT_HASH);
+  });
+});
+
+Deno.test("theme-color is paired to the colour scheme", async () => {
+  const routes = {
+    [topStoriesUrl]: [noVarySearchStory],
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/1"));
+    const body = await res.text();
+
+    assertStringIncludes(body, '<meta name="color-scheme" content="light dark">');
+    assertStringIncludes(body, 'content="#f5f5f5" media="(prefers-color-scheme: light)"');
+    assertStringIncludes(body, 'content="#0d1117" media="(prefers-color-scheme: dark)"');
+  });
+});
+
+// =============================================================================
+// Crawling and indexing (robots.txt, sitemap, meta robots, Redirect-By)
+// =============================================================================
+
+Deno.test("sitemap lists the feed entry points against the requesting origin", async () => {
+  const res = await sitemapHandler(new Request("https://nfhn.test/sitemap.xml"));
+  const body = await res.text();
+
+  assertEquals(res.status, 200);
+  assertStringIncludes(res.headers.get("content-type") ?? "", "application/xml");
+
+  for (const { slug } of FEEDS) {
+    assertStringIncludes(body, `<loc>https://nfhn.test/${slug}/1</loc>`);
+  }
+
+  // Ephemeral and non-canonical URLs must stay out: entries that decay into
+  // 404s or redirects cost trust in the whole file.
+  assertEquals(body.includes("/item/"), false);
+  assertEquals(body.includes("/reader/"), false);
+  assertEquals(body.includes("/saved"), false);
+});
+
+Deno.test("robots.txt points at a sitemap that exists", async () => {
+  const robots = await Deno.readTextFile(new URL("../static/robots.txt", import.meta.url));
+  const match = robots.match(/^Sitemap:\s*(\S+)$/m);
+  if (!match?.[1]) throw new Error("robots.txt does not advertise a sitemap");
+
+  const res = await sitemapHandler(new Request(match[1]));
+  assertEquals(res.status, 200, "the advertised sitemap URL must be served");
+  await res.text();
+});
+
+Deno.test("saved page is not indexable", async () => {
+  const res = await savedHandler(new Request("https://nfhn.test/saved"));
+  await res.text();
+  assertStringIncludes(res.headers.get("x-robots-tag") ?? "", "noindex");
+});
+
+Deno.test("redirects name themselves with Redirect-By", () => {
+  const res = redirect("/top/1");
+  assertEquals(res.status, 301);
+  assertEquals(res.headers.get("location"), "/top/1");
+  assertEquals(res.headers.get("redirect-by"), "NFHN");
+});
+
+// =============================================================================
+// Landmarks and skip link
+// =============================================================================
+
+Deno.test("skip link target comes after the navigation it skips", async () => {
+  const routes = {
+    [topStoriesUrl]: [noVarySearchStory],
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/1"));
+    const body = await res.text();
+
+    const nav = body.indexOf('<nav class="nav-feeds"');
+    const main = body.indexOf('id="main-content"');
+    const skip = body.indexOf('href="#main-content"');
+
+    assert(skip >= 0 && nav >= 0 && main >= 0, "skip link, nav and main must all render");
+    assert(skip < nav, "skip link must be reachable before the navigation");
+    assert(
+      nav < main,
+      "navigation must sit outside <main>, otherwise the skip link skips nothing",
+    );
+    assertStringIncludes(body, '<header class="header-bar">');
   });
 });

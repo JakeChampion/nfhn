@@ -31,6 +31,12 @@
   --accent-cool: oklch(from var(--accent) l c calc(h + 40));
 }
 
+/* Reserve the scrollbar's track at all times, so navigating between a page that
+   overflows and one that does not cannot shift the centred layout sideways. */
+:root {
+  scrollbar-gutter: stable;
+}
+
 /* Light theme (default) */
 :root,
 :root[data-theme="light"] {
@@ -2901,5 +2907,64 @@ details {
   details.comment {
     opacity: 1;
     transform: none;
+  }
+}
+
+/* =============================================================================
+   Forced colours mode (Windows High Contrast and friends)
+
+   In forced-colours mode the browser replaces the palette with the user's own,
+   so anything whose boundary came only from a background colour or a shadow
+   flattens into the canvas. Semantic elements - real <button>, <a>, <details> -
+   keep their affordances automatically; these rules repair the custom surfaces
+   that do not, using system colour keywords so the result tracks whichever
+   palette the user actually chose.
+   ============================================================================= */
+
+@media (forced-colors: active) {
+  /* Scroll progress is a bare coloured bar: without a forced system colour it
+     is painted in the forced background and disappears entirely. */
+  .reading-progress::after {
+    background: Highlight;
+  }
+
+  /* Badges, toasts and popovers are defined by background fill alone. */
+  .badge,
+  .toast,
+  .settings-menu,
+  .shortcuts-modal {
+    border: 1px solid CanvasText;
+  }
+
+  /* Icon buttons rely on hover/elevation backgrounds for their bounds. */
+  .settings-menu-btn,
+  .share-btn,
+  .bookmark-btn,
+  .pip-reader-btn,
+  .saved-action-btn,
+  .back-to-top {
+    border: 1px solid ButtonText;
+  }
+
+  .reader-mode-link {
+    border: 1px solid LinkText;
+  }
+
+  /* Keyboard selection must stay legible against the forced palette. */
+  .kbd-focus {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+
+/* Users who asked for more contrast without a forced palette are a different
+   audience: keep our own colours, but firm up the boundaries that are
+   deliberately faint in the default theme. */
+@media (prefers-contrast: more) {
+  .badge,
+  .settings-menu,
+  .shortcuts-modal,
+  .toast {
+    border: 1px solid var(--text-primary);
   }
 }

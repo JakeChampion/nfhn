@@ -28,7 +28,7 @@ built-in test runner and use mocked fetch/cache APIs (no external services requi
 npm test
 
 # Or run directly with Deno
-deno test --allow-net --allow-env tests/
+deno test --allow-net --allow-env --allow-read tests/
 
 # Watch mode
 npm run test:watch

@@ -103,6 +103,10 @@ export default async (req: Request) => {
 function getHeaders(): HeadersInit {
   return {
     "content-type": "text/html; charset=utf-8",
+    // Reader pages republish somebody else's article. Indexing them would put a
+    // duplicate of the publisher's content in the index under our domain;
+    // `follow` still credits the links inside it.
+    "x-robots-tag": "noindex, follow",
     "content-security-policy":
       "default-src 'self'; script-src 'unsafe-inline' https://unpkg.com; style-src 'unsafe-inline'; img-src * data:; frame-ancestors 'none';",
     "x-content-type-options": "nosniff",

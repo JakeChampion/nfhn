@@ -91,7 +91,12 @@ export const parsePositiveInt = (value: string | undefined): number | null => {
 export const redirect = (location: string, status: 301 | 302 = 301): Response =>
   new Response(null, {
     status,
-    headers: applySecurityHeaders(new Headers({ Location: location })),
+    headers: applySecurityHeaders(
+      // Redirect-By names the layer that produced the redirect. Netlify's own
+      // rules in netlify.toml redirect some of these paths too, so when a chain
+      // misbehaves this says which hop was ours.
+      new Headers({ "Location": location, "Redirect-By": "NFHN" }),
+    ),
   });
 
 /**
