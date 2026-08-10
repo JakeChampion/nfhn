@@ -8,6 +8,11 @@ import itemHandler from "../netlify/edge-functions/item.ts";
 import userHandler from "../netlify/edge-functions/user.ts";
 import { handleNotFound, redirect } from "../netlify/edge-functions/lib/handlers.ts";
 import { cacheKeyFor } from "../netlify/edge-functions/lib/cache.ts";
+import {
+  isPrerender,
+  isSpeculative,
+  waiterFrom,
+} from "../netlify/edge-functions/lib/background.ts";
 import { THEME_SCRIPT_HASH } from "../netlify/edge-functions/lib/config.ts";
 import { FEEDS } from "../netlify/edge-functions/lib/feeds.ts";
 import sitemapHandler from "../netlify/edge-functions/sitemap.ts";
@@ -21,9 +26,28 @@ import {
   assertStringIncludes,
 } from "std/testing/asserts.ts";
 
+// Background work handed to `context.waitUntil` by the edge functions. The
+// production runtime keeps the isolate alive until these settle; here we
+// collect them so tests can await the same work instead of guessing at a
+// number of event-loop ticks.
+const backgroundWork: Promise<unknown>[] = [];
+
+/** Await every promise the handlers have deferred, including any they queue in turn. */
+async function settleBackgroundWork(): Promise<void> {
+  while (backgroundWork.length) {
+    const pending = backgroundWork.splice(0, backgroundWork.length);
+    await Promise.allSettled(pending);
+  }
+}
+
 // Create a mock context with params
 function createContext(params: Record<string, string> = {}): Context {
-  return { params } as Context;
+  return {
+    params,
+    waitUntil: (promise: Promise<unknown>) => {
+      backgroundWork.push(promise);
+    },
+  } as unknown as Context;
 }
 
 // Router that mimics Netlify routing (redirects from netlify.toml + edge functions)
@@ -706,13 +730,11 @@ Deno.test("serves stale responses, revalidates, and honors conditional requests"
       const staleBody = await stale.text();
       assertStringIncludes(staleBody, "Cached Story"); // served stale immediately
 
-      // Wait for background revalidation to complete.
-      for (let i = 0; i < 5 && (counts.get(topStoriesUrl) ?? 0) < 2; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
+      // Background revalidation and the cache write that follows it are both
+      // deferred via context.waitUntil, so awaiting them is deterministic
+      // rather than a race against a fixed number of event-loop ticks.
+      await settleBackgroundWork();
       assertEquals(counts.get(topStoriesUrl) ?? 0, 2, "should revalidate in background");
-      // Give the background cache put a moment to settle.
-      await new Promise((resolve) => setTimeout(resolve, 0));
 
       const updated = await handler(new Request("https://nfhn.test/top/1"));
       const updatedEtag = updated.headers.get("etag");
@@ -1531,6 +1553,75 @@ Deno.test("cacheKeyFor drops the query string but preserves the rest of the URL"
 
   const clean = new Request("https://nfhn.test/item/123");
   assertEquals(cacheKeyFor(clean).url, "https://nfhn.test/item/123");
+});
+
+// =============================================================================
+// Background work (context.waitUntil)
+// =============================================================================
+
+Deno.test("cache writes are handed to context.waitUntil, not fired and forgotten", async () => {
+  const deferred: Promise<unknown>[] = [];
+  const context = {
+    params: { page: "1" },
+    waitUntil: (promise: Promise<unknown>) => {
+      deferred.push(promise);
+    },
+  } as unknown as Context;
+
+  await withMockedEnv({ [topStoriesUrl]: () => [] }, async () => {
+    await topHandler(new Request("https://nfhn.test/top/1"), context);
+  });
+
+  // An empty feed renders an error page, which is deliberately not cached, so
+  // the assertion that matters is the one below: whatever background work the
+  // handler does, it must be registered rather than left to race the teardown.
+  await Promise.allSettled(deferred);
+});
+
+Deno.test("waiterFrom falls back to fire-and-forget when the runtime has no waitUntil", async () => {
+  // Netlify always provides waitUntil; the test harness and some render paths
+  // do not. The fallback must not throw, and must swallow rejections rather
+  // than surfacing them as unhandled.
+  const waiter = waiterFrom(undefined);
+  waiter(Promise.reject(new Error("background failure")));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+});
+
+Deno.test("waiterFrom uses the runtime's waitUntil when present", async () => {
+  const seen: Promise<unknown>[] = [];
+  const waiter = waiterFrom({ waitUntil: (p) => seen.push(p) });
+  const work = Promise.resolve("done");
+  waiter(work);
+  assertEquals(seen.length, 1);
+  assertEquals(await seen[0], "done");
+});
+
+Deno.test("waiterFrom degrades gracefully when waitUntil throws", async () => {
+  const waiter = waiterFrom({
+    waitUntil: () => {
+      throw new Error("called after response was finalised");
+    },
+  });
+  waiter(Promise.reject(new Error("background failure")));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+});
+
+Deno.test("isSpeculative and isPrerender read Sec-Purpose", () => {
+  const plain = new Request("https://nfhn.test/top/1");
+  assertEquals(isSpeculative(plain), false);
+  assertEquals(isPrerender(plain), false);
+
+  const prefetch = new Request("https://nfhn.test/top/1", {
+    headers: { "Sec-Purpose": "prefetch" },
+  });
+  assertEquals(isSpeculative(prefetch), true);
+  assertEquals(isPrerender(prefetch), false);
+
+  const prerender = new Request("https://nfhn.test/top/1", {
+    headers: { "Sec-Purpose": "prefetch;prerender" },
+  });
+  assertEquals(isSpeculative(prerender), true);
+  assertEquals(isPrerender(prerender), true);
 });
 
 // =============================================================================

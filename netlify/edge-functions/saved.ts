@@ -28,6 +28,11 @@ export default async (request: Request): Promise<Response> => {
 };
 
 export const config: Config = {
+  rateLimit: {
+    windowLimit: 60,
+    windowSize: 60,
+    aggregateBy: "ip",
+  },
   method: ["GET"],
   path: "/saved",
   cache: "manual",
