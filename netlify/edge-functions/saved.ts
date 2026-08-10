@@ -14,6 +14,10 @@ export default async (request: Request): Promise<Response> => {
     "content-type": "text/html; charset=utf-8",
     // Saved page is client-rendered, so minimal caching
     "cache-control": "public, max-age=3600, stale-while-revalidate=86400",
+    // Nothing here is indexable: the server sends an empty shell and the list is
+    // rendered from the visitor's own browser storage. `follow` keeps the nav
+    // links in it worth crawling.
+    "x-robots-tag": "noindex, follow",
   });
   applySecurityHeaders(headers);
 

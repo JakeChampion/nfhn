@@ -876,10 +876,18 @@ Deno.test("pwaHeadTags: includes apple-touch-icon", async () => {
   assertEquals(result.includes('rel="apple-touch-icon"'), true);
 });
 
-Deno.test("pwaHeadTags: includes theme-color", async () => {
+Deno.test("pwaHeadTags: includes theme-color for both colour schemes", async () => {
   const result = await htmlToString(pwaHeadTags());
   assertEquals(result.includes('name="theme-color"'), true);
-  assertEquals(result.includes("#ff7a18"), true);
+  // Paired to the OS preference, and matching --background at the page edges
+  // rather than the brand accent, which appears nowhere near the address bar.
+  assertEquals(result.includes('content="#f5f5f5" media="(prefers-color-scheme: light)"'), true);
+  assertEquals(result.includes('content="#0d1117" media="(prefers-color-scheme: dark)"'), true);
+});
+
+Deno.test("pwaHeadTags: declares the supported colour schemes", async () => {
+  const result = await htmlToString(pwaHeadTags());
+  assertEquals(result.includes('name="color-scheme" content="light dark"'), true);
 });
 
 // =============================================================================

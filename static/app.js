@@ -6,6 +6,22 @@
   const stored = localStorage.getItem("theme") || "auto";
   root.setAttribute("data-theme", stored);
 
+  // The media-based <meta name="theme-color"> pair tracks the OS, so an in-page
+  // override would leave the browser chrome out of step with the page. The
+  // pre-paint inline script prepends a media-less tag, which browsers prefer
+  // because it is first in document order; keep its value on the resolved theme.
+  const darkQuery = matchMedia("(prefers-color-scheme: dark)");
+  const syncThemeColor = (theme) => {
+    const meta = document.querySelector('meta[name="theme-color"]:not([media])');
+    if (!meta) return;
+    const dark = theme === "dark" || (theme === "auto" && darkQuery.matches);
+    meta.content = dark ? "#0d1117" : "#f5f5f5";
+  };
+  syncThemeColor(stored);
+  darkQuery.addEventListener("change", () => {
+    syncThemeColor(localStorage.getItem("theme") || "auto");
+  });
+
   const radios = document.querySelectorAll('input[name="theme"]');
   radios.forEach((radio) => {
     if (radio.value === stored) radio.checked = true;
@@ -13,6 +29,7 @@
       const theme = e.target.value;
       root.setAttribute("data-theme", theme);
       localStorage.setItem("theme", theme);
+      syncThemeColor(theme);
     });
   });
 })();

@@ -62,11 +62,18 @@ const speculationRules = (): HTML =>
 </script>`;
 
 // --- Inline script to set theme before page renders (prevents flash) ---
-// This script must match the hash in config.ts CSP_DIRECTIVES
-// Hash: sha256-aa72PHEwNOBVTHaG/ayYpxdOJImxtHfAuO+pszB1UHA=
+// Also writes a media-less <meta name="theme-color"> reflecting the *resolved*
+// theme. The media-based pair in pwaHeadTags() tracks the OS, so on its own it
+// leaves the browser chrome out of step with an in-page override (light OS +
+// dark toggle = dark page, light address bar). Browsers use the first
+// theme-color in document order whose media matches, so this one is prepended to
+// <head> ahead of them and wins. Colours match --background at the page edges.
+//
+// This script must match THEME_SCRIPT_HASH in config.ts, which is enforced by a
+// test that hashes the rendered markup - do not edit one without the other.
 
 const themeInitScript = (): HTML =>
-  tpl`<script>document.documentElement.setAttribute('data-theme',localStorage.getItem('theme')||'auto');</script>`;
+  tpl`<script>(()=>{var t=localStorage.getItem('theme')||'auto',d=t==='dark'||(t==='auto'&&matchMedia('(prefers-color-scheme:dark)').matches),m=document.createElement('meta');document.documentElement.setAttribute('data-theme',t);m.name='theme-color';m.content=d?'#0d1117':'#f5f5f5';document.head.prepend(m);})();</script>`;
 
 // --- Home page (feed listing) ---
 
@@ -108,8 +115,8 @@ export const home = (
   <body>
     ${readingProgress()}
     ${skipLink()}
+    ${headerBar(feed)}
     <main id="main-content" aria-label="Main content">
-      ${headerBar(feed)}
       <ol class="stories">
         ${content.map((data: Item) => renderStory(data))}
       </ol>
@@ -202,8 +209,8 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
     `NFHN: ${item.title}`,
     tpl`
       ${structuredData}
+      ${headerBar(activeFeed)}
       <main id="main-content" aria-label="Main content">
-        ${headerBar(activeFeed)}
         <article>
           <a href="${meta.href(item)}">
             ${meta.label ? tpl`<span class="badge ${meta.badgeClass}">${meta.label}</span>` : ""}
@@ -283,8 +290,8 @@ export const userProfile = (
   shellPage(
     `NFHN: ${user.id}`,
     tpl`
+      ${headerBar("top")}
       <main id="main-content" aria-label="Main content">
-        ${headerBar("top")}
         <article class="user-profile">
           <h1>${user.id}</h1>
           <dl class="user-stats">
@@ -354,8 +361,8 @@ export const savedPage = (canonicalUrl?: string): HTML =>
   <body>
     ${readingProgress()}
     ${skipLink()}
+    ${headerBar("saved")}
     <main id="main-content" aria-label="Main content">
-      ${headerBar("saved")}
       <div class="saved-header">
         <h1>Saved Stories</h1>
         <p class="saved-description">Stories saved to your browser for offline reading.</p>

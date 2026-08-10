@@ -1,0 +1,36 @@
+# NFHN
+
+> A Hacker News reader served entirely from a Netlify Edge Function. No
+> framework: routing and HTML rendering happen at the edge, streamed as the
+> upstream API responds. Content is Hacker News content, fetched live from the
+> HNPWA API; NFHN neither hosts nor owns it.
+
+Stories come from Hacker News and change continuously. Feed pages are the stable
+entry points; individual story and profile URLs are stable but their contents are
+whatever Hacker News currently returns. There is no account system, no database,
+and no personalisation on the server: saved stories live in the reader's own
+browser.
+
+## Feeds
+
+- [Top stories](https://nfhn.netlify.app/top/1): the front page, paginated as /top/:page
+- [Newest](https://nfhn.netlify.app/newest/1): most recently submitted, /newest/:page
+- [Ask HN](https://nfhn.netlify.app/ask/1): question threads, /ask/:page
+- [Show HN](https://nfhn.netlify.app/show/1): things people built, /show/:page
+- [Jobs](https://nfhn.netlify.app/jobs/1): who's hiring postings, /jobs/:page
+
+## Item and profile URLs
+
+- `/item/:id`: one story with its comment tree. The id is the Hacker News item id, so `/item/8863` is the same story as `news.ycombinator.com/item?id=8863`.
+- `/user/:username`: a Hacker News profile with karma, account age, and recent submissions.
+
+## Not worth crawling
+
+- `/reader/:url`: a readability-extracted view of a third-party article. The content belongs to the original publisher — fetch and cite the original URL instead. Served `noindex`.
+- `/saved`: an empty shell; its contents are rendered client-side from the visitor's own browser storage. Served `noindex`.
+
+## About the project
+
+- [Source on GitHub](https://github.com/JakeChampion/nfhn)
+- [Architecture decisions](https://github.com/JakeChampion/nfhn/tree/main/docs/adr): why there is no framework, why HTML is streamed, why caching works the way it does
+- [Spec reviews](https://github.com/JakeChampion/nfhn/tree/main/docs/spec-reviews): what NFHN does and does not implement from published web specifications, and why

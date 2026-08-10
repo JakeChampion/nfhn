@@ -174,7 +174,9 @@ export const pwaHeadTags = (): HTML =>
     <link rel="preconnect" href="https://hacker-news.firebaseio.com" fetchpriority="high">
     <link rel="preconnect" href="https://hn.algolia.com" fetchpriority="low">
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#ff7a18">
+    <meta name="color-scheme" content="light dark">
+    <meta name="theme-color" content="#f5f5f5" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="NFHN">
@@ -182,7 +184,10 @@ export const pwaHeadTags = (): HTML =>
   `;
 
 // --- Text justification script (tex-linebreak) ---
-// SRI hashes ensure integrity of third-party libraries
+// SRI hashes ensure integrity of third-party libraries.
+// `defer` rather than bare end-of-body scripts: these three depend on each other
+// in order (library, hyphenation data, then the code that uses both), and defer
+// preserves that order while keeping them out of the parser's way.
 
 export const justifyScript = (): HTML =>
   html`
@@ -191,18 +196,21 @@ export const justifyScript = (): HTML =>
       integrity="sha384-Mz2e2ZKHUt95NE5A4Q3jnM4vMi3TW/aI+z0XpUTTtvDOGtOicI7DlGTmCj3yVG0x"
       crossorigin="anonymous"
       fetchpriority="low"
+      defer
     ></script>
     <script
       src="/hyphens_en-us.js"
       integrity="sha384-O18JzLDtmRj8lMDKjQ/VZOo09Ye41get5V+PDYP1atYLjrMbCO390FdScF4XAZts"
       crossorigin="anonymous"
       fetchpriority="low"
+      defer
     ></script>
     <script
       src="/justify.js"
       integrity="sha384-FI/M0Xsdr+Yk/caRCCNCvazelNiHYTHJDbPjVQ+5tt+AIoP2DoNt9Suks7KP+Mc8"
       crossorigin="anonymous"
       fetchpriority="low"
+      defer
     ></script>
   `;
 
@@ -332,11 +340,15 @@ export const settingsMenuButton = (): HTML =>
 
 // --- Header bar with nav and theme toggle ---
 
+// Rendered as a sibling before <main>, not inside it: a <header> nested in
+// <main> is not a banner landmark, and - more importantly - the skip link points
+// at <main>, so navigation living inside it was navigation the skip link could
+// not skip.
 export const headerBar = (activeFeed: FeedSlug | "saved"): HTML =>
   html`
-    <div class="header-bar">
+    <header class="header-bar">
       ${settingsMenuButton()} ${renderNav(activeFeed)}
-    </div>
+    </header>
     ${settingsMenu()}
   `;
 
@@ -390,7 +402,6 @@ export const userLink = (username: string | null | undefined): HTML => {
 export const readerModeLink = (url: string | undefined): HTML => {
   if (!url) {
     return html`
-
     `;
   }
   const readerUrl = `/reader/${url}`;
@@ -415,7 +426,6 @@ export const readerModeLink = (url: string | undefined): HTML => {
 export const pipReaderButton = (url: string | undefined, title: string): HTML => {
   if (!url) {
     return html`
-
     `;
   }
   return html`
@@ -526,7 +536,6 @@ export const isRenderableComment = (comment: HNAPIItem): boolean =>
 export const renderComment = (comment: HNAPIItem, level: number, opUser?: string): HTML => {
   if (!isRenderableComment(comment)) {
     return html`
-
     `;
   }
 
