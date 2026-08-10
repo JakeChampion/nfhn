@@ -1,6 +1,8 @@
 import { Readability } from "./lib/readability.js";
 // deno-lint-ignore no-import-prefix
 import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.45/deno-dom-wasm.ts";
+import { waiterFrom, type WaitUntilCapable } from "./lib/background.ts";
+import { READER_STORE, readerKey, readMirror, writeMirror } from "./lib/store.ts";
 
 // Escape HTML to prevent XSS
 function escapeHtml(text: string): string {
@@ -39,7 +41,14 @@ function normalizeUrl(url: string): string | null {
   }
 }
 
-export default async (req: Request) => {
+interface CachedExtraction {
+  title: string;
+  content: string;
+  readingTime: number;
+}
+
+export default async (req: Request, context?: WaitUntilCapable) => {
+  const waitUntil = waiterFrom(context);
   // need to slice off /reader/
   const requestUrl = new URL(req.url);
   const rawUrl = requestUrl.pathname.slice(8);
@@ -59,6 +68,23 @@ export default async (req: Request) => {
       status: 400,
       headers: getHeaders(),
     });
+  }
+
+  // Extractions are effectively immutable and expensive: a full round trip to
+  // somebody else's server plus a DOM parse and a Readability pass, repeated per
+  // edge node per cache expiry. Caching them is also the polite thing to do -
+  // right now a popular HN link gets hit once per node - and it keeps reader
+  // mode working for a site that has since gone down, which for HN links is a
+  // recurring event.
+  //
+  // See docs/netlify-proposals/03-netlify-blobs.md
+  const cacheKey = await readerKey(url);
+  const cached = await readMirror<CachedExtraction>(READER_STORE, cacheKey);
+  if (cached?.value?.content) {
+    return new Response(
+      renderHtml(url, cached.value.title, cached.value.content, cached.value.readingTime),
+      { status: 200, headers: getHeaders() },
+    );
   }
 
   try {
@@ -82,6 +108,13 @@ export default async (req: Request) => {
     const content = parsed.content as string;
     const textContent = parsed.textContent as string || "";
     const readingTime = estimateReadingTime(textContent);
+
+    writeMirror(
+      READER_STORE,
+      cacheKey,
+      { title, content, readingTime } satisfies CachedExtraction,
+      waitUntil,
+    );
 
     return new Response(renderHtml(url, title, content, readingTime), {
       status: 200,

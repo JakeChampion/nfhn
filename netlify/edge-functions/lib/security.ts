@@ -33,3 +33,31 @@ export const applySecurityHeaders = (headers: Headers): Headers => {
 
 export const getRequestId = (request: Request): string | undefined =>
   request.headers.get("x-nf-request-id") ?? undefined;
+
+/**
+ * Label a response for tag-based purging.
+ *
+ * `Netlify-Cache-Tag` is stripped before the response reaches the client and
+ * only affects Netlify's CDN, which is what we want: these are internal
+ * invalidation keys, not part of the public contract.
+ *
+ * Tags let the CDN TTL be raised without raising staleness, because the
+ * scheduled function in netlify/functions/hn-invalidate.mts purges exactly the
+ * items HN reports as changed instead of waiting for a guessed TTL to lapse.
+ *
+ * @see docs/netlify-proposals/02-cache-tags-and-purge-api.md
+ */
+export const applyCacheTags = (headers: Headers, tags: string[]): Headers => {
+  const unique = [...new Set(tags.filter(Boolean))];
+  if (unique.length) headers.set("Netlify-Cache-Tag", unique.join(","));
+  return headers;
+};
+
+/** Cache tag for a single HN item. */
+export const itemTag = (id: number): string => `item:${id}`;
+
+/** Cache tag for a feed listing. */
+export const feedTag = (slug: string): string => `feed:${slug}`;
+
+/** Cache tag for a user profile. */
+export const userTag = (username: string): string => `user:${username}`;

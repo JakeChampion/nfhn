@@ -8,8 +8,10 @@ import {
   fetchStoriesPage,
   fetchUser,
   fetchUserSubmissions,
+  type HNAPIItem,
   mapApiUser,
   mapStoryToItem,
+  type StoryItem,
 } from "./hn.ts";
 import {
   FEED_STALE_SECONDS,
@@ -22,9 +24,17 @@ import {
   USER_STALE_SECONDS,
   USER_TTL_SECONDS,
 } from "./config.ts";
-import { applySecurityHeaders, getRequestId } from "./security.ts";
+import {
+  applyCacheTags,
+  applySecurityHeaders,
+  feedTag,
+  getRequestId,
+  itemTag,
+  userTag,
+} from "./security.ts";
 import { withProgrammableCache } from "./cache.ts";
 import { waiterFrom, type WaitUntilCapable } from "./background.ts";
+import { feedKey, HN_MIRROR_STORE, itemKey, readMirror, writeMirror } from "./store.ts";
 import { renderErrorPage, renderOfflinePage } from "./errors.ts";
 import { log } from "./logger.ts";
 import {
@@ -131,6 +141,8 @@ export function handleFeed(
     ));
   }
 
+  const waitUntil = waiterFrom(context);
+
   return withProgrammableCache(
     request,
     HTML_CACHE_NAME,
@@ -139,19 +151,46 @@ export function handleFeed(
     async () => {
       try {
         const fetchStart = performance.now();
-        const results = await fetchStoriesPage(slug, pageNumber);
+        const fresh = await fetchStoriesPage(slug, pageNumber);
         const fetchDuration = performance.now() - fetchStart;
 
+        // HN unreachable: fall back to the durable mirror rather than erroring.
+        // Being up and honestly labelled beats a 503, and the mirror is the only
+        // thing standing between an HN outage and a dead site.
+        let results = fresh;
+        let staleSince: number | undefined;
         if (results === null) {
-          throw new APIUnavailableError(`${slug} feed`, undefined, requestId);
+          const mirrored = await readMirror<StoryItem[]>(
+            HN_MIRROR_STORE,
+            feedKey(slug, pageNumber),
+          );
+          if (!mirrored?.value?.length) {
+            throw new APIUnavailableError(`${slug} feed`, undefined, requestId);
+          }
+          results = mirrored.value;
+          staleSince = mirrored.storedAt;
+          log.warn("Serving feed from mirror", { slug, pageNumber, requestId });
         }
+
         if (!results.length) {
           const error = new NotFoundError("feed", emptyDescription, requestId);
           return renderErrorPage(error.statusCode, emptyTitle, emptyDescription, requestId);
         }
+
+        if (fresh) {
+          writeMirror(HN_MIRROR_STORE, feedKey(slug, pageNumber), fresh, waitUntil);
+        }
+
         const canonical = computeCanonical(request, `/${slug}/${pageNumber}`);
-        const response = new HTMLResponse(home(results, pageNumber, slug, canonical));
+        const response = new HTMLResponse(home(results, pageNumber, slug, canonical, staleSince));
         applySecurityHeaders(response.headers);
+        // Tagging with every story on the page means a purge of any one of them
+        // also drops the listings it appears on, which is what keeps a raised
+        // CDN TTL honest.
+        applyCacheTags(response.headers, [
+          feedTag(slug),
+          ...results.map((story) => itemTag(story.id)),
+        ]);
         const etag = await generateETag(
           results.map((r) =>
             [r.id, r.title, r.domain ?? "", r.comments_count, r.type, r.url ?? ""].join(":")
@@ -189,6 +228,7 @@ export function handleItem(
 ): Promise<Response> {
   const requestId = getRequestId(request);
   const startTime = performance.now();
+  const waitUntil = waiterFrom(context);
 
   if (!Number.isFinite(id) || id < 1 || id > MAX_ITEM_ID) {
     const error = new ValidationError(
@@ -215,12 +255,28 @@ export function handleItem(
     async () => {
       try {
         const fetchStart = performance.now();
-        const raw = await fetchItem(id);
+        const fresh = await fetchItem(id);
         const fetchDuration = performance.now() - fetchStart;
+
+        // Same fallback as the feeds: prefer a labelled stale copy over a 503.
+        let raw = fresh;
+        let staleSince: number | undefined;
+        if (!raw) {
+          const mirrored = await readMirror<HNAPIItem>(HN_MIRROR_STORE, itemKey(id));
+          if (mirrored?.value) {
+            raw = mirrored.value;
+            staleSince = mirrored.storedAt;
+            log.warn("Serving item from mirror", { itemId: id, requestId });
+          }
+        }
 
         if (!raw || raw.deleted || raw.dead) {
           const error = new NotFoundError("item", "That story is unavailable.", requestId);
           return renderErrorPage(error.statusCode, error.title, error.description, requestId);
+        }
+
+        if (fresh && !fresh.deleted && !fresh.dead) {
+          writeMirror(HN_MIRROR_STORE, itemKey(id), fresh, waitUntil);
         }
 
         const story = mapStoryToItem(raw);
@@ -231,8 +287,12 @@ export function handleItem(
         story.comments = raw.comments ?? [];
 
         const canonical = computeCanonical(request, `/item/${id}`);
-        const response = new HTMLResponse(article(story, canonical));
+        const response = new HTMLResponse(article(story, canonical, staleSince));
         applySecurityHeaders(response.headers);
+        applyCacheTags(
+          response.headers,
+          story.user ? [itemTag(story.id), userTag(story.user)] : [itemTag(story.id)],
+        );
         const etag = await generateETag([story.id, story.time, story.comments_count]);
         const lastModified = lastModifiedFromTimes([story.time]);
         if (etag) response.headers.set("ETag", etag);
@@ -336,6 +396,7 @@ export function handleUser(
         const canonical = new URL(`/user/${username}`, request.url).toString();
         const response = new HTMLResponse(userProfile(user, submissions, canonical));
         applySecurityHeaders(response.headers);
+        applyCacheTags(response.headers, [userTag(user.id)]);
         const etag = await generateETag([user.id, user.karma, user.created]);
         const lastModified = new Date(user.created * 1000).toUTCString();
         if (etag) response.headers.set("ETag", etag);

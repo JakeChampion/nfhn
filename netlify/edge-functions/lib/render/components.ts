@@ -227,6 +227,23 @@ export const sharedStyles = (pageNumber = 1): HTML => {
   `;
 };
 
+// --- Stale-data banner ---
+//
+// Shown when HN's API is unreachable and the page has been rendered from the
+// Blobs mirror instead. Being up and honestly labelled beats a 503.
+//
+// See docs/netlify-proposals/03-netlify-blobs.md
+
+export const staleBanner = (storedAt: number): HTML => {
+  const iso = new Date(storedAt).toISOString();
+  return html`
+    <p class="stale-banner" role="status">
+      Hacker News is not responding. Showing the copy saved
+      <time datetime="${iso}">at ${iso}</time>.
+    </p>
+  `;
+};
+
 // --- Relative timestamps ---
 //
 // A relative string rendered on the server is frozen at render time. These pages

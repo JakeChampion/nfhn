@@ -25,6 +25,7 @@ import {
   shareButton,
   sharedStyles,
   skipLink,
+  staleBanner,
   themeScript,
   userLink,
   websiteJsonLd,
@@ -100,6 +101,7 @@ export const home = (
   pageNumber: number,
   feed: FeedSlug = "top",
   canonicalUrl?: string,
+  staleSince?: number,
 ): HTML =>
   tpl`
 <!DOCTYPE html>
@@ -136,6 +138,7 @@ export const home = (
     ${skipLink()}
     ${headerBar(feed)}
     <main id="main-content" aria-label="Main content">
+      ${staleSince ? staleBanner(staleSince) : ""}
       <ol class="stories">
         ${content.map((data: Item) => renderStory(data))}
       </ol>
@@ -196,7 +199,7 @@ const shellPage = (
 
 // --- Article page (single item with comments) ---
 
-export const article = (item: Item, canonicalUrl?: string): HTML => {
+export const article = (item: Item, canonicalUrl?: string, staleSince?: number): HTML => {
   const activeFeed: FeedSlug = item.type === "ask"
     ? "ask"
     : item.type === "show"
@@ -231,6 +234,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
       ${itemTransitionName(item.id)}
       ${headerBar(activeFeed)}
       <main id="main-content" aria-label="Main content">
+        ${staleSince ? staleBanner(staleSince) : ""}
         <article>
           <a href="${meta.href(item)}">
             ${meta.label ? tpl`<span class="badge ${meta.badgeClass}">${meta.label}</span>` : ""}
