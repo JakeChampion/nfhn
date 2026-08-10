@@ -138,6 +138,14 @@ Two prerequisites for revisiting: Netlify supports the codings (or an edge-side 
 compressor becomes available), and the `Vary: Accept-Encoding, Available-Dictionary` requirement can
 be honoured — omitting it poisons shared caches with undecodable bodies.
 
+> **Update, 2026-08-10.** Both prerequisites now have candidate answers, so this verdict is being
+> re-examined in [`../netlify-proposals/01-compression-dictionary-transport.md`](../netlify-proposals/01-compression-dictionary-transport.md):
+> a WASM zstd build (`compressUsingDict`) can produce a conformant `dcz` body inside the edge runtime,
+> and `Netlify-Vary: header=Available-Dictionary` keys the CDN cache without the hit-rate collapse a
+> blanket `Vary` was expected to cause. The verdict above stands until a spike confirms Netlify's CDN
+> passes an unrecognised `Content-Encoding` through untouched — which is the one thing that would make
+> all of it moot. The "deliberately not shipping the half we could" rule is unchanged.
+
 > Unrelated observation from this review, not addressed here: `static/` holds committed `.br`, `.gz`
 > and `.zst` copies of each asset, but nothing references or serves them. Netlify serves `static/`
 > literally and compresses on its own, so `/app.js.br` is reachable only as its own URL. They look
