@@ -642,6 +642,33 @@ export const renderComment = (comment: HNAPIItem, level: number, opUser?: string
     : details;
 };
 
+// --- Comment thread controls (Invoker Commands) ---
+//
+// `commandfor` + `command` let a button declare what it does to another element
+// in markup: the browser handles activation, keyboard support and the
+// accessibility wiring, and no click handler is needed. Commands prefixed with
+// `--` are custom, dispatching a `command` event instead of a built-in action,
+// so one delegated listener in app.js replaces per-button handlers.
+//
+// This suits NFHN's CSP in particular - script-src is 'self' plus a single
+// pinned hash - but the buttons are inert in a browser without invoker support,
+// so app.js keeps a click fallback until support is universal.
+//
+// See docs/api-proposals/14-invoker-commands.md
+
+const commentControls = (count: number): HTML =>
+  html`
+    <div class="comment-controls">
+      <button type="button" commandfor="comments" command="--collapse-all">
+        Collapse all
+      </button>
+      <button type="button" commandfor="comments" command="--expand-all" hidden>
+        Expand all
+      </button>
+      <span class="comment-count">${count} thread${count === 1 ? "" : "s"}</span>
+    </div>
+  `;
+
 export const commentsSection = (rootComments: HNAPIItem[] | undefined, opUser?: string): HTML => {
   const visibleComments = (rootComments ?? []).filter(isRenderableComment);
   if (visibleComments.length === 0) {
@@ -651,7 +678,8 @@ export const commentsSection = (rootComments: HNAPIItem[] | undefined, opUser?: 
   }
 
   return html`
-    <section aria-label="Comments">
+    ${commentControls(visibleComments.length)}
+    <section id="comments" aria-label="Comments">
       ${visibleComments.map((comment) => renderComment(comment, 0, opUser))}
     </section>
   `;
