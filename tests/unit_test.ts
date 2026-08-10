@@ -1601,3 +1601,64 @@ Deno.test("encodeWithDictionary emits dcz and the Vary pair when negotiated", as
   const body = new Uint8Array(await encoded.arrayBuffer());
   assertEquals(Array.from(parseDczHeader(body)!), Array.from(dictionary.hash));
 });
+
+// =============================================================================
+// CSS containment vs counters
+// =============================================================================
+
+/**
+ * Collect the selectors of every rule that *declares* content-visibility.
+ * Naive but sufficient: styles.css has no nested at-rules with braces inside
+ * selectors, and a `transition: content-visibility ...` value has no colon
+ * after the property name so it is not matched.
+ */
+function selectorsDeclaring(css: string, property: string): string[] {
+  const selectors: string[] = [];
+  const declaration = new RegExp(`(^|[;{\\s])${property}\\s*:`);
+
+  for (const block of css.split("}")) {
+    const brace = block.indexOf("{");
+    if (brace === -1) continue;
+    const body = block.slice(brace + 1);
+    if (!declaration.test(body)) continue;
+    selectors.push(block.slice(0, brace).trim().replace(/\s+/g, " "));
+  }
+  return selectors;
+}
+
+Deno.test("content-visibility is never applied to counter-numbered story rows", async () => {
+  const css = await Deno.readTextFile(new URL("../static/styles.css", import.meta.url));
+
+  // `content-visibility: auto` implies style containment, and style containment
+  // scopes counter-increment to the contained subtree. `ol > li:before`
+  // increments `section` to number the story rows, so containing a row makes it
+  // start its own counter and render as "1" - every row, in every engine.
+  // This regressed once; it must not regress again.
+  const contained = selectorsDeclaring(css, "content-visibility");
+  assertEquals(contained.length > 0, true, "expected content-visibility to still be in use");
+
+  const counted = selectorsDeclaring(css, "counter-increment");
+  assertEquals(counted.length > 0, true, "expected counter-increment to still be in use");
+
+  for (const selector of contained) {
+    assertEquals(
+      /(^|[\s,>])(ol\b|\.stories\b)/.test(selector),
+      false,
+      `"${selector}" contains an element inside the counter-numbered story list; ` +
+        "style containment would reset the counter and number every row 1",
+    );
+  }
+});
+
+Deno.test("comment subtrees keep content-visibility and carry no counters", async () => {
+  const css = await Deno.readTextFile(new URL("../static/styles.css", import.meta.url));
+  const contained = selectorsDeclaring(css, "content-visibility");
+
+  // The comment thread is where the optimisation actually pays: 1,000+ nodes,
+  // and `ul > li` so the `ol > li:before` counter never applies.
+  assertEquals(
+    contained.some((selector) => selector.includes('[aria-label="Comments"]')),
+    true,
+    "comment subtrees should still opt into content-visibility",
+  );
+});
