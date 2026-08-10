@@ -1,6 +1,6 @@
 # Generated images: closing the favicon and `og:image` gap without a design tool
 
-**Status:** Proposed · **Impact:** Medium · **Effort:** Medium
+**Status:** Partially implemented (maskable icon + SVG card shipped, og:image tag behind NFHN_OG_IMAGES) · **Impact:** Medium · **Effort:** Medium
 
 ## The gap
 
@@ -89,6 +89,23 @@ Do the boring part first (verify Image CDN handles SVG; commit a `favicon.ico`; 
 claim), then treat Option B as a standalone feature. B is more work than the whole rest of this
 directory combined for the visual polish, but it is the only item here that changes how NFHN looks to
 people who have never visited it.
+
+## What shipped, and how it differs from the above
+
+- **The maskable icon is fixed.** `scripts/icons.ts` derives `icon-maskable.svg` from `icon.svg` at
+  build time - inset to the 80% safe zone on an opaque backdrop - and `manifest.json` now declares
+  `any` and `maskable` as two separate icons rather than claiming both of a file that honours
+  neither. Generated rather than committed so the two cannot drift.
+- **The card route is `/og/item/:id.svg`, not `.png`.** Composing SVG needs no tooling, so that part
+  runs today; `resvg-wasm` was not needed and is not a dependency. Rasterisation is delegated to
+  Netlify Image CDN via `ogImageUrl()` in `config.ts`.
+- **1200×630, not 1200×675.** 1.91:1 is the ratio the major platforms actually crop to.
+- **The `og:image` tag is behind `NFHN_OG_IMAGES`, default off.** The one unverified link in the
+  chain is whether Image CDN accepts SVG input. With the flag off, link previews are exactly as they
+  are today, so switching it on after a deploy-preview check is either an improvement or a no-op.
+- **`/favicon.ico` is still missing.** Unchanged: the ICO container is not something the platform can
+  produce at request time, so it needs a committed binary.
+- **Feed pages still get no card.** Only item URLs got one, on the reasoning above.
 
 ## Sources
 

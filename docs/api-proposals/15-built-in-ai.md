@@ -1,6 +1,6 @@
 # Built-in AI: on-device summaries and translation
 
-**Status:** Proposed · **Browser support:** Chrome 138+ desktop (Summarizer); Translator and Language
+**Status:** Implemented (Summarizer; Translator not yet) · **Browser support:** Chrome 138+ desktop (Summarizer); Translator and Language
 Detector desktop-only · **Impact:** 🔥 High · **Effort:** Medium
 
 ## The pitch

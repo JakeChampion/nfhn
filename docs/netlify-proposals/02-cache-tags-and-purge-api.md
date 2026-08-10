@@ -1,6 +1,6 @@
 # Cache tags + Purge API: stop guessing TTLs
 
-**Status:** Proposed · **Impact:** 🔥 High · **Effort:** Medium
+**Status:** Implemented (tags + scheduled purge shipped; TTL raise held pending purge-latency measurement) · **Impact:** 🔥 High · **Effort:** Medium
 
 ## The problem with the current caching strategy
 

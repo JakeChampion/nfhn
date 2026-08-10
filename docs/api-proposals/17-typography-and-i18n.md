@@ -1,6 +1,6 @@
 # Typography and text segmentation: `text-box-trim`, `Intl.Segmenter`, `Intl.RelativeTimeFormat`
 
-**Status:** Proposed · **Browser support:** mixed, see per-item · **Impact:** Medium · **Effort:** Low
+**Status:** Implemented · **Browser support:** mixed, see per-item · **Impact:** Medium · **Effort:** Low
 
 NFHN takes typography unusually seriously for a news reader — it ships a TeX line-breaking
 implementation (`static/tex-linebreak.js`, `static/justify.js`) and an English hyphenation dictionary

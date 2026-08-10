@@ -1,6 +1,6 @@
 # Compression Dictionary Transport — unblocking it at the edge
 
-**Status:** Proposed · **Impact:** 🔥 High · **Effort:** High · **Support:** Chromium 130+ (Firefox in
+**Status:** Partially implemented (framing + negotiation shipped, disabled pending CDN passthrough spike) · **Impact:** 🔥 High · **Effort:** High · **Support:** Chromium 130+ (Firefox in
 progress, Safari no signal)
 
 ## Why this is worth revisiting

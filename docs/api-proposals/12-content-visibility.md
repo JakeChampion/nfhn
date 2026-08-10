@@ -1,6 +1,6 @@
 # `content-visibility: auto` for comment threads
 
-**Status:** Proposed · **Browser support:** Baseline (Chromium 85+, Firefox 125+, Safari 18+) ·
+**Status:** Implemented · **Browser support:** Baseline (Chromium 85+, Firefox 125+, Safari 18+) ·
 **Impact:** 🔥 High · **Effort:** Low
 
 ## The problem

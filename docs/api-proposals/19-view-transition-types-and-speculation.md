@@ -1,6 +1,6 @@
 # View Transition types and finishing the speculation story
 
-**Status:** Proposed · **Browser support:** Chromium 125+ (types), Baseline for the rest ·
+**Status:** Implemented · **Browser support:** Chromium 125+ (types), Baseline for the rest ·
 **Impact:** Medium · **Effort:** Low
 
 Two small refinements to features NFHN already ships.

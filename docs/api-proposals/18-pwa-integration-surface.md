@@ -1,6 +1,6 @@
 # The PWA integration surface: share targets, protocol handlers, badging
 
-**Status:** Proposed · **Browser support:** mixed, all progressive · **Effort:** Low
+**Status:** Implemented · **Browser support:** mixed, all progressive · **Effort:** Low
 
 `static/manifest.json` is already thoughtful — six shortcuts, categories, scope, maskable purpose
 declared. But it stops at "installable". The manifest members below turn an installed NFHN from a

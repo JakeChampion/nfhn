@@ -17,14 +17,14 @@ This directory contains detailed proposals for incorporating modern web APIs and
 | [Priority Hints](./09-priority-hints.md) | Baseline 2023 | Medium | Low | ✅ **Implemented** |
 | [CSS :has()](./10-css-has-selector.md) | Baseline 2023 | 🔥 High | Low | ✅ **Implemented** |
 | [Compression Streams](./11-compression-streams-api.md) | Baseline 2023 | Medium | Medium | Proposed |
-| [content-visibility](./12-content-visibility.md) | Baseline | 🔥 High | Low | Proposed |
-| [::details-content + interpolate-size](./13-details-content-animation.md) | Chromium + Safari | Medium | Low | Proposed |
-| [Invoker Commands](./14-invoker-commands.md) | Baseline 2025 | Medium | Low | Proposed |
-| [Built-in AI (Summarizer)](./15-built-in-ai.md) | Chrome desktop | 🔥 High | Medium | Proposed |
-| [SW Static Routing](./16-service-worker-routing.md) | Chromium | Medium | Low | Proposed |
-| [Typography + Intl](./17-typography-and-i18n.md) | mixed | Medium | Low | Proposed |
-| [PWA integration surface](./18-pwa-integration-surface.md) | mixed | Medium | Low | Proposed |
-| [View Transition types](./19-view-transition-types-and-speculation.md) | Chromium 125+ | Medium | Low | Proposed |
+| [content-visibility](./12-content-visibility.md) | Baseline | 🔥 High | Low | ✅ **Implemented** |
+| [::details-content + interpolate-size](./13-details-content-animation.md) | Chromium + Safari | Medium | Low | ✅ **Implemented** |
+| [Invoker Commands](./14-invoker-commands.md) | Baseline 2025 | Medium | Low | ✅ **Implemented** |
+| [Built-in AI (Summarizer)](./15-built-in-ai.md) | Chrome desktop | 🔥 High | Medium | ✅ **Implemented** |
+| [SW Static Routing](./16-service-worker-routing.md) | Chromium | Medium | Low | ✅ **Implemented** |
+| [Typography + Intl](./17-typography-and-i18n.md) | mixed | Medium | Low | ✅ **Implemented** |
+| [PWA integration surface](./18-pwa-integration-surface.md) | mixed | Medium | Low | ✅ **Implemented** |
+| [View Transition types](./19-view-transition-types-and-speculation.md) | Chromium 125+ | Medium | Low | ✅ **Implemented** |
 
 Platform-side proposals — Netlify Blobs, cache tags, rate limiting, compression dictionaries — live in
 [`../netlify-proposals/`](../netlify-proposals/README.md).
@@ -48,9 +48,9 @@ Platform-side proposals — Netlify Blobs, cache tags, rate limiting, compressio
 10. **File System Access** - Export/import saved stories
 11. **Document PiP** - Floating reader mode
 
-### Phase 4: Proposed 2026-08 (12–19)
+### Phase 4: 2026-08 (12–19) ✅ COMPLETE
 
-Ordered by value-per-hour rather than by number:
+Implemented in this order, chosen by value-per-hour rather than by number:
 
 1. **[content-visibility](./12-content-visibility.md)** - two CSS properties, and the biggest
    remaining rendering cost on the site (1,000-comment threads) largely goes away

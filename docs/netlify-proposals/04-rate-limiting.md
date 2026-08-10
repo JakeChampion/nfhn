@@ -1,6 +1,6 @@
 # Built-in rate limiting, especially on `/reader/*`
 
-**Status:** Proposed · **Impact:** Medium (High for `/reader`) · **Effort:** Low
+**Status:** Implemented · **Impact:** Medium (High for `/reader`) · **Effort:** Low
 
 ## The comment in `config.ts` is now out of date
 
