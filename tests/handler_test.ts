@@ -1946,3 +1946,64 @@ Deno.test("manifest declares the share target that /share implements", async () 
   // Without navigate-existing, every share spawns another window.
   assertEquals(manifest.launch_handler?.client_mode, "navigate-existing");
 });
+
+// =============================================================================
+// Comment thread controls (Invoker Commands)
+// =============================================================================
+
+Deno.test("comment threads render invoker controls targeting the comments section", async () => {
+  const posted = Math.floor(Date.now() / 1000) - 3600;
+  const routes = {
+    "https://api.hnpwa.com/v0/item/900.json": {
+      id: 900,
+      title: "Discussed Story",
+      points: 10,
+      user: "author",
+      time: posted,
+      type: "link",
+      url: "https://example.com",
+      domain: "example.com",
+      comments_count: 2,
+      comments: [
+        { id: 901, type: "comment", user: "a", time: posted, content: "<p>one</p>", comments: [] },
+        { id: 902, type: "comment", user: "b", time: posted, content: "<p>two</p>", comments: [] },
+      ],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/900"));
+    const body = await res.text();
+
+    // commandfor must name an element that exists, or the button is a no-op.
+    assertStringIncludes(body, '<section id="comments"');
+    assertStringIncludes(body, 'commandfor="comments" command="--collapse-all"');
+    assertStringIncludes(body, 'commandfor="comments" command="--expand-all"');
+    assertStringIncludes(body, "2 threads");
+  });
+});
+
+Deno.test("stories with no comments render no thread controls", async () => {
+  const routes = {
+    "https://api.hnpwa.com/v0/item/901.json": {
+      id: 901,
+      title: "Quiet Story",
+      points: 1,
+      user: "author",
+      time: Math.floor(Date.now() / 1000),
+      type: "link",
+      url: "https://example.com",
+      domain: "example.com",
+      comments_count: 0,
+      comments: [],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/901"));
+    const body = await res.text();
+
+    assertStringIncludes(body, "No comments yet.");
+    assertEquals(body.includes('command="--collapse-all"'), false);
+  });
+});

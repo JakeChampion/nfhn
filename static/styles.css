@@ -1936,6 +1936,50 @@ main {
   }
 }
 
+/* Comment thread controls (Invoker Commands) */
+.comment-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1rem 0 0.5rem;
+  flex-wrap: wrap;
+}
+
+.comment-controls button {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--border, currentColor);
+  border-radius: 0.35rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.comment-controls button:hover {
+  background: color-mix(in oklch, currentColor 8%, transparent);
+}
+
+.comment-summary {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-inline-start: 3px solid var(--accent, currentColor);
+  background: color-mix(in oklch, currentColor 5%, transparent);
+  border-radius: 0 0.35rem 0.35rem 0;
+  white-space: pre-wrap;
+}
+
+.comment-summary-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  opacity: 0.65;
+}
+
+.comment-controls .comment-count {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
 /* =============================================================================
    content-visibility - skip rendering off-screen comment subtrees
    (Baseline: Chromium 85+, Firefox 125+, Safari 18+)

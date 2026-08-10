@@ -496,6 +496,193 @@ document.querySelectorAll('a[href^="http"]:not(.reader-mode-link)').forEach((lin
   });
 })();
 
+// --- On-device summarisation (Built-in AI) ---
+//
+// Chrome ships Gemini Nano with the browser and exposes it through task APIs.
+// No API key, no backend, no per-use cost, and no data leaves the device -- which
+// is why this fits a site with no accounts, no analytics and a CSP of
+// connect-src 'self'. A conventional "summarise this" feature would break all
+// four; this one adds no network request at all.
+//
+// Chrome desktop only, and gated on availability() rather than mere presence of
+// the global: the model may be unavailable on the hardware, or need a large
+// download first. The control is only inserted once we know it can actually run,
+// so nobody is offered a button that does nothing.
+//
+// See docs/api-proposals/15-built-in-ai.md
+const Summarise = (function () {
+  // A very long thread will exceed the model's input quota. Summarising the
+  // highest-signal part beats failing, and beats silently truncating mid-word.
+  const MAX_CHARS = 12000;
+
+  function threadText() {
+    const section = document.getElementById("comments");
+    if (!section) return "";
+
+    const parts = [];
+    let used = 0;
+    for (const comment of section.querySelectorAll("details")) {
+      const author = comment.querySelector(".comment-user")?.textContent?.trim() || "someone";
+      const body = comment.querySelector("summary + div")?.textContent?.trim();
+      if (!body) continue;
+
+      const line = author + ": " + body;
+      if (used + line.length > MAX_CHARS) break;
+      parts.push(line);
+      used += line.length;
+    }
+    return parts.join("\n\n");
+  }
+
+  async function available() {
+    if (!("Summarizer" in self)) return false;
+    try {
+      const state = await Summarizer.availability();
+      // "downloadable" is offered too: the download is user-initiated below,
+      // with progress, rather than starting on page load.
+      return state !== "unavailable";
+    } catch {
+      return false;
+    }
+  }
+
+  async function run(target, options) {
+    const text = threadText();
+    if (!text) {
+      target.textContent = "Nothing to summarise yet.";
+      return;
+    }
+
+    target.textContent = "Preparing…";
+
+    const summarizer = await Summarizer.create({
+      type: options.type || "key-points",
+      format: "plain-text",
+      length: "short",
+      sharedContext: options.context,
+      monitor(monitor) {
+        monitor.addEventListener("downloadprogress", (event) => {
+          const pct = Math.round((event.loaded || 0) * 100);
+          target.textContent = "Downloading model… " + pct + "%";
+        });
+      },
+    });
+
+    try {
+      target.textContent = "";
+      // Streaming matters here: on-device inference is not instant, and a panel
+      // that fills progressively reads far better than a spinner.
+      const stream = summarizer.summarizeStreaming(text);
+      for await (const chunk of stream) {
+        target.textContent += chunk;
+      }
+    } finally {
+      summarizer.destroy?.();
+    }
+  }
+
+  return { available, run, threadText };
+})();
+
+(function initSummariseControl() {
+  const controls = document.querySelector(".comment-controls");
+  if (!controls) return;
+
+  Summarise.available().then((ok) => {
+    if (!ok) return;
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "Summarise thread";
+    button.className = "comment-summarise";
+
+    const panel = document.createElement("div");
+    panel.className = "comment-summary";
+    panel.hidden = true;
+    // The output is an interpretation of a contentious discussion, not a
+    // substitute for it. Say so, and keep the full thread one scroll away.
+    panel.setAttribute("aria-live", "polite");
+
+    const output = document.createElement("p");
+    const note = document.createElement("p");
+    note.className = "comment-summary-note";
+    note.textContent = "Generated on your device. The full thread is below.";
+    panel.append(output, note);
+
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      panel.hidden = false;
+      try {
+        await Summarise.run(output, {
+          type: "key-points",
+          context:
+            "A Hacker News discussion thread. Identify the main points of disagreement and the most substantive claims.",
+        });
+      } catch (err) {
+        output.textContent = "Could not summarise this thread: " + err.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    controls.append(button);
+    controls.after(panel);
+  });
+})();
+
+// --- Comment thread controls (Invoker Commands) ---
+//
+// The buttons declare `commandfor="comments" command="--collapse-all"` in
+// markup. Custom commands (the `--` prefix) dispatch a `command` event rather
+// than performing a built-in action, so this one delegated listener covers every
+// control -- and event.source gives the invoking button directly, with no
+// closest() walk from the event target.
+//
+// Browsers without invoker support leave the buttons inert, so the same handler
+// is wired to click as a fallback and removed once support is universal.
+(function initCommentControls() {
+  const supportsInvokers = "commandForElement" in HTMLButtonElement.prototype;
+
+  function setAll(open) {
+    const section = document.getElementById("comments");
+    if (!section) return;
+    for (const details of section.querySelectorAll("details")) {
+      details.open = open;
+    }
+    // Swap which control is offered, so the button always describes the action
+    // that is actually available.
+    const collapse = document.querySelector('[command="--collapse-all"]');
+    const expand = document.querySelector('[command="--expand-all"]');
+    if (collapse) collapse.hidden = !open;
+    if (expand) expand.hidden = open;
+  }
+
+  function run(command) {
+    if (command === "--collapse-all") {
+      setAll(false);
+      return true;
+    }
+    if (command === "--expand-all") {
+      setAll(true);
+      return true;
+    }
+    return false;
+  }
+
+  if (supportsInvokers) {
+    document.addEventListener("command", (event) => {
+      run(event.command);
+    });
+    return;
+  }
+
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest?.("[command]");
+    if (!button) return;
+    if (run(button.getAttribute("command"))) event.preventDefault();
+  });
+})();
+
 // --- Relative timestamps (Intl.RelativeTimeFormat) ---
 //
 // The server renders a relative string that is frozen at render time, and these
