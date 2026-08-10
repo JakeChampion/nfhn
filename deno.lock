@@ -64,6 +64,7 @@
     ],
     "packageJson": {
       "dependencies": [
+        "npm:@bokuweb/zstd-wasm@^0.0.27",
         "npm:@netlify/blobs@^10.7.12",
         "npm:@netlify/edge-functions@^3.0.2",
         "npm:@netlify/functions@^5.3.0",

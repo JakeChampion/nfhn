@@ -1,6 +1,7 @@
 // security.ts - Security headers utilities
 
 import { CSP_DIRECTIVES, NO_VARY_SEARCH, REPORTING_ENDPOINT, REPORTING_GROUP } from "./config.ts";
+import { applyDictionaryVary, DICTIONARY_TRANSPORT_ENABLED } from "./dictionary.ts";
 
 export const buildContentSecurityPolicy = (): string => {
   return CSP_DIRECTIVES.join("; ");
@@ -27,6 +28,11 @@ export const applySecurityHeaders = (headers: Headers): Headers => {
   // Names the collector that the CSP's `report-to` directive refers to, and
   // enables deprecation, intervention and crash reports at the same time.
   headers.set("Reporting-Endpoints", `${REPORTING_GROUP}="${REPORTING_ENDPOINT}"`);
+  // Applied to every page, not only the ones actually served as `dcz`. A cache
+  // that stored a delta without this would later hand it to a client that never
+  // had the dictionary, which cannot decode it. Vary must describe what the
+  // response *could* depend on, not what this one happened to use.
+  if (DICTIONARY_TRANSPORT_ENABLED) applyDictionaryVary(headers);
   // Early hint for CSS preload - improves LCP by starting CSS download before HTML parsing
   if (!headers.has("Link")) {
     headers.set("Link", "</styles.css>; rel=preload; as=style");

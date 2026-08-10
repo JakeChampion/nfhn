@@ -35,6 +35,7 @@ import {
 import { withProgrammableCache } from "./cache.ts";
 import { waiterFrom, type WaitUntilCapable } from "./background.ts";
 import { feedKey, HN_MIRROR_STORE, itemKey, readMirror, writeMirror } from "./store.ts";
+import { encodeWithDictionary } from "./dictionary.ts";
 import { renderErrorPage, renderOfflinePage } from "./errors.ts";
 import { log } from "./logger.ts";
 import {
@@ -423,4 +424,22 @@ export function handleUser(
     () => renderOfflinePage(requestId),
     waiterFrom(context),
   );
+}
+
+/**
+ * Apply dictionary compression to a handler's response, if the client can use it.
+ *
+ * Deliberately wraps the handler from *outside* rather than being folded into
+ * one: `withProgrammableCache` keys on the URL alone, so the encode has to
+ * happen after the cache, never before it. A `dcz` body in that cache would
+ * later be handed to a client that never had the dictionary.
+ *
+ * @see lib/dictionary.ts
+ */
+export async function withDictionaryEncoding(
+  request: Request,
+  pending: Promise<Response> | Response,
+): Promise<Response> {
+  const response = await pending;
+  return await encodeWithDictionary(request, response);
 }

@@ -1,6 +1,11 @@
 // show.ts - Show HN feed
 import type { Config, Context } from "@netlify/edge-functions";
-import { handleFeed, handleNotFound, parsePositiveInt } from "./lib/handlers.ts";
+import {
+  handleFeed,
+  handleNotFound,
+  parsePositiveInt,
+  withDictionaryEncoding,
+} from "./lib/handlers.ts";
 
 export default (request: Request, context: Context) => {
   const pageNumber = parsePositiveInt(context.params.page);
@@ -8,13 +13,16 @@ export default (request: Request, context: Context) => {
     return handleNotFound(request);
   }
 
-  return handleFeed(
+  return withDictionaryEncoding(
     request,
-    "show",
-    pageNumber,
-    "No stories found",
-    "We could not find that page of Show HN posts.",
-    context,
+    handleFeed(
+      request,
+      "show",
+      pageNumber,
+      "No stories found",
+      "We could not find that page of Show HN posts.",
+      context,
+    ),
   );
 };
 

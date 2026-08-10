@@ -12,25 +12,29 @@
 //      cardinality is one hash per deployed dictionary - two cache entries, not
 //      thousands.
 //
-// What is NOT yet answered, and why nothing here is enabled by default: whether
-// Netlify's CDN passes an unrecognised `Content-Encoding` through untouched. If
-// it re-compresses or strips `dcz`, every visitor gets an undecodable body. The
-// spec review's rule holds - do not nominate a dictionary the server cannot use -
-// so `Use-As-Dictionary` is only emitted when DICTIONARY_TRANSPORT_ENABLED is on,
-// which is gated on that spike.
+// The third question - does Netlify's CDN pass an unrecognised
+// `Content-Encoding` through untouched? - is answered too: it does, confirmed in
+// production on another site. That was the last thing holding this back, so it
+// is on by default with `NFHN_DICTIONARY_TRANSPORT=0` as a kill switch.
 //
-// This module is the part that can be written and tested without a deploy: the
-// framing, the negotiation, and the header contract.
+// This module owns the wire format and the negotiation. The compressor lives in
+// zstd.ts and the dictionary itself in shell-dictionary.ts, both imported lazily
+// so an isolate that never serves a dictionary-capable client never instantiates
+// the WASM module.
 //
 // See docs/netlify-proposals/01-compression-dictionary-transport.md
 
 /**
- * Master switch. Off until a deploy-preview spike confirms Netlify passes
- * `Content-Encoding: dcz` through unmodified.
+ * Master switch, on by default.
+ *
+ * The open question was whether Netlify's CDN passes an unrecognised
+ * `Content-Encoding` through untouched. It does - confirmed in production on
+ * another site - so this is enabled, with `NFHN_DICTIONARY_TRANSPORT=0` left as
+ * a kill switch that needs no deploy of new code to use.
  */
 export const DICTIONARY_TRANSPORT_ENABLED =
   (globalThis as { Deno?: { env: { get(k: string): string | undefined } } }).Deno?.env
-    .get("NFHN_DICTIONARY_TRANSPORT") === "1";
+    .get("NFHN_DICTIONARY_TRANSPORT") !== "0";
 
 /**
  * The 8-byte magic number that opens a Dictionary-Compressed Zstandard stream.
@@ -191,4 +195,56 @@ export function canServeDictionaryDelta(
     parseAvailableDictionary(request.headers.get("Available-Dictionary")),
     dictionaryHash,
   );
+}
+
+/**
+ * Encode a response as `dcz` when the client holds our dictionary.
+ *
+ * **This must be applied outside the programmable cache, not inside it.**
+ * `withProgrammableCache` keys on the URL alone, so a `dcz` body stored there
+ * would later be served to a client that never had the dictionary - an
+ * undecodable response. Keeping the encode on the way out means the cache always
+ * holds plain HTML and the delta is computed per request, against whatever
+ * dictionary that particular client actually advertised.
+ *
+ * Any failure returns the original response unchanged. A missed optimisation is
+ * invisible; a corrupted body is not.
+ */
+export async function encodeWithDictionary(
+  request: Request,
+  response: Response,
+): Promise<Response> {
+  if (!DICTIONARY_TRANSPORT_ENABLED) return response;
+  // Only complete, uncompressed HTML bodies. 304s have no body, error pages are
+  // not worth the CPU, and anything already encoded must not be double-wrapped.
+  if (response.status !== 200 || !response.body) return response;
+  if (response.headers.has("Content-Encoding")) return response;
+
+  const advertised = parseAvailableDictionary(request.headers.get("Available-Dictionary"));
+  if (!advertised) return response;
+
+  try {
+    const { tryGetShellDictionary } = await import("./shell-dictionary.ts");
+    const dictionary = await tryGetShellDictionary();
+    if (!dictionary || !canServeDictionaryDelta(request, dictionary.hash)) return response;
+
+    const plain = new Uint8Array(await response.arrayBuffer());
+    const { compressWithDictionary } = await import("./zstd.ts");
+    const frame = await compressWithDictionary(plain, dictionary.bytes);
+    const body = frameDcz(dictionary.hash, frame);
+
+    const headers = new Headers(response.headers);
+    headers.set("Content-Encoding", "dcz");
+    headers.delete("Content-Length");
+    applyDictionaryVary(headers);
+
+    return new Response(body as BodyInit, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  } catch (error) {
+    console.error("Dictionary encoding failed, serving uncompressed:", error);
+    return response;
+  }
 }
