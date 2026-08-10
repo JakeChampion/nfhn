@@ -496,6 +496,51 @@ document.querySelectorAll('a[href^="http"]:not(.reader-mode-link)').forEach((lin
   });
 })();
 
+// --- bfcache diagnostics ---
+//
+// NFHN's whole performance story assumes navigation is nearly free: Speculation
+// Rules with prerender: moderate, No-Vary-Search so decorated URLs still hit,
+// cross-document View Transitions to hide the seam. Back/forward should be free
+// too - restored from bfcache with no request at all - but eligibility is easy
+// to lose by accident and impossible to spot from source.
+//
+// notRestoredReasons says exactly why a restore was refused. Reported to the
+// same collector as CSP violations (netlify/edge-functions/reports.ts).
+//
+// See docs/netlify-proposals/06-reporting-endpoint.md
+(function reportBfcacheBlocks() {
+  const [nav] = performance.getEntriesByType("navigation");
+  if (!nav || !nav.notRestoredReasons) return;
+
+  const reasons = nav.notRestoredReasons;
+  // A same-document reload reports no blocking reasons; only report a genuine
+  // refusal, or this beacons on every single page load.
+  if (!reasons.reasons?.length && !reasons.children?.length) return;
+
+  try {
+    navigator.sendBeacon(
+      "/_report",
+      new Blob(
+        [
+          JSON.stringify([{
+            type: "bfcache-blocked",
+            url: location.href,
+            body: {
+              reasons: reasons.reasons,
+              blocked: reasons.blocked,
+              id: reasons.id,
+              name: reasons.name,
+            },
+          }]),
+        ],
+        { type: "application/reports+json" },
+      ),
+    );
+  } catch {
+    // Diagnostics must never be load-bearing.
+  }
+})();
+
 // --- On-device summarisation (Built-in AI) ---
 //
 // Chrome ships Gemini Nano with the browser and exposes it through task APIs.

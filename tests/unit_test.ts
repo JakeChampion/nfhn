@@ -1,6 +1,11 @@
 // unit_test.ts - Unit tests for core utility functions
 
-import { assertEquals, assertStrictEquals } from "std/testing/asserts.ts";
+import {
+  assertEquals,
+  assertStrictEquals,
+  assertStringIncludes,
+  assertThrows,
+} from "std/testing/asserts.ts";
 
 import { escape, html, htmlToString, raw, unsafeHTML } from "../netlify/edge-functions/lib/html.ts";
 import { formatTimeAgo, type HNAPIItem, mapStoryToItem } from "../netlify/edge-functions/lib/hn.ts";
@@ -1206,4 +1211,133 @@ Deno.test("escape: handles unicode characters", () => {
 
 Deno.test("escape: handles newlines and tabs", () => {
   assertEquals(escape("line1\nline2\ttab"), "line1\nline2\ttab");
+});
+
+// =============================================================================
+// Compression Dictionary Transport (RFC 9842)
+// =============================================================================
+
+import {
+  applyDictionaryVary,
+  canServeDictionaryDelta,
+  DCZ_HEADER_LENGTH,
+  DCZ_MAGIC,
+  digestsMatch,
+  formatAvailableDictionary,
+  frameDcz,
+  parseAvailableDictionary,
+  parseDczHeader,
+  sha256,
+  useAsDictionaryHeader,
+} from "../netlify/edge-functions/lib/dictionary.ts";
+
+Deno.test("dcz framing matches the wire format in RFC 9842 4.2", async () => {
+  const dictionary = new TextEncoder().encode("a shared HTML shell");
+  const hash = await sha256(dictionary);
+  const frame = new Uint8Array([1, 2, 3, 4, 5]);
+
+  const stream = frameDcz(hash, frame);
+
+  // 8 magic bytes + 32-byte SHA-256 + the zstd frame.
+  assertEquals(stream.length, DCZ_HEADER_LENGTH + frame.length);
+  assertEquals(Array.from(stream.slice(0, 8)), Array.from(DCZ_MAGIC));
+  assertEquals(Array.from(stream.slice(8, 40)), Array.from(hash));
+  assertEquals(Array.from(stream.slice(40)), Array.from(frame));
+});
+
+Deno.test("dcz framing round-trips its dictionary hash", async () => {
+  const hash = await sha256(new TextEncoder().encode("dictionary"));
+  const parsed = parseDczHeader(frameDcz(hash, new Uint8Array([9, 9])));
+  assertEquals(parsed === null, false);
+  assertEquals(Array.from(parsed!), Array.from(hash));
+});
+
+Deno.test("parseDczHeader rejects streams that are not dcz", () => {
+  assertEquals(parseDczHeader(new Uint8Array(10)), null);
+  // Right length, wrong magic - a plain zstd frame must not be mistaken for dcz.
+  const wrongMagic = new Uint8Array(DCZ_HEADER_LENGTH + 1);
+  wrongMagic.set([0x28, 0xb5, 0x2f, 0xfd], 0);
+  assertEquals(parseDczHeader(wrongMagic), null);
+});
+
+Deno.test("frameDcz refuses a hash that is not a SHA-256", async () => {
+  await Promise.resolve();
+  assertThrows(() => frameDcz(new Uint8Array(16), new Uint8Array(1)));
+});
+
+Deno.test("Available-Dictionary round-trips through the structured field encoding", async () => {
+  const hash = await sha256(new TextEncoder().encode("shell-v1"));
+  const header = formatAvailableDictionary(hash);
+
+  // Structured Field Byte Sequence: base64 wrapped in colons.
+  assertEquals(header.startsWith(":"), true);
+  assertEquals(header.endsWith(":"), true);
+  assertEquals(Array.from(parseAvailableDictionary(header)!), Array.from(hash));
+});
+
+Deno.test("parseAvailableDictionary rejects malformed values", () => {
+  assertEquals(parseAvailableDictionary(null), null);
+  assertEquals(parseAvailableDictionary(""), null);
+  assertEquals(parseAvailableDictionary("no-colons"), null);
+  assertEquals(parseAvailableDictionary(":not base64!:"), null);
+  // Valid base64, but not 32 bytes: not a SHA-256, so not usable.
+  assertEquals(parseAvailableDictionary(":" + btoa("short") + ":"), null);
+});
+
+Deno.test("digestsMatch compares full length and handles nulls", async () => {
+  const a = await sha256(new TextEncoder().encode("a"));
+  const b = await sha256(new TextEncoder().encode("b"));
+
+  assertEquals(digestsMatch(a, a), true);
+  assertEquals(digestsMatch(a, b), false);
+  assertEquals(digestsMatch(a, null), false);
+  assertEquals(digestsMatch(null, null), false);
+  assertEquals(digestsMatch(a, a.slice(0, 16)), false);
+});
+
+Deno.test("Use-As-Dictionary is built to the header grammar", () => {
+  assertEquals(
+    useAsDictionaryHeader({ match: "/top/*" }),
+    'match="/top/*"',
+  );
+  assertEquals(
+    useAsDictionaryHeader({
+      match: "/(top|newest)/*",
+      matchDest: ["document"],
+      id: "shell-v1",
+    }),
+    'match="/(top|newest)/*", match-dest=("document"), id="shell-v1"',
+  );
+});
+
+Deno.test("dictionary responses vary on both the CDN and downstream caches", () => {
+  const headers = new Headers();
+  applyDictionaryVary(headers);
+
+  // Omitting Vary poisons shared caches with bodies they cannot decode.
+  assertStringIncludes(headers.get("Vary")!, "Accept-Encoding");
+  assertStringIncludes(headers.get("Vary")!, "Available-Dictionary");
+  // Netlify-Vary keys Netlify's own cache, which Vary alone does not.
+  assertEquals(headers.get("Netlify-Vary"), "header=Available-Dictionary");
+});
+
+Deno.test("applyDictionaryVary preserves an existing Vary without duplicating", () => {
+  const headers = new Headers({ Vary: "Accept-Encoding" });
+  applyDictionaryVary(headers);
+  assertEquals(headers.get("Vary"), "Accept-Encoding, Available-Dictionary");
+});
+
+Deno.test("dictionary deltas are off until the CDN passthrough spike passes", async () => {
+  const hash = await sha256(new TextEncoder().encode("shell-v1"));
+  const request = new Request("https://nfhn.test/top/1", {
+    headers: {
+      "Accept-Encoding": "dcz, zstd, br",
+      "Available-Dictionary": formatAvailableDictionary(hash),
+    },
+  });
+
+  // The spec review's rule: do not nominate a dictionary we cannot use. Until
+  // NFHN_DICTIONARY_TRANSPORT is set, negotiation always declines and the
+  // response falls through to whatever Netlify would have sent anyway.
+  assertEquals(canServeDictionaryDelta(request, hash), false);
 });

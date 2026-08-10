@@ -60,6 +60,12 @@ export const THEME_SCRIPT_HASH = "'sha256-6hO62gdSSJDQ6/I94TG7pbIBUb/WZCv/YmMI/I
 // `key-order` additionally ignores the order parameters appear in.
 export const NO_VARY_SEARCH = "params, key-order";
 
+// Reporting API (https://www.w3.org/TR/reporting-1/)
+// The endpoint group named by `Reporting-Endpoints` and by the CSP `report-to`
+// directive. Both must agree, so they read from the same constant.
+export const REPORTING_GROUP = "default";
+export const REPORTING_ENDPOINT = "/_report";
+
 // Content Security Policy directives
 // Note: unsafe-inline for styles is needed for dynamic counter-set on <ol>
 // Script unsafe-inline is replaced with a hash for the critical theme init script
@@ -77,4 +83,9 @@ export const CSP_DIRECTIVES = [
   "base-uri 'none'",
   "form-action 'none'",
   "upgrade-insecure-requests",
+  // Violations are posted to the collector in netlify/edge-functions/reports.ts.
+  // Without this the strict policy above is unverifiable in the field: the test
+  // that pins THEME_SCRIPT_HASH proves the hash matches the markup we render, not
+  // that the policy survives contact with extensions and rewriting proxies.
+  `report-to ${REPORTING_GROUP}`,
 ] as const;
