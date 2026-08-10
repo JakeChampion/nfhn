@@ -2005,11 +2005,14 @@ main {
   contain-intrinsic-size: auto 8rem;
 }
 
-/* Story rows are only ~30 per page, but the win is free. */
-.stories > li {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 4rem;
-}
+/* NOT applied to `.stories > li`, however tempting the free win looks.
+   `content-visibility: auto` implies *style* containment, and style containment
+   scopes `counter-increment` and `counter-set` to the contained element's own
+   subtree. `ol > li:before` increments `section` to number the story rows, so
+   containing each row makes every one of them start a fresh counter and render
+   as "1". That is spec'd behaviour, not a browser bug, so it breaks everywhere.
+   Comment subtrees above are safe because they are `ul > li` and carry no
+   counters. 30 rows was never worth the risk. */
 
 /* =============================================================================
    Animated comment collapse - ::details-content + interpolate-size

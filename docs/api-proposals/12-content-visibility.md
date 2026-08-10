@@ -57,11 +57,29 @@ subtrees have no layout until rendered, so anything computing total document hei
 verified once this lands — with `auto` sizing the estimate improves as the reader scrolls, which can
 make a progress bar drift. Worth a look in the browser rather than in review.
 
-## Where else to apply it
+## Where NOT to apply it: the story list
 
-- Story rows on feed pages. Less dramatic (30 rows, not 1,000) but free.
+This proposal originally said story rows were a free win. They are not, and shipping it there was a
+bug — every row on every feed page rendered as "1".
+
+`content-visibility: auto` implies **style containment**, and style containment scopes
+`counter-increment` and `counter-set` to the contained element's own subtree. The story numbers come
+from `ol > li:before { counter-increment: section }`, so containing each `<li>` gives each one its own
+fresh `section` counter. This is spec'd behaviour, not a browser bug, so it breaks in every engine.
+
+The same reasoning is why the comment rules above are safe: comments are `ul > li`, and the counter
+selector is `ol > li`, so no counter crosses a containment boundary. Anything that *is* numbered
+must stay uncontained — or the number has to be computed somewhere other than inside the contained
+element.
+
+Guarded by "content-visibility is never applied to counter-numbered story rows" in
+`tests/unit_test.ts`, which fails if a `content-visibility` rule ever targets an `ol` descendant
+again.
+
+## Where else it would be safe
+
 - The extracted article body in `/reader/*`. Long-form articles are the second-biggest DOM on the
-  site.
+  site, and nothing there is numbered.
 
 ## Measuring it
 
