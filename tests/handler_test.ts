@@ -18,6 +18,7 @@ import { applyCacheTags } from "../netlify/edge-functions/lib/security.ts";
 import { FEEDS } from "../netlify/edge-functions/lib/feeds.ts";
 import sitemapHandler from "../netlify/edge-functions/sitemap.ts";
 import savedHandler from "../netlify/edge-functions/saved.ts";
+import reportsHandler, { normaliseReport } from "../netlify/edge-functions/reports.ts";
 import shareHandler, {
   extractSharedUrl,
   shareDestination,
@@ -2070,4 +2071,86 @@ Deno.test("applyCacheTags deduplicates and skips empty tag sets", () => {
   // No header at all is better than an empty one: an empty tag list would
   // otherwise look like a valid purge target.
   assertEquals(empty.get("Netlify-Cache-Tag"), null);
+});
+
+// =============================================================================
+// Reporting API collector (/_report)
+// =============================================================================
+
+Deno.test("pages advertise a reporting endpoint that the CSP refers to", async () => {
+  const routes = { [topStoriesUrl]: [noVarySearchStory] };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/1"));
+    await res.text();
+
+    assertEquals(res.headers.get("reporting-endpoints"), 'default="/_report"');
+    // The group named in report-to must be one Reporting-Endpoints defines, or
+    // violations are computed and then dropped on the floor.
+    assertStringIncludes(res.headers.get("content-security-policy") ?? "", "report-to default");
+  });
+});
+
+Deno.test("report collector rejects payloads it should not accept", async () => {
+  const wrongType = await reportsHandler(
+    new Request("https://nfhn.test/_report", {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: "[]",
+    }),
+  );
+  assertEquals(wrongType.status, 415);
+
+  const malformed = await reportsHandler(
+    new Request("https://nfhn.test/_report", {
+      method: "POST",
+      headers: { "content-type": "application/reports+json" },
+      body: "not json",
+    }),
+  );
+  assertEquals(malformed.status, 400);
+
+  const empty = await reportsHandler(
+    new Request("https://nfhn.test/_report", {
+      method: "POST",
+      headers: { "content-type": "application/reports+json" },
+      body: "[]",
+    }),
+  );
+  assertEquals(empty.status, 400);
+});
+
+Deno.test("report collector accepts a reports batch", async () => {
+  const res = await reportsHandler(
+    new Request("https://nfhn.test/_report", {
+      method: "POST",
+      headers: { "content-type": "application/reports+json" },
+      body: JSON.stringify([
+        { type: "csp-violation", url: "https://nfhn.test/top/1", body: { blockedURL: "inline" } },
+      ]),
+    }),
+  );
+
+  // 204 even when Blobs is unavailable: a failed report must never surface to
+  // the visitor, and the browser can do nothing useful with an error here.
+  assertEquals(res.status, 204);
+});
+
+Deno.test("normaliseReport bounds untrusted input", () => {
+  const known = normaliseReport({
+    type: "deprecation",
+    url: "https://nfhn.test/x",
+    body: { a: 1 },
+  });
+  assertEquals(known?.type, "deprecation");
+
+  // Unknown types are bucketed rather than trusted as a storage key path.
+  assertEquals(normaliseReport({ type: "../../etc/passwd" })?.type, "other");
+  assertEquals(normaliseReport({})?.type, "other");
+
+  // Long URLs are truncated so one report cannot bloat the store.
+  const long = normaliseReport({ type: "crash", url: "https://nfhn.test/" + "a".repeat(5000) });
+  assertEquals((long?.url as string).length, 2048);
+
+  assertEquals(normaliseReport(null as unknown as Record<string, unknown>), null);
 });

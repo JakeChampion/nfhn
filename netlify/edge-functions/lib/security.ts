@@ -1,6 +1,6 @@
 // security.ts - Security headers utilities
 
-import { CSP_DIRECTIVES, NO_VARY_SEARCH } from "./config.ts";
+import { CSP_DIRECTIVES, NO_VARY_SEARCH, REPORTING_ENDPOINT, REPORTING_GROUP } from "./config.ts";
 
 export const buildContentSecurityPolicy = (): string => {
   return CSP_DIRECTIVES.join("; ");
@@ -24,6 +24,9 @@ export const applySecurityHeaders = (headers: Headers): Headers => {
   // parameters never change the response for these routes, so a prefetched
   // page still counts as a hit when the click adds tracking parameters.
   headers.set("No-Vary-Search", NO_VARY_SEARCH);
+  // Names the collector that the CSP's `report-to` directive refers to, and
+  // enables deprecation, intervention and crash reports at the same time.
+  headers.set("Reporting-Endpoints", `${REPORTING_GROUP}="${REPORTING_ENDPOINT}"`);
   // Early hint for CSS preload - improves LCP by starting CSS download before HTML parsing
   if (!headers.has("Link")) {
     headers.set("Link", "</styles.css>; rel=preload; as=style");
