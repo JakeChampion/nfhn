@@ -2,6 +2,8 @@
 
 import { applySecurityHeaders, getRequestId } from "./security.ts";
 import { renderErrorPage } from "./errors.ts";
+import type { Waiter } from "./background.ts";
+import { waiterFrom } from "./background.ts";
 
 const cacheControlValue = (ttlSeconds: number, swrSeconds: number): string => {
   const parts = [`public`, `max-age=${ttlSeconds}`];
@@ -104,6 +106,7 @@ export async function withProgrammableCache(
   swrSeconds: number,
   producer: () => Promise<Response>,
   offlineFallback?: () => Response,
+  waitUntil: Waiter = waiterFrom(),
 ): Promise<Response> {
   const requestId = getRequestId(request);
   const cacheKey = cacheKeyFor(request);
@@ -113,22 +116,27 @@ export async function withProgrammableCache(
 
   const serveFresh = (response: Response): Response => applyConditionalRequest(request, response);
 
+  // Revalidation and cache writes both outlive the response, so they are handed
+  // to the runtime via waitUntil. Without it the isolate can be torn down
+  // mid-flight once the response has been returned - see lib/background.ts.
   const revalidateInBackground = (): void => {
-    producer()
-      .then((response) => {
-        if (!isCacheable(response)) return;
-        const { cacheable } = prepareResponses(
-          response,
-          ttlSeconds,
-          swrSeconds,
-        );
-        cache.put(cacheKey, cacheable).catch((err) => {
-          console.error("Failed to update cache in background:", err);
-        });
-      })
-      .catch((err) => {
-        console.error("Background revalidation failed:", err);
-      });
+    waitUntil(
+      producer()
+        .then((response) => {
+          if (!isCacheable(response)) return;
+          const { cacheable } = prepareResponses(
+            response,
+            ttlSeconds,
+            swrSeconds,
+          );
+          return cache.put(cacheKey, cacheable).catch((err) => {
+            console.error("Failed to update cache in background:", err);
+          });
+        })
+        .catch((err) => {
+          console.error("Background revalidation failed:", err);
+        }),
+    );
   };
 
   const serveStaleAndRevalidate = (stale: Response): Response => {
@@ -143,9 +151,11 @@ export async function withProgrammableCache(
       swrSeconds,
     );
 
-    cache.put(cacheKey, cacheable).catch((err) => {
-      console.error("Failed to cache response:", err);
-    });
+    waitUntil(
+      cache.put(cacheKey, cacheable).catch((err) => {
+        console.error("Failed to cache response:", err);
+      }),
+    );
 
     return serveFresh(client);
   };

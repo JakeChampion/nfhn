@@ -606,4 +606,17 @@ function renderInstructions(): string {
 </html>`;
 }
 
-export const config = { path: "/reader/*" };
+export const config = {
+  path: "/reader/*",
+  rateLimit: {
+    // Much stricter than the feeds. This route fetches an arbitrary third-party
+    // URL server-side and runs Readability over it, so one cheap request here
+    // buys an expensive outbound fetch made from Netlify's IPs with NFHN's
+    // User-Agent on it. Rate limiting is a mitigation, not a fix - validating
+    // the target against a story NFHN has actually rendered is the real answer.
+    // See docs/netlify-proposals/04-rate-limiting.md.
+    windowLimit: 10,
+    windowSize: 60,
+    aggregateBy: "ip",
+  },
+};

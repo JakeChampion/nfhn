@@ -38,6 +38,11 @@ ${urls}
 };
 
 export const config: Config = {
+  rateLimit: {
+    windowLimit: 60,
+    windowSize: 60,
+    aggregateBy: "ip",
+  },
   method: ["GET"],
   path: "/sitemap.xml",
   cache: "manual",

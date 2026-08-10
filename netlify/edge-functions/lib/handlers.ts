@@ -24,6 +24,7 @@ import {
 } from "./config.ts";
 import { applySecurityHeaders, getRequestId } from "./security.ts";
 import { withProgrammableCache } from "./cache.ts";
+import { waiterFrom, type WaitUntilCapable } from "./background.ts";
 import { renderErrorPage, renderOfflinePage } from "./errors.ts";
 import { log } from "./logger.ts";
 import {
@@ -108,6 +109,7 @@ export function handleFeed(
   pageNumber: number,
   emptyTitle: string,
   emptyDescription: string,
+  context?: WaitUntilCapable,
 ): Promise<Response> {
   const requestId = getRequestId(request);
   const startTime = performance.now();
@@ -173,13 +175,18 @@ export function handleFeed(
       }
     },
     () => renderOfflinePage(requestId),
+    waiterFrom(context),
   );
 }
 
 /**
  * Handle an item page request.
  */
-export function handleItem(request: Request, id: number): Promise<Response> {
+export function handleItem(
+  request: Request,
+  id: number,
+  context?: WaitUntilCapable,
+): Promise<Response> {
   const requestId = getRequestId(request);
   const startTime = performance.now();
 
@@ -245,6 +252,7 @@ export function handleItem(request: Request, id: number): Promise<Response> {
       }
     },
     () => renderOfflinePage(requestId),
+    waiterFrom(context),
   );
 }
 
@@ -276,7 +284,11 @@ const isValidUsername = (username: string): boolean => {
 /**
  * Handle a user profile page request.
  */
-export function handleUser(request: Request, username: string): Promise<Response> {
+export function handleUser(
+  request: Request,
+  username: string,
+  context?: WaitUntilCapable,
+): Promise<Response> {
   const requestId = getRequestId(request);
   const startTime = performance.now();
 
@@ -348,5 +360,6 @@ export function handleUser(request: Request, username: string): Promise<Response
       }
     },
     () => renderOfflinePage(requestId),
+    waiterFrom(context),
   );
 }
