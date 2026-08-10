@@ -1,6 +1,6 @@
 # Netlify Blobs: the persistence layer NFHN doesn't have yet
 
-**Status:** Proposed · **Impact:** 🔥 High · **Effort:** Medium
+**Status:** Implemented (HN mirror + reader cache shipped) · **Impact:** 🔥 High · **Effort:** Medium
 
 NFHN is entirely stateless today. Everything it knows lives either in a per-node HTTP cache
 (`lib/cache.ts`) that evaporates, or in the visitor's own browser (IndexedDB, `localStorage`, the

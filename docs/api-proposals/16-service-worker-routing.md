@@ -1,6 +1,6 @@
 # Service Worker Static Routing API + navigation preload
 
-**Status:** Proposed · **Browser support:** `addRoutes()` Chromium 123+ (Firefox positive, WebKit no
+**Status:** Implemented · **Browser support:** `addRoutes()` Chromium 123+ (Firefox positive, WebKit no
 signal); navigation preload Baseline · **Impact:** Medium · **Effort:** Low
 
 Two service-worker optimisations that NFHN's existing `sw.js` is set up for but does not use.

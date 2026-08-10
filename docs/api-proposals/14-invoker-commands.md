@@ -1,6 +1,6 @@
 # Invoker Commands (`command` / `commandfor`)
 
-**Status:** Proposed · **Browser support:** Baseline 2025 (Chromium 135+, Firefox 137+, Safari 18.4+) ·
+**Status:** Implemented · **Browser support:** Baseline 2025 (Chromium 135+, Firefox 137+, Safari 18.4+) ·
 **Impact:** Medium · **Effort:** Low
 
 ## The idea

@@ -10,26 +10,34 @@ platform capabilities, which is why they live on this side.
 
 ## Quick reference
 
-| Proposal | Impact | Effort | Blocked on |
+| Proposal | Impact | Status | Remaining |
 |---|---|---|---|
-| [01 Compression Dictionary Transport](./01-compression-dictionary-transport.md) | 🔥 High | High | a spike: does the CDN pass `dcz` through? |
-| [02 Cache tags + Purge API](./02-cache-tags-and-purge-api.md) | 🔥 High | Medium | — |
-| [03 Netlify Blobs](./03-netlify-blobs.md) | 🔥 High | Medium | — |
-| [04 Rate limiting](./04-rate-limiting.md) | Medium (High for `/reader`) | Low | — |
-| [05 Generated images](./05-generated-images.md) | Medium | Medium | Image CDN SVG support unconfirmed |
-| [06 Reporting collector](./06-reporting-endpoint.md) | Medium | Low | needs 03 |
-| [07 `waitUntil` + `Sec-Purpose`](./07-waituntil-and-sec-purpose.md) | Medium | Low | — |
+| [01 Compression Dictionary Transport](./01-compression-dictionary-transport.md) | 🔥 High | Framing + negotiation shipped, **disabled** | spike: does the CDN pass `dcz` through? then wire the WASM compressor |
+| [02 Cache tags + Purge API](./02-cache-tags-and-purge-api.md) | 🔥 High | Shipped | raise the CDN TTL once purge latency is measured |
+| [03 Netlify Blobs](./03-netlify-blobs.md) | 🔥 High | Shipped (mirror + reader cache) | cross-device saved sync; retention sweep |
+| [04 Rate limiting](./04-rate-limiting.md) | Medium (High for `/reader`) | Shipped | validate `/reader` targets against known stories |
+| [05 Generated images](./05-generated-images.md) | Medium | Card + maskable icon shipped, `og:image` **behind a flag** | confirm Image CDN accepts SVG; `favicon.ico` |
+| [06 Reporting collector](./06-reporting-endpoint.md) | Medium | Shipped | a way to read the collected reports |
+| [07 `waitUntil` + `Sec-Purpose`](./07-waituntil-and-sec-purpose.md) | Medium | Shipped | `Sec-Purpose` helpers exist but nothing consumes them yet |
 
 ## What NFHN uses today
 
-Edge Functions, the programmable cache (`caches.open` in `lib/cache.ts`), redirects in
-`netlify.toml`, and a build command. That is a small fraction of the platform, and the gap is where
-these proposals come from.
+Before these proposals: Edge Functions, the programmable cache (`caches.open` in `lib/cache.ts`),
+redirects in `netlify.toml`, and a build command. That was a small fraction of the platform, and the
+gap is where these proposals came from.
 
-Not used: Blobs, cache tags and the Purge API, `Netlify-Vary`, `Netlify-CDN-Cache-Control` and the
-durable cache, scheduled functions, rate limiting, Image CDN, `context.waitUntil`, `context.geo`.
+Now also in use: Netlify Blobs, cache tags, scheduled functions, rate limiting,
+`Netlify-CDN-Cache-Control`, and `context.waitUntil`.
+
+Still unused: `context.geo` (nothing about HN is regional), `Netlify-Vary` (written by the dictionary
+module but not on any live response yet), and Image CDN (see 05).
+
+Two things are deliberately **not** switched on, both for the reason the spec reviews give: the
+verification step has not happened yet. See the "Remaining" column.
 
 ## Suggested order
+
+This was the order the work was done in.
 
 **1. [`waitUntil`](./07-waituntil-and-sec-purpose.md)** — a live bug: background cache revalidation
 can be killed when the isolate is torn down. Small, self-contained, and a prerequisite for anything

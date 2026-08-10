@@ -1,6 +1,6 @@
 # Animating comment collapse with `::details-content`, `interpolate-size` and `calc-size()`
 
-**Status:** Proposed · **Browser support:** Chromium 129+/131+, Safari 18.4+ (Firefox in progress) ·
+**Status:** Implemented · **Browser support:** Chromium 129+/131+, Safari 18.4+ (Firefox in progress) ·
 **Impact:** Medium · **Effort:** Low
 
 ## What this replaces

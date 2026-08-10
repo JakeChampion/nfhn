@@ -1,6 +1,6 @@
 # A reporting collector: the missing half of the Reporting API
 
-**Status:** Proposed · **Impact:** Medium · **Effort:** Low
+**Status:** Implemented · **Impact:** Medium · **Effort:** Low
 
 ## The gap
 

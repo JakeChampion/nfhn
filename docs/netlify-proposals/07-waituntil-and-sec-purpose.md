@@ -1,6 +1,6 @@
 # `context.waitUntil` and speculation-aware rendering
 
-**Status:** Proposed · **Impact:** Medium · **Effort:** Low
+**Status:** Implemented (waitUntil shipped; Sec-Purpose helpers shipped, not yet consumed) · **Impact:** Medium · **Effort:** Low
 
 Two small edge-runtime things, one of which is a live bug.
 
