@@ -257,6 +257,25 @@ document.querySelectorAll('a[href^="http"]:not(.reader-mode-link)').forEach((lin
 (function initBookmarks() {
   const STORAGE_KEY = "nfhn-saved-stories";
 
+  // Saved stories live in storage the browser is free to evict under pressure,
+  // silently. Asking for persistence at the moment someone first saves
+  // something - rather than on page load - is both more honest and more likely
+  // to be granted, since browsers weigh engagement when deciding.
+  // See docs/api-proposals/18-pwa-integration-surface.md
+  let persistenceRequested = false;
+  async function requestPersistence() {
+    if (persistenceRequested) return;
+    persistenceRequested = true;
+    try {
+      if (!navigator.storage?.persist) return;
+      if (await navigator.storage.persisted()) return;
+      await navigator.storage.persist();
+    } catch {
+      // Not supported, or the user declined. Saving still works; it is just
+      // evictable, which is the status quo.
+    }
+  }
+
   function getSavedStories() {
     try {
       return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
@@ -312,6 +331,7 @@ document.querySelectorAll('a[href^="http"]:not(.reader-mode-link)').forEach((lin
       btn.title = "Remove from saved";
       btn.setAttribute("aria-label", "Remove from saved");
       notifyServiceWorker("CACHE_ITEM", id, externalUrl);
+      requestPersistence();
     }
 
     saveStories(stories);
@@ -474,6 +494,104 @@ document.querySelectorAll('a[href^="http"]:not(.reader-mode-link)').forEach((lin
       }
     });
   });
+})();
+
+// --- Relative timestamps (Intl.RelativeTimeFormat) ---
+//
+// The server renders a relative string that is frozen at render time, and these
+// pages are cached for minutes. This re-renders every <time datetime> against
+// the reader's own clock and locale, so a page served from cache still shows the
+// right age. The server text remains the no-JS fallback.
+const RelativeTime = (function () {
+  const UNITS = [
+    ["year", 31536000],
+    ["month", 2592000],
+    ["week", 604800],
+    ["day", 86400],
+    ["hour", 3600],
+    ["minute", 60],
+  ];
+
+  let formatter = null;
+  const getFormatter = () => {
+    if (!formatter) {
+      formatter = new Intl.RelativeTimeFormat(navigator.language || "en", {
+        numeric: "auto",
+      });
+    }
+    return formatter;
+  };
+
+  function format(date, now) {
+    const seconds = Math.round((date.getTime() - (now ?? Date.now())) / 1000);
+    const magnitude = Math.abs(seconds);
+    if (magnitude < 45) return "just now";
+
+    for (const [unit, size] of UNITS) {
+      if (magnitude >= size) {
+        return getFormatter().format(Math.round(seconds / size), unit);
+      }
+    }
+    return getFormatter().format(Math.round(seconds / 60), "minute");
+  }
+
+  function refresh(root) {
+    if (!("RelativeTimeFormat" in Intl)) return;
+    const now = Date.now();
+    const scope = root || document;
+    for (const el of scope.querySelectorAll("time[datetime]")) {
+      const date = new Date(el.dateTime);
+      if (Number.isNaN(date.getTime())) continue;
+      // Keep the absolute time reachable on hover / for assistive tech.
+      if (!el.title) el.title = date.toLocaleString();
+      el.textContent = format(date, now);
+    }
+  }
+
+  return { format, refresh };
+})();
+
+(function initRelativeTimes() {
+  RelativeTime.refresh();
+  // Comment threads sit open for a long time; a page left on screen should not
+  // keep claiming a story was posted "2 minutes ago" an hour later.
+  setInterval(() => RelativeTime.refresh(), 60_000);
+  addEventListener("pageshow", (event) => {
+    // Restored from bfcache: the DOM is exactly as it was, timestamps included.
+    if (event.persisted) RelativeTime.refresh();
+  });
+})();
+
+// --- Grapheme-safe truncation (Intl.Segmenter) ---
+//
+// Slicing a string by code unit splits emoji with skin-tone modifiers, family
+// sequences, Hangul syllables and combining accents - all of which turn up in HN
+// titles. Segmenter counts what a reader would call a character.
+const TextSegments = (function () {
+  const supported = typeof Intl !== "undefined" && "Segmenter" in Intl;
+  let graphemes = null;
+
+  function truncate(text, maxGraphemes) {
+    if (!text || text.length <= maxGraphemes) return text;
+    if (!supported) return text.slice(0, maxGraphemes) + "…";
+
+    if (!graphemes) {
+      graphemes = new Intl.Segmenter(navigator.language || "en", {
+        granularity: "grapheme",
+      });
+    }
+
+    const parts = [];
+    for (const { segment } of graphemes.segment(text)) {
+      parts.push(segment);
+      if (parts.length > maxGraphemes) {
+        return parts.slice(0, maxGraphemes).join("") + "…";
+      }
+    }
+    return text;
+  }
+
+  return { truncate, supported };
 })();
 
 // --- View transition types ---

@@ -17,6 +17,10 @@ import { THEME_SCRIPT_HASH } from "../netlify/edge-functions/lib/config.ts";
 import { FEEDS } from "../netlify/edge-functions/lib/feeds.ts";
 import sitemapHandler from "../netlify/edge-functions/sitemap.ts";
 import savedHandler from "../netlify/edge-functions/saved.ts";
+import shareHandler, {
+  extractSharedUrl,
+  shareDestination,
+} from "../netlify/edge-functions/share.ts";
 import { resetCircuitBreaker } from "../netlify/edge-functions/lib/hn.ts";
 import type { Context } from "@netlify/edge-functions";
 import {
@@ -1545,6 +1549,46 @@ Deno.test("speculation rules declare the same No-Vary-Search the server sends", 
   });
 });
 
+Deno.test("timestamps render as <time datetime> so cached pages can be corrected", async () => {
+  const posted = Math.floor(Date.now() / 1000) - 3600;
+  const routes = {
+    "https://api.hnpwa.com/v0/item/777.json": {
+      id: 777,
+      title: "Timestamped Story",
+      points: 10,
+      user: "author",
+      time: posted,
+      type: "link",
+      url: "https://example.com",
+      domain: "example.com",
+      comments_count: 1,
+      comments: [
+        {
+          id: 778,
+          type: "comment",
+          user: "commenter",
+          time: posted + 60,
+          time_ago: "59 minutes ago",
+          content: "<p>A comment</p>",
+          comments: [],
+        },
+      ],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/777"));
+    const body = await res.text();
+
+    const iso = new Date(posted * 1000).toISOString();
+    assertStringIncludes(body, `<time datetime="${iso}">`);
+    // The comment's own timestamp too, not just the story's.
+    assertStringIncludes(body, `<time datetime="${new Date((posted + 60) * 1000).toISOString()}">`);
+    // The server-rendered text stays as the no-JS fallback.
+    assertStringIncludes(body, "59 minutes ago</time>");
+  });
+});
+
 Deno.test("story titles carry matching view-transition-names on feed and item pages", async () => {
   const routes = {
     [topStoriesUrl]: [{ ...noVarySearchStory, id: 4242 }],
@@ -1829,4 +1873,76 @@ Deno.test("skip link target comes after the navigation it skips", async () => {
     );
     assertStringIncludes(body, '<header class="header-bar">');
   });
+});
+
+// =============================================================================
+// Web Share Target (/share)
+// =============================================================================
+
+Deno.test("share target extracts a URL from url, text or title", () => {
+  assertEquals(
+    extractSharedUrl(new URLSearchParams({ url: "https://example.com/a" })),
+    "https://example.com/a",
+  );
+  // Several share sheets put the link in `text`, often with a title prepended.
+  assertEquals(
+    extractSharedUrl(new URLSearchParams({ text: "Great read https://example.com/b" })),
+    "https://example.com/b",
+  );
+  assertEquals(
+    extractSharedUrl(new URLSearchParams({ title: "https://example.com/c" })),
+    "https://example.com/c",
+  );
+  assertEquals(extractSharedUrl(new URLSearchParams({ text: "no link here" })), null);
+  assertEquals(extractSharedUrl(new URLSearchParams()), null);
+});
+
+Deno.test("share target refuses non-http schemes", () => {
+  // The shared value ends up in a Location header, so anything that is not
+  // http(s) must not survive.
+  for (const hostile of ["javascript:alert(1)", "data:text/html,<script>", "file:///etc/passwd"]) {
+    assertEquals(extractSharedUrl(new URLSearchParams({ url: hostile })), null);
+  }
+});
+
+Deno.test("share target sends external links to reader mode and internal links home", () => {
+  const origin = "https://nfhn.test";
+  assertEquals(
+    shareDestination(new URLSearchParams({ url: "https://example.com/a" }), origin),
+    "/reader/https://example.com/a",
+  );
+  // Sharing an NFHN URL back into NFHN should open the discussion, not wrap it.
+  assertEquals(
+    shareDestination(new URLSearchParams({ url: `${origin}/item/123` }), origin),
+    "/item/123",
+  );
+  assertEquals(shareDestination(new URLSearchParams(), origin), "/top/1");
+});
+
+Deno.test("share target does not advertise No-Vary-Search", async () => {
+  const res = await shareHandler(
+    new Request("https://nfhn.test/share?url=https://example.com/a"),
+  );
+
+  assertEquals(res.status, 302);
+  assertEquals(res.headers.get("location"), "/reader/https://example.com/a");
+  // This is the one route whose response depends on the query string. Claiming
+  // otherwise would let a cache serve one shared link's redirect for another.
+  assertEquals(res.headers.get("no-vary-search"), null);
+  assertEquals(res.headers.get("cache-control"), "no-store");
+});
+
+Deno.test("manifest declares the share target that /share implements", async () => {
+  const manifest = JSON.parse(
+    await Deno.readTextFile(new URL("../static/manifest.json", import.meta.url)),
+  );
+
+  assertEquals(manifest.share_target?.action, "/share");
+  assertEquals(manifest.share_target?.method, "GET");
+  // The param names the handler reads.
+  assertEquals(manifest.share_target?.params?.url, "url");
+  assertEquals(manifest.share_target?.params?.text, "text");
+  assertEquals(manifest.share_target?.params?.title, "title");
+  // Without navigate-existing, every share spawns another window.
+  assertEquals(manifest.launch_handler?.client_mode, "navigate-existing");
 });

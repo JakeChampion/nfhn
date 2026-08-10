@@ -10,8 +10,50 @@ const STATIC_ASSETS = [
   "/saved",
 ];
 
+// Static routes, applied by the browser *before* the service worker starts.
+//
+// Without these, every request for /styles.css or /app.js has to boot the
+// worker - spin up the thread, evaluate this script, run the fetch handler -
+// only to be told "serve it from the cache". Static routing lets the browser
+// make that decision itself, so the worker never starts.
+//
+// The cache-name route is safe here specifically because CACHE_NAME embeds the
+// deploy id (nfhn1-__DEPLOY_ID__, stamped by scripts/build.ts): the cache name
+// *is* the version, so there is no stale-asset risk from bypassing the
+// revalidation logic in the fetch handler. If that ever stops being true, this
+// route has to go.
+//
+// See docs/api-proposals/16-service-worker-routing.md
+function staticRoutes() {
+  const assets = STATIC_ASSETS.filter((path) => path !== "/saved");
+  return [
+    {
+      condition: {
+        urlPattern: new URLPattern({ pathname: `(${assets.join("|")})` }),
+        requestMethod: "GET",
+      },
+      source: { cacheName: CACHE_NAME },
+    },
+    {
+      // Reader mode is always network. The fetch handler already knows this;
+      // declaring it here means the worker is not woken to find out.
+      condition: { urlPattern: new URLPattern({ pathname: "/reader/*" }) },
+      source: "network",
+    },
+  ];
+}
+
 // Install - cache static assets
 self.addEventListener("install", (event) => {
+  if ("addRoutes" in event && typeof URLPattern !== "undefined") {
+    try {
+      event.addRoutes(staticRoutes());
+    } catch (_err) {
+      // A browser that has addRoutes but rejects these conditions should fall
+      // through to the fetch handler, not fail the install.
+    }
+  }
+
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(STATIC_ASSETS);
@@ -96,7 +138,13 @@ self.addEventListener("fetch", (event) => {
   // HTML pages - network first with offline fallback
   if (request.headers.get("accept")?.includes("text/html")) {
     event.respondWith(
-      fetch(request)
+      // Navigation preload starts the network request while the worker is still
+      // booting, instead of serialising worker startup in front of the fetch.
+      // event.preloadResponse is undefined for non-navigations and in browsers
+      // without support, so the ?? falls back to a normal fetch.
+      Promise.resolve(event.preloadResponse)
+        .catch(() => undefined)
+        .then((preloaded) => preloaded ?? fetch(request))
         .then((response) => {
           // Cache successful responses
           if (response.ok) {
@@ -324,6 +372,12 @@ self.addEventListener("sync", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     Promise.all([
+      // Start the network request for navigations while this worker is still
+      // booting, rather than after. One call, and it removes worker startup
+      // from the critical path of every cache-missing navigation.
+      self.registration.navigationPreload
+        ? self.registration.navigationPreload.enable().catch(() => {})
+        : Promise.resolve(),
       // Clean up old caches
       caches.keys().then((cacheNames) => {
         return Promise.all(

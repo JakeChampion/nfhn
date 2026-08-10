@@ -260,3 +260,61 @@ Deno.test("pageCacheOptions: keeps the query string for reader URLs", () => {
     undefined,
   );
 });
+
+// =============================================================================
+// Static Routing API (InstallEvent.addRoutes)
+// =============================================================================
+
+// Mirrors staticRoutes() in sw.js. The routes are declared at install time and
+// applied by the browser before the worker starts, so a mismatch between this
+// pattern and the real asset paths silently means the worker boots anyway -
+// exactly the cost the routes exist to avoid.
+const ROUTED_ASSETS = STATIC_ASSETS.filter((path) => path !== "/saved");
+
+function staticAssetPattern(): URLPattern {
+  return new URLPattern({ pathname: `(${ROUTED_ASSETS.join("|")})` });
+}
+
+Deno.test("static routing: the pattern matches every precached asset", () => {
+  const pattern = staticAssetPattern();
+  for (const asset of ROUTED_ASSETS) {
+    assertEquals(
+      pattern.test(`https://nfhn.test${asset}`),
+      true,
+      `${asset} should be routed straight to the cache`,
+    );
+  }
+});
+
+Deno.test("static routing: /saved is excluded so the worker still handles it", () => {
+  // /saved is precached but is a page, not an immutable asset: it must keep
+  // going through the fetch handler's offline fallback logic.
+  assertEquals(staticAssetPattern().test("https://nfhn.test/saved"), false);
+});
+
+Deno.test("static routing: pages and API paths are not captured", () => {
+  const pattern = staticAssetPattern();
+  for (const path of ["/top/1", "/item/123", "/user/alice", "/styles.css.map"]) {
+    assertEquals(
+      pattern.test(`https://nfhn.test${path}`),
+      false,
+      `${path} should not be routed to the static cache`,
+    );
+  }
+});
+
+Deno.test("static routing: reader URLs match the network-only route", () => {
+  const readerPattern = new URLPattern({ pathname: "/reader/*" });
+  assertEquals(readerPattern.test("https://nfhn.test/reader/https://example.com/a"), true);
+  assertEquals(readerPattern.test("https://nfhn.test/top/1"), false);
+});
+
+Deno.test("sw.js enables navigation preload and declares static routes", async () => {
+  const source = await Deno.readTextFile(new URL("../static/sw.js", import.meta.url));
+
+  // Both are easy to drop in a refactor and neither has a visible symptom -
+  // the site keeps working, just with worker startup back on the critical path.
+  assertEquals(source.includes("navigationPreload"), true);
+  assertEquals(source.includes("event.preloadResponse"), true);
+  assertEquals(source.includes("addRoutes"), true);
+});
