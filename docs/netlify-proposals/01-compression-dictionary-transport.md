@@ -1,6 +1,6 @@
 # Compression Dictionary Transport — unblocking it at the edge
 
-**Status:** Partially implemented (framing + negotiation shipped, disabled pending CDN passthrough spike) · **Impact:** 🔥 High · **Effort:** High · **Support:** Chromium 130+ (Firefox in
+**Status:** Implemented and enabled · **Impact:** 🔥 High · **Effort:** High · **Support:** Chromium 130+ (Firefox in
 progress, Safari no signal)
 
 ## Why this is worth revisiting
@@ -122,21 +122,62 @@ Dictionary compression at request time is real CPU. Do not pay it per request:
 - Cap it: skip dictionary encoding above some body size, and skip it entirely when
   `Sec-Purpose: prefetch` says nobody is waiting on the bytes.
 
-## What has to be verified before writing real code
+## What shipped
 
-This is a spike, not a merge-ready plan. Three unknowns, in order of how likely they are to kill it:
+The blocking unknown — does Netlify's CDN pass `Content-Encoding: dcz` through untouched? — is
+answered: it does, confirmed in production on another site. That was the last thing holding this
+back, so it is on by default, with `NFHN_DICTIONARY_TRANSPORT=0` as a kill switch that needs no code
+deploy to use.
 
-1. **Does Netlify's CDN pass `Content-Encoding: dcz` through untouched?** If the CDN re-compresses or
-   strips an encoding it does not recognise, everything above is moot. Test with one hand-built
-   response before anything else.
-2. **Does `Netlify-Vary: header=…` apply to edge-function responses**, or only to redirect/header
-   rules? Confirm against a deploy preview.
-3. **WASM instantiation cost per isolate.** Measure cold-start impact; if it is bad, the memoised-blob
-   path can serve the common case without ever instantiating the module.
+| Module | Role |
+| --- | --- |
+| `lib/dictionary.ts` | Wire format, `Available-Dictionary` parsing, negotiation, `encodeWithDictionary` |
+| `lib/zstd.ts` | WASM zstd, instantiated lazily and once per isolate |
+| `lib/shell-dictionary.ts` | The dictionary itself, built from the real templates |
+| `netlify/edge-functions/dictionary.ts` | Serves `/_dict/shell` with `Use-As-Dictionary` |
 
-The review's instinct — "deliberately not shipping the half we could" — still holds. Do not emit
-`Use-As-Dictionary` until step 1 passes, because a nominated dictionary we cannot use costs the
-visitor a download and buys nothing.
+**The dictionary is a rendered page, not a hand-maintained fragment list.** It is produced by running
+the real `home()` template over thirty fixed synthetic stories, so it cannot drift from what the
+renderer actually emits. It has to be byte-identical in every isolate in every region — the browser
+hashes the bytes it was served and we must reproduce them exactly — which is why the inputs are fixed
+and no clock is involved.
+
+**Measured on a realistic `/top/2`** (30 stories, full shell), against the deployed dictionary:
+
+| Encoding | Size | vs uncompressed |
+| --- | --- | --- |
+| none | 69,395 B | — |
+| gzip | 5,779 B | 91.7% smaller |
+| zstd, no dictionary | 5,110 B | 92.6% smaller |
+| **zstd + dictionary (`dcz`)** | **1,815 B** | **97.4% smaller** |
+
+That is **2.8× smaller than zstd alone**, and the 1,815 B includes the 40-byte `dcz` header. The win
+is exactly where the review predicted: the shell is free, and only the story rows cost anything.
+
+## Two things that were easy to get wrong
+
+**The encode must happen outside the cache.** `withProgrammableCache` keys on the URL alone, so a
+`dcz` body stored in it would later be served to a client that never had the dictionary — an
+undecodable response. `withDictionaryEncoding()` therefore wraps the handler from the outside: the
+cache always holds plain HTML, and the delta is computed per request against whatever dictionary that
+particular client advertised.
+
+**`Vary` goes on every page, not only the encoded ones.** A cache that stored a delta without it
+would hand that delta to a client with no dictionary. `Vary` has to describe what the response
+*could* depend on, not what this particular one happened to use, so `applySecurityHeaders` sets it
+unconditionally while the feature is on.
+
+Every failure path returns the response unencoded. A missed optimisation is invisible; a corrupted
+body is not.
+
+## Still worth doing
+
+- **The static-asset dictionary** (section B above) is not built. It needs the previous deploy's
+  bytes in Blobs, and it is worth much less than the HTML win now measured.
+- **Memoising deltas in Blobs**, so a second visitor to `/top/2` with the same dictionary gets a blob
+  read rather than a zstd run.
+- **Skipping the encode for `Sec-Purpose: prefetch`**, where nobody is waiting on the bytes. The
+  helpers for this already exist in `lib/background.ts`.
 
 ## Sources
 

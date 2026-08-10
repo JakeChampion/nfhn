@@ -1,6 +1,6 @@
 // user.ts - User profile page
 import type { Config, Context } from "@netlify/edge-functions";
-import { handleNotFound, handleUser } from "./lib/handlers.ts";
+import { handleNotFound, handleUser, withDictionaryEncoding } from "./lib/handlers.ts";
 
 export default (request: Request, context: Context) => {
   const username = context.params.username;
@@ -9,7 +9,7 @@ export default (request: Request, context: Context) => {
     return handleNotFound(request);
   }
 
-  return handleUser(request, username, context);
+  return withDictionaryEncoding(request, handleUser(request, username, context));
 };
 
 export const config: Config = {

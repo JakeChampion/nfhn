@@ -1,6 +1,11 @@
 // ask.ts - Ask HN feed
 import type { Config, Context } from "@netlify/edge-functions";
-import { handleFeed, handleNotFound, parsePositiveInt } from "./lib/handlers.ts";
+import {
+  handleFeed,
+  handleNotFound,
+  parsePositiveInt,
+  withDictionaryEncoding,
+} from "./lib/handlers.ts";
 
 export default (request: Request, context: Context) => {
   const pageNumber = parsePositiveInt(context.params.page);
@@ -8,13 +13,16 @@ export default (request: Request, context: Context) => {
     return handleNotFound(request);
   }
 
-  return handleFeed(
+  return withDictionaryEncoding(
     request,
-    "ask",
-    pageNumber,
-    "No stories found",
-    "We couldn't find that page of Ask HN posts.",
-    context,
+    handleFeed(
+      request,
+      "ask",
+      pageNumber,
+      "No stories found",
+      "We couldn't find that page of Ask HN posts.",
+      context,
+    ),
   );
 };
 

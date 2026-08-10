@@ -2,6 +2,7 @@
 
 import { type HTML, html, raw, unsafeHTML } from "../html.ts";
 import { FEEDS } from "../feeds.ts";
+import { DICTIONARY_TRANSPORT_ENABLED } from "../dictionary.ts";
 import { type FeedSlug, type HNAPIItem, type Item, type ItemType } from "../hn.ts";
 
 // --- JSON-LD Structured Data ---
@@ -174,6 +175,11 @@ export const pwaHeadTags = (): HTML =>
     <link rel="preconnect" href="https://hacker-news.firebaseio.com" fetchpriority="high">
     <link rel="preconnect" href="https://hn.algolia.com" fetchpriority="low">
     <link rel="manifest" href="/manifest.json">
+    ${DICTIONARY_TRANSPORT_ENABLED
+      ? html`
+        <link rel="compression-dictionary" href="/_dict/shell">
+      `
+      : ""}
     <meta name="color-scheme" content="light dark">
     <meta name="theme-color" content="#f5f5f5" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">

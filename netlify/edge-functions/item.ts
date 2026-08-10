@@ -1,6 +1,11 @@
 // item.ts - Item/story page
 import type { Config, Context } from "@netlify/edge-functions";
-import { handleItem, handleNotFound, parsePositiveInt } from "./lib/handlers.ts";
+import {
+  handleItem,
+  handleNotFound,
+  parsePositiveInt,
+  withDictionaryEncoding,
+} from "./lib/handlers.ts";
 
 export default (request: Request, context: Context) => {
   const id = parsePositiveInt(context.params.id);
@@ -9,7 +14,7 @@ export default (request: Request, context: Context) => {
     return handleNotFound(request);
   }
 
-  return handleItem(request, id, context);
+  return withDictionaryEncoding(request, handleItem(request, id, context));
 };
 
 export const config: Config = {

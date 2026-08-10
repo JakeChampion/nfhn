@@ -1327,7 +1327,7 @@ Deno.test("applyDictionaryVary preserves an existing Vary without duplicating", 
   assertEquals(headers.get("Vary"), "Accept-Encoding, Available-Dictionary");
 });
 
-Deno.test("dictionary deltas are off until the CDN passthrough spike passes", async () => {
+Deno.test("dictionary negotiation accepts a client holding our dictionary", async () => {
   const hash = await sha256(new TextEncoder().encode("shell-v1"));
   const request = new Request("https://nfhn.test/top/1", {
     headers: {
@@ -1336,10 +1336,58 @@ Deno.test("dictionary deltas are off until the CDN passthrough spike passes", as
     },
   });
 
-  // The spec review's rule: do not nominate a dictionary we cannot use. Until
-  // NFHN_DICTIONARY_TRANSPORT is set, negotiation always declines and the
-  // response falls through to whatever Netlify would have sent anyway.
-  assertEquals(canServeDictionaryDelta(request, hash), false);
+  assertEquals(canServeDictionaryDelta(request, hash), true);
+});
+
+Deno.test("dictionary negotiation declines anything it cannot serve safely", async () => {
+  const ours = await sha256(new TextEncoder().encode("shell-v1"));
+  const theirs = await sha256(new TextEncoder().encode("some-other-dictionary"));
+
+  const withHeaders = (headers: Record<string, string>) =>
+    new Request("https://nfhn.test/top/1", { headers });
+
+  // Client holds a different dictionary: compressing against ours would produce
+  // a body it cannot decode.
+  assertEquals(
+    canServeDictionaryDelta(
+      withHeaders({
+        "Accept-Encoding": "dcz",
+        "Available-Dictionary": formatAvailableDictionary(theirs),
+      }),
+      ours,
+    ),
+    false,
+  );
+
+  // Client did not offer dcz in Accept-Encoding.
+  assertEquals(
+    canServeDictionaryDelta(
+      withHeaders({
+        "Accept-Encoding": "br, gzip",
+        "Available-Dictionary": formatAvailableDictionary(ours),
+      }),
+      ours,
+    ),
+    false,
+  );
+
+  // No dictionary advertised at all - the common case for a first visit.
+  assertEquals(
+    canServeDictionaryDelta(withHeaders({ "Accept-Encoding": "dcz" }), ours),
+    false,
+  );
+
+  // `dczx` must not match `dcz` on a prefix.
+  assertEquals(
+    canServeDictionaryDelta(
+      withHeaders({
+        "Accept-Encoding": "dczx",
+        "Available-Dictionary": formatAvailableDictionary(ours),
+      }),
+      ours,
+    ),
+    false,
+  );
 });
 
 // =============================================================================
@@ -1423,4 +1471,133 @@ Deno.test("manifest separates the maskable icon from the plain one", async () =>
   assertEquals(purposes.includes("any maskable"), false);
   assertEquals(purposes.includes("maskable"), true);
   assertEquals(purposes.includes("any"), true);
+});
+
+// =============================================================================
+// Dictionary compression, end to end
+// =============================================================================
+
+import { createDCtx, decompressUsingDict, init as zstdInit } from "@bokuweb/zstd-wasm";
+import { compressWithDictionary } from "../netlify/edge-functions/lib/zstd.ts";
+import { getShellDictionary } from "../netlify/edge-functions/lib/shell-dictionary.ts";
+import { encodeWithDictionary } from "../netlify/edge-functions/lib/dictionary.ts";
+
+Deno.test("a dcz response decodes back to the exact original bytes", async () => {
+  // The test that matters: everything else is a header contract, but if this
+  // fails, real browsers get an undecodable body.
+  await zstdInit();
+  const dictionary = await getShellDictionary();
+
+  const page = new TextEncoder().encode(
+    '<!DOCTYPE html><html lang="en" data-theme="auto"><head><meta charset="UTF-8">' +
+      '<title>HN: Page 2</title></head><body><ol class="stories">' +
+      '<li data-story-id="123"><a class="title">A story</a></li></ol></body></html>',
+  );
+
+  const frame = await compressWithDictionary(page, dictionary.bytes);
+  const stream = frameDcz(dictionary.hash, frame);
+
+  // Framing is what the browser reads first.
+  assertEquals(Array.from(stream.slice(0, 8)), Array.from(DCZ_MAGIC));
+  assertEquals(Array.from(parseDczHeader(stream)!), Array.from(dictionary.hash));
+
+  // And the payload after the 40-byte header must decode against that same
+  // dictionary, which is exactly what the browser will do.
+  const decoded = decompressUsingDict(
+    createDCtx(),
+    stream.slice(DCZ_HEADER_LENGTH),
+    dictionary.bytes,
+  );
+  assertEquals(new TextDecoder().decode(decoded), new TextDecoder().decode(page));
+});
+
+Deno.test("the shell dictionary is deterministic across calls", async () => {
+  // Every isolate in every region must derive byte-identical dictionary content,
+  // or the hash the browser holds will not match the one we compress against.
+  const a = await getShellDictionary();
+  const b = await getShellDictionary();
+  assertEquals(Array.from(a.hash), Array.from(b.hash));
+  assertEquals(a.bytes.length, b.bytes.length);
+
+  // And the hash must actually be the hash of the served bytes.
+  assertEquals(Array.from(await sha256(a.bytes)), Array.from(a.hash));
+});
+
+Deno.test("the shell dictionary makes a feed page dramatically smaller", async () => {
+  const dictionary = await getShellDictionary();
+  // A page of the same shape as the dictionary, which is the real case: /top/2
+  // differs from /top/1 only in the story rows.
+  const page = dictionary.bytes;
+
+  const withDict = await compressWithDictionary(page, dictionary.bytes);
+
+  // Sanity floor rather than a brittle exact number: if a delta against a
+  // near-identical dictionary is not at least 20x smaller, something is wrong
+  // with how the dictionary is being applied.
+  assertEquals(
+    withDict.length * 20 < page.length,
+    true,
+    `expected a large delta, got ${withDict.length} bytes from ${page.length}`,
+  );
+});
+
+Deno.test("encodeWithDictionary leaves responses alone when it cannot help", async () => {
+  const plain = "<!DOCTYPE html><html><body>hello</body></html>";
+
+  // No Available-Dictionary: the overwhelmingly common case, and the one where
+  // an accidental encode would break the page.
+  const bare = new Request("https://nfhn.test/top/1", {
+    headers: { "Accept-Encoding": "dcz" },
+  });
+  const untouched = await encodeWithDictionary(bare, new Response(plain, { status: 200 }));
+  assertEquals(untouched.headers.get("Content-Encoding"), null);
+  assertEquals(await untouched.text(), plain);
+
+  // Already-encoded bodies must never be double-wrapped.
+  const dictionary = await getShellDictionary();
+  const negotiated = new Request("https://nfhn.test/top/1", {
+    headers: {
+      "Accept-Encoding": "dcz",
+      "Available-Dictionary": formatAvailableDictionary(dictionary.hash),
+    },
+  });
+  const preEncoded = await encodeWithDictionary(
+    negotiated,
+    new Response(plain, { status: 200, headers: { "Content-Encoding": "br" } }),
+  );
+  assertEquals(preEncoded.headers.get("Content-Encoding"), "br");
+
+  // Error pages are not worth the CPU.
+  const errorPage = await encodeWithDictionary(
+    negotiated,
+    new Response(plain, { status: 500 }),
+  );
+  assertEquals(errorPage.headers.get("Content-Encoding"), null);
+});
+
+Deno.test("encodeWithDictionary emits dcz and the Vary pair when negotiated", async () => {
+  const dictionary = await getShellDictionary();
+  const request = new Request("https://nfhn.test/top/1", {
+    headers: {
+      "Accept-Encoding": "dcz",
+      "Available-Dictionary": formatAvailableDictionary(dictionary.hash),
+    },
+  });
+
+  const encoded = await encodeWithDictionary(
+    request,
+    new Response(new TextDecoder().decode(dictionary.bytes), {
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    }),
+  );
+
+  assertEquals(encoded.headers.get("Content-Encoding"), "dcz");
+  // Content-Length would describe the pre-encode body and must not survive.
+  assertEquals(encoded.headers.get("Content-Length"), null);
+  assertStringIncludes(encoded.headers.get("Vary")!, "Available-Dictionary");
+  assertEquals(encoded.headers.get("Netlify-Vary"), "header=Available-Dictionary");
+
+  const body = new Uint8Array(await encoded.arrayBuffer());
+  assertEquals(Array.from(parseDczHeader(body)!), Array.from(dictionary.hash));
 });

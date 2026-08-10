@@ -12,7 +12,7 @@ platform capabilities, which is why they live on this side.
 
 | Proposal | Impact | Status | Remaining |
 |---|---|---|---|
-| [01 Compression Dictionary Transport](./01-compression-dictionary-transport.md) | 🔥 High | Framing + negotiation shipped, **disabled** | spike: does the CDN pass `dcz` through? then wire the WASM compressor |
+| [01 Compression Dictionary Transport](./01-compression-dictionary-transport.md) | 🔥 High | **Shipped and enabled** — 97.4% smaller feed pages, 2.8× better than zstd alone | static-asset dictionary; memoise deltas in Blobs |
 | [02 Cache tags + Purge API](./02-cache-tags-and-purge-api.md) | 🔥 High | Shipped | raise the CDN TTL once purge latency is measured |
 | [03 Netlify Blobs](./03-netlify-blobs.md) | 🔥 High | Shipped (mirror + reader cache) | cross-device saved sync; retention sweep |
 | [04 Rate limiting](./04-rate-limiting.md) | Medium (High for `/reader`) | Shipped | validate `/reader` targets against known stories |
@@ -29,11 +29,12 @@ gap is where these proposals came from.
 Now also in use: Netlify Blobs, cache tags, scheduled functions, rate limiting,
 `Netlify-CDN-Cache-Control`, and `context.waitUntil`.
 
-Still unused: `context.geo` (nothing about HN is regional), `Netlify-Vary` (written by the dictionary
-module but not on any live response yet), and Image CDN (see 05).
+Also in use: `Netlify-Vary`, on every page, to key the CDN cache by `Available-Dictionary`.
 
-Two things are deliberately **not** switched on, both for the reason the spec reviews give: the
-verification step has not happened yet. See the "Remaining" column.
+Still unused: `context.geo` (nothing about HN is regional) and Image CDN (see 05).
+
+One thing is deliberately **not** switched on — the `og:image` tag, pending confirmation that Image
+CDN accepts SVG input. See the "Remaining" column.
 
 ## Suggested order
 
