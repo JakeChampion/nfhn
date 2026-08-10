@@ -1341,3 +1341,86 @@ Deno.test("dictionary deltas are off until the CDN passthrough spike passes", as
   // response falls through to whatever Netlify would have sent anyway.
   assertEquals(canServeDictionaryDelta(request, hash), false);
 });
+
+// =============================================================================
+// Open Graph cards and icon generation
+// =============================================================================
+
+import { renderCard, wrapTitle } from "../netlify/edge-functions/og.ts";
+import { buildMaskableIcon, MASKABLE_BACKGROUND, SAFE_ZONE_SCALE } from "../scripts/icons.ts";
+
+Deno.test("wrapTitle keeps short titles on one line", () => {
+  assertEquals(wrapTitle("Show HN: A tiny thing"), ["Show HN: A tiny thing"]);
+});
+
+Deno.test("wrapTitle wraps long titles and ellipsizes only when truncating", () => {
+  const long = "A ".repeat(200).trim();
+  const lines = wrapTitle(long);
+  assertEquals(lines.length, 4);
+  assertEquals(lines[3]!.endsWith("…"), true);
+
+  // A title that fits exactly must not gain a misleading ellipsis.
+  const fits = wrapTitle("one two three four five six");
+  assertEquals(fits.join("").includes("…"), false);
+});
+
+Deno.test("wrapTitle handles CJK titles without a whitespace split", () => {
+  // No spaces at all: a naive split would produce one unbreakable line.
+  const lines = wrapTitle("設計とプログラミングについての長い記事のタイトルです".repeat(3));
+  assertEquals(lines.length > 1, true);
+});
+
+Deno.test("renderCard escapes story text into the SVG", () => {
+  const svg = renderCard({
+    title: 'Bobby <script>alert("xss")</script> Tables',
+    points: 1,
+    user: "a&b",
+    comments: 2,
+    domain: "example.com",
+  });
+
+  // The card is served as image/svg+xml, which browsers parse as markup.
+  assertEquals(svg.includes("<script>"), false);
+  assertStringIncludes(svg, "&lt;script&gt;");
+  assertStringIncludes(svg, "a&amp;b");
+});
+
+Deno.test("renderCard uses the 1.91:1 dimensions platforms crop to", () => {
+  const svg = renderCard({ title: "T", points: 0, user: null, comments: 0, domain: null });
+  assertStringIncludes(svg, 'width="1200"');
+  assertStringIncludes(svg, 'height="630"');
+  // Singular/plural agreement on zero counts.
+  assertStringIncludes(svg, "0 points");
+  assertStringIncludes(svg, "0 comments");
+});
+
+Deno.test("buildMaskableIcon insets the artwork and adds an opaque backdrop", () => {
+  const source = '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">' +
+    '<path d="M0 0h10v10z"/></svg>';
+  const out = buildMaskableIcon(source);
+
+  // The manifest's previous "any maskable" claim failed on both counts: no safe
+  // zone, and transparent behind the artwork.
+  assertStringIncludes(out, `fill="${MASKABLE_BACKGROUND}"`);
+  assertStringIncludes(out, `scale(${SAFE_ZONE_SCALE})`);
+  assertStringIncludes(out, "translate(40 40)");
+  // Source artwork is carried through untouched, so the two cannot diverge.
+  assertStringIncludes(out, '<path d="M0 0h10v10z"/>');
+});
+
+Deno.test("buildMaskableIcon rejects a source that is not an SVG document", () => {
+  assertThrows(() => buildMaskableIcon("not an svg"));
+});
+
+Deno.test("manifest separates the maskable icon from the plain one", async () => {
+  const manifest = JSON.parse(
+    await Deno.readTextFile(new URL("../static/manifest.json", import.meta.url)),
+  );
+
+  const purposes = manifest.icons.map((icon: { purpose: string }) => icon.purpose);
+  // Declaring "any maskable" on artwork with no safe zone is a false claim; the
+  // two purposes now point at two different files.
+  assertEquals(purposes.includes("any maskable"), false);
+  assertEquals(purposes.includes("maskable"), true);
+  assertEquals(purposes.includes("any"), true);
+});

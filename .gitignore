@@ -5,3 +5,5 @@ node_modules
 coverage
 .coverage
 coverage_profile
+# Generated at build time from static/icon.svg by scripts/build.ts
+static/icon-maskable.svg

@@ -60,6 +60,23 @@ export const THEME_SCRIPT_HASH = "'sha256-6hO62gdSSJDQ6/I94TG7pbIBUb/WZCv/YmMI/I
 // `key-order` additionally ignores the order parameters appear in.
 export const NO_VARY_SEARCH = "params, key-order";
 
+// Open Graph images
+// The card itself is rendered as SVG by netlify/edge-functions/og.ts, which
+// needs no tooling. Social platforms require a raster, so the tag points at
+// Netlify Image CDN to convert it - and whether Image CDN accepts SVG input is
+// not documented. Off until that is confirmed on a deploy preview; with it off,
+// link previews are exactly as they are today (no image), so enabling it can
+// only be an improvement or a no-op.
+export const OG_IMAGES_ENABLED = Deno.env.get("NFHN_OG_IMAGES") === "1";
+export const OG_IMAGE_WIDTH = 1200;
+export const OG_IMAGE_HEIGHT = 630;
+
+/** Image CDN URL that rasterises a story's SVG card. */
+export const ogImageUrl = (id: number): string =>
+  `/.netlify/images?url=${
+    encodeURIComponent(`/og/item/${id}.svg`)
+  }&w=${OG_IMAGE_WIDTH}&h=${OG_IMAGE_HEIGHT}&fm=png`;
+
 // Reporting API (https://www.w3.org/TR/reporting-1/)
 // The endpoint group named by `Reporting-Endpoints` and by the CSP `report-to`
 // directive. Both must agree, so they read from the same constant.

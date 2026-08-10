@@ -2,7 +2,13 @@
 
 import { type HTML, html as tpl, unsafeHTML } from "../html.ts";
 import { type FeedSlug, type Item, type SubmissionItem, type User } from "../hn.ts";
-import { NO_VARY_SEARCH } from "../config.ts";
+import {
+  NO_VARY_SEARCH,
+  OG_IMAGE_HEIGHT,
+  OG_IMAGE_WIDTH,
+  OG_IMAGES_ENABLED,
+  ogImageUrl,
+} from "../config.ts";
 import {
   articleJsonLd,
   backToTop,
@@ -159,6 +165,7 @@ const shellPage = (
   body: HTML,
   canonicalUrl?: string,
   description?: string,
+  ogImage?: string,
 ): HTML =>
   (async function* (): AsyncGenerator<string> {
     yield* tpl`
@@ -176,7 +183,14 @@ const shellPage = (
     ${description ? tpl`<meta property="og:description" content="${description}" />` : ""}
     ${canonicalUrl ? tpl`<meta property="og:url" content="${canonicalUrl}" />` : ""}
     <meta property="og:site_name" content="HN">
-    <meta name="twitter:card" content="summary">
+    ${
+      ogImage
+        ? tpl`<meta property="og:image" content="${ogImage}" />
+    <meta property="og:image:width" content="${String(OG_IMAGE_WIDTH)}" />
+    <meta property="og:image:height" content="${String(OG_IMAGE_HEIGHT)}" />
+    <meta name="twitter:card" content="summary_large_image" />`
+        : tpl`<meta name="twitter:card" content="summary" />`
+    }
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     ${sharedStyles(1)}
     <title>${title}</title>
@@ -278,6 +292,9 @@ export const article = (item: Item, canonicalUrl?: string, staleSince?: number):
     `,
     canonicalUrl,
     `Hacker News discussion: ${item.title}`,
+    OG_IMAGES_ENABLED && canonicalUrl
+      ? new URL(ogImageUrl(item.id), canonicalUrl).toString()
+      : undefined,
   );
 };
 
