@@ -1885,11 +1885,36 @@ main {
     animation: 150ms ease-out both fade-out,
                150ms ease-out both slide-to-right;
   }
-  
+
   &::view-transition-new(main-content) {
     animation: 150ms ease-in 50ms both fade-in,
                150ms ease-in 50ms both slide-from-left;
   }
+}
+
+/* Feed -> story and back. The story title carries a matching
+   view-transition-name on both pages (emitted per-story by
+   components.ts), so it morphs from the list row into the article
+   heading. The page itself only crossfades, so the travelling title is
+   the thing the eye follows rather than competing with a slide. */
+:root:active-view-transition-type(drill-in),
+:root:active-view-transition-type(drill-out) {
+  &::view-transition-old(main-content) {
+    animation: 120ms ease-out both fade-out;
+  }
+
+  &::view-transition-new(main-content) {
+    animation: 180ms ease-in 60ms both fade-in;
+  }
+}
+
+/* The shared title element. Each story title is given
+   `view-transition-class: story-title` alongside its unique
+   view-transition-name, so one rule can slow the morph slightly without
+   naming every story id. */
+::view-transition-group(.story-title) {
+  animation-duration: 250ms;
+  animation-timing-function: ease-in-out;
 }
 
 @keyframes slide-from-left {
@@ -1908,6 +1933,71 @@ main {
   ::view-transition-old(*),
   ::view-transition-new(*) {
     animation: none !important;
+  }
+}
+
+/* =============================================================================
+   content-visibility - skip rendering off-screen comment subtrees
+   (Baseline: Chromium 85+, Firefox 125+, Safari 18+)
+   See docs/api-proposals/12-content-visibility.md
+   ============================================================================= */
+
+/* A busy HN thread is 1,000+ comments and several thousand DOM nodes, all of
+   which are laid out, styled and painted before the page is interactive - to
+   show about eight of them. content-visibility: auto lets the browser skip that
+   work for subtrees that are off-screen and do it lazily on scroll.
+
+   contain-intrinsic-size uses the `auto <length>` form deliberately: comment
+   heights vary enormously (a one-line "this" next to a forty-line code block),
+   so a fixed estimate would make the scrollbar lurch every time it was wrong.
+   `auto` remembers each element's last-rendered size, so any given subtree is
+   mis-estimated at most once.
+
+   Find-in-page and fragment navigation both still work: the browser forces
+   rendering of a skipped subtree to search it, and scrolls to the match. */
+[aria-label="Comments"] > details,
+[aria-label="Comments"] ul > li {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 8rem;
+}
+
+/* Story rows are only ~30 per page, but the win is free. */
+.stories > li {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 4rem;
+}
+
+/* =============================================================================
+   Animated comment collapse - ::details-content + interpolate-size
+   (Chromium 129+/131+, Safari 18.4+; Firefox in progress)
+   See docs/api-proposals/13-details-content-animation.md
+   ============================================================================= */
+
+/* Animating height from 0 to auto has been the canonical impossible CSS problem.
+   interpolate-size: allow-keywords makes transitions to intrinsic keywords legal,
+   ::details-content exposes the previously-unstylable wrapper inside <details>,
+   and allow-discrete keeps the content present while it closes.
+
+   Doing this in CSS rather than JS matters here specifically: the CSP is
+   script-src 'self' plus a single pinned hash, so every interaction that stays
+   in CSS is one that never needs a handler or a hash update. */
+@supports (interpolate-size: allow-keywords) {
+  :root {
+    interpolate-size: allow-keywords;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [aria-label="Comments"] details::details-content {
+      block-size: 0;
+      overflow: clip;
+      transition:
+        block-size 250ms ease,
+        content-visibility 250ms allow-discrete;
+    }
+
+    [aria-label="Comments"] details[open]::details-content {
+      block-size: auto;
+    }
   }
 }
 

@@ -227,6 +227,42 @@ export const sharedStyles = (pageNumber = 1): HTML => {
   `;
 };
 
+// --- Shared-element view transition names ---
+//
+// Giving a story title the same view-transition-name on the feed and on its own
+// page makes the title travel from the list into the article heading, instead of
+// the whole page crossfading. Names must be unique per document, which they are:
+// a story appears at most once per feed page.
+//
+// This is emitted as a <style> block rather than a style attribute because the
+// CSP sets `style-src-attr 'none'`. Inline <style> elements are already the
+// established pattern here (see the counter-set above).
+
+const transitionNameFor = (id: number): string => `story-${id}`;
+
+export const feedTransitionNames = (items: Item[]): HTML => {
+  if (!items.length) return html``;
+  const rules = items
+    .map((item) =>
+      `li[data-story-id="${item.id}"] .story-title-text{view-transition-name:${
+        transitionNameFor(item.id)
+      };view-transition-class:story-title}`
+    )
+    .join("");
+  return html`
+    <style>${unsafeHTML(rules)}</style>
+  `;
+};
+
+export const itemTransitionName = (id: number): HTML =>
+  html`
+    <style>${unsafeHTML(
+      `.story-heading{view-transition-name:${
+        transitionNameFor(id)
+      };view-transition-class:story-title}`,
+    )}</style>
+  `;
+
 // --- Theme toggle ---
 
 export const themeToggle = (): HTML =>
