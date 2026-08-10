@@ -17,6 +17,17 @@ This directory contains detailed proposals for incorporating modern web APIs and
 | [Priority Hints](./09-priority-hints.md) | Baseline 2023 | Medium | Low | ✅ **Implemented** |
 | [CSS :has()](./10-css-has-selector.md) | Baseline 2023 | 🔥 High | Low | ✅ **Implemented** |
 | [Compression Streams](./11-compression-streams-api.md) | Baseline 2023 | Medium | Medium | Proposed |
+| [content-visibility](./12-content-visibility.md) | Baseline | 🔥 High | Low | Proposed |
+| [::details-content + interpolate-size](./13-details-content-animation.md) | Chromium + Safari | Medium | Low | Proposed |
+| [Invoker Commands](./14-invoker-commands.md) | Baseline 2025 | Medium | Low | Proposed |
+| [Built-in AI (Summarizer)](./15-built-in-ai.md) | Chrome desktop | 🔥 High | Medium | Proposed |
+| [SW Static Routing](./16-service-worker-routing.md) | Chromium | Medium | Low | Proposed |
+| [Typography + Intl](./17-typography-and-i18n.md) | mixed | Medium | Low | Proposed |
+| [PWA integration surface](./18-pwa-integration-surface.md) | mixed | Medium | Low | Proposed |
+| [View Transition types](./19-view-transition-types-and-speculation.md) | Chromium 125+ | Medium | Low | Proposed |
+
+Platform-side proposals — Netlify Blobs, cache tags, rate limiting, compression dictionaries — live in
+[`../netlify-proposals/`](../netlify-proposals/README.md).
 
 ## Implementation Priority
 
@@ -36,6 +47,26 @@ This directory contains detailed proposals for incorporating modern web APIs and
 9. **Compression Streams** - Reduce storage usage
 10. **File System Access** - Export/import saved stories
 11. **Document PiP** - Floating reader mode
+
+### Phase 4: Proposed 2026-08 (12–19)
+
+Ordered by value-per-hour rather than by number:
+
+1. **[content-visibility](./12-content-visibility.md)** - two CSS properties, and the biggest
+   remaining rendering cost on the site (1,000-comment threads) largely goes away
+2. **[Intl.RelativeTimeFormat](./17-typography-and-i18n.md)** - fixes a real bug: cached pages
+   currently show relative timestamps frozen at render time
+3. **[SW static routing + navigation preload](./16-service-worker-routing.md)** - removes service
+   worker cold-start from the critical path of every navigation
+4. **[expects_no_vary_search](./19-view-transition-types-and-speculation.md)** - completes the
+   No-Vary-Search work already shipped; a few lines
+5. **[share_target](./18-pwa-integration-surface.md)** - makes NFHN a target in the OS share sheet,
+   feeding straight into reader mode
+6. **[::details-content animation](./13-details-content-animation.md)** and
+   **[Invoker Commands](./14-invoker-commands.md)** - comment collapse becomes animated and
+   scriptless, which suits the strict CSP
+7. **[Built-in AI](./15-built-in-ai.md)** - the most interesting and the most work: on-device thread
+   summarisation with no server, no key and no data leaving the device
 
 ## Already Implemented
 
