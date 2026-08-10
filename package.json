@@ -16,7 +16,9 @@
   },
   "homepage": "https://github.com/JakeChampion/nfhn#readme",
   "dependencies": {
-    "@netlify/edge-functions": "^3.0.2"
+    "@netlify/blobs": "^10.7.12",
+    "@netlify/edge-functions": "^3.0.2",
+    "@netlify/functions": "^5.3.0"
   },
   "devDependencies": {
     "husky": "^9.0.0"

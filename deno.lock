@@ -64,7 +64,9 @@
     ],
     "packageJson": {
       "dependencies": [
+        "npm:@netlify/blobs@^10.7.12",
         "npm:@netlify/edge-functions@^3.0.2",
+        "npm:@netlify/functions@^5.3.0",
         "npm:husky@9"
       ]
     }

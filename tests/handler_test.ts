@@ -14,6 +14,7 @@ import {
   waiterFrom,
 } from "../netlify/edge-functions/lib/background.ts";
 import { THEME_SCRIPT_HASH } from "../netlify/edge-functions/lib/config.ts";
+import { applyCacheTags } from "../netlify/edge-functions/lib/security.ts";
 import { FEEDS } from "../netlify/edge-functions/lib/feeds.ts";
 import sitemapHandler from "../netlify/edge-functions/sitemap.ts";
 import savedHandler from "../netlify/edge-functions/saved.ts";
@@ -2006,4 +2007,67 @@ Deno.test("stories with no comments render no thread controls", async () => {
     assertStringIncludes(body, "No comments yet.");
     assertEquals(body.includes('command="--collapse-all"'), false);
   });
+});
+
+// =============================================================================
+// Cache tags (Netlify-Cache-Tag)
+// =============================================================================
+
+Deno.test("feed pages are tagged with the feed and every story on them", async () => {
+  const routes = {
+    [topStoriesUrl]: [
+      { ...noVarySearchStory, id: 11 },
+      { ...noVarySearchStory, id: 22 },
+    ],
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/1"));
+    await res.text();
+
+    const tags = (res.headers.get("netlify-cache-tag") ?? "").split(",");
+    assertEquals(tags.includes("feed:top"), true);
+    // Tagging each story means purging one story also drops the listings it
+    // appears on - without that, a raised CDN TTL would show stale rankings.
+    assertEquals(tags.includes("item:11"), true);
+    assertEquals(tags.includes("item:22"), true);
+  });
+});
+
+Deno.test("item pages are tagged with the item and its author", async () => {
+  const routes = {
+    "https://api.hnpwa.com/v0/item/321.json": {
+      id: 321,
+      title: "Tagged Story",
+      points: 5,
+      user: "tagger",
+      time: Math.floor(Date.now() / 1000),
+      type: "link",
+      url: "https://example.com",
+      domain: "example.com",
+      comments_count: 0,
+      comments: [],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/item/321"));
+    await res.text();
+
+    const tags = (res.headers.get("netlify-cache-tag") ?? "").split(",");
+    assertEquals(tags.includes("item:321"), true);
+    assertEquals(tags.includes("user:tagger"), true);
+  });
+});
+
+Deno.test("applyCacheTags deduplicates and skips empty tag sets", () => {
+  const headers = new Headers();
+  applyCacheTags(headers, ["item:1", "item:1", "feed:top", ""]);
+  assertEquals(headers.get("Netlify-Cache-Tag"), "item:1,feed:top");
+
+  const empty = new Headers();
+  applyCacheTags(empty, []);
+  // No header at all is better than an empty one: an empty tag list would
+  // otherwise look like a valid purge target.
+  assertEquals(empty.get("Netlify-Cache-Tag"), null);
 });
