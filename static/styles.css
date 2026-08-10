@@ -2016,6 +2016,29 @@ p, .comment-content, .story-meta {
 }
 
 /* =============================================================================
+   text-box-trim - optical vertical rhythm
+   (Safari 18.2+, Chromium 133+; Firefox in progress)
+   See docs/api-proposals/17-typography-and-i18n.md
+   ============================================================================= */
+
+/* Text carries invisible leading above the cap height and below the baseline,
+   which is why a heading in a padded box never looks vertically centred and why
+   the gap under a <summary> never quite matches the designed value. Trimming to
+   cap height and baseline means declared spacing is the spacing you see.
+
+   This matters more here than on most sites: the comment list is dense and
+   deeply nested, so every level currently accumulates a little optical drift. */
+@supports (text-box: trim-both cap alphabetic) {
+  h1,
+  h2,
+  .story-title-text,
+  .story-heading,
+  .comment-meta {
+    text-box: trim-both cap alphabetic;
+  }
+}
+
+/* =============================================================================
    Popover API styles (Baseline 2024)
    ============================================================================= */
 

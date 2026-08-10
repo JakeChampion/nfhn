@@ -20,6 +20,7 @@ import {
   pwaHeadTags,
   readerModeLink,
   readingProgress,
+  relativeTime,
   renderStory,
   shareButton,
   sharedStyles,
@@ -246,13 +247,13 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
       // Job with no comments: hide points/comments line, just show "posted X ago"
       item.type === "job" && item.comments_count === 0
         ? tpl`
-              <p class="meta-line">posted ${item.time_ago}</p>
+              <p class="meta-line">posted ${relativeTime(item.time, item.time_ago)}</p>
             `
         : tpl`
               <p class="meta-line">
-                ${item.points ?? 0} points by ${
-          item.user ? userLink(item.user) : "[deleted]"
-        } ${item.time_ago}
+                ${item.points ?? 0} points by ${item.user ? userLink(item.user) : "[deleted]"} ${
+          relativeTime(item.time, item.time_ago)
+        }
                 · ${totalComments} comment${totalComments === 1 ? "" : "s"}${
           loadedComments !== totalComments ? tpl` (${loadedComments} loaded)` : ""
         }
@@ -293,7 +294,7 @@ const renderSubmissionItem = (item: SubmissionItem, index: number): HTML =>
       </span>
       <span class="story-meta">
         ${item.points} point${item.points === 1 ? "" : "s"} · 
-        ${item.time_ago} · 
+        ${relativeTime(item.time, item.time_ago)} · 
         <a href="/item/${item.id}">${item.comments_count} comment${
     item.comments_count === 1 ? "" : "s"
   }</a>

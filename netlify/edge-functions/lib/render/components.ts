@@ -227,6 +227,28 @@ export const sharedStyles = (pageNumber = 1): HTML => {
   `;
 };
 
+// --- Relative timestamps ---
+//
+// A relative string rendered on the server is frozen at render time. These pages
+// sit in the edge cache for up to five minutes and in the browser's cache for
+// longer, so "1 minute ago" is routinely six minutes old by the time it is read.
+//
+// Emitting <time datetime> fixes three things at once: the machine-readable
+// timestamp is correct however long the page was cached, app.js can re-render it
+// against the reader's clock and locale with Intl.RelativeTimeFormat, and the
+// markup is finally consistent with the JSON-LD, which has always used ISO dates.
+// The server-rendered text stays as the no-JS fallback.
+//
+// See docs/api-proposals/17-typography-and-i18n.md
+
+export const relativeTime = (unixSeconds: number | undefined, text: string): HTML => {
+  if (!unixSeconds || !Number.isFinite(unixSeconds)) {
+    return html`${text}`;
+  }
+  const iso = new Date(unixSeconds * 1000).toISOString();
+  return html`<time datetime="${iso}">${text}</time>`;
+};
+
 // --- Shared-element view transition names ---
 //
 // Giving a story title the same view-transition-name on the feed and on its own
@@ -598,7 +620,10 @@ export const renderComment = (comment: HNAPIItem, level: number, opUser?: string
       <summary aria-label="Comment by ${user}${isOP ? " (OP)" : ""}, posted ${time_ago}">
         <span class="comment-meta">
           ${userDisplay}
-          <a class="comment-permalink" href="#${comment.id}">${time_ago}</a>
+          <a class="comment-permalink" href="#${comment.id}">${relativeTime(
+            comment.time,
+            time_ago,
+          )}</a>
         </span>
       </summary>
       <div>${content}</div>

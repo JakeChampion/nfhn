@@ -63,5 +63,31 @@
     }
   ],
   "related_applications": [],
-  "prefer_related_applications": false
+  "prefer_related_applications": false,
+  "share_target": {
+    "action": "/share",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
+  "protocol_handlers": [
+    {
+      "protocol": "web+hn",
+      "url": "/item/%s"
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": "/saved",
+      "accept": {
+        "application/json": [".json"]
+      }
+    }
+  ]
 }
