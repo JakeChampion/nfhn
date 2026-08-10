@@ -94,7 +94,7 @@ export const home = (
     ${canonicalUrl ? tpl`<link rel="canonical" href="${canonicalUrl}">` : ""}
     <meta name="description" content="Hacker News ${feed} page ${pageNumber}: latest ${feed} stories.">
     <meta property="og:type" content="website">
-    <meta property="og:title" content="NFHN: ${
+    <meta property="og:title" content="HN: ${
     feed.charAt(0).toUpperCase() + feed.slice(1)
   } Stories - Page ${pageNumber}">
     <meta property="og:description" content="Hacker News ${feed} page ${pageNumber}: latest ${feed} stories.">
@@ -105,9 +105,9 @@ export const home = (
     ${sharedStyles(pageNumber)}
     ${
     websiteJsonLd({
-      name: "NFHN - Hacker News Reader",
-      url: "https://nfhn.netlify.app",
-      description: "A fast, accessible Hacker News reader built with Netlify Edge Functions.",
+      name: "Hacker News Reader",
+      url: "https://hn.jakechampion.name",
+      description: "A fast, accessible Hacker News reader.",
     })
   }
     <title>NFHN: Page ${pageNumber}</title>
