@@ -99,7 +99,7 @@ export const home = (
   } Stories - Page ${pageNumber}">
     <meta property="og:description" content="Hacker News ${feed} page ${pageNumber}: latest ${feed} stories.">
     ${canonicalUrl ? tpl`<meta property="og:url" content="${canonicalUrl}">` : ""}
-    <meta property="og:site_name" content="NFHN">
+    <meta property="og:site_name" content="HN">
     <meta name="twitter:card" content="summary">
     <link rel="icon" type="image/svg+xml" href="/icon.svg">
     ${sharedStyles(pageNumber)}
@@ -110,7 +110,7 @@ export const home = (
       description: "A fast, accessible Hacker News reader.",
     })
   }
-    <title>NFHN: Page ${pageNumber}</title>
+    <title>HN: Page ${pageNumber}</title>
   </head>
   <body>
     ${readingProgress()}
@@ -153,7 +153,7 @@ const shellPage = (
     <meta property="og:title" content="${title}">
     ${description ? tpl`<meta property="og:description" content="${description}" />` : ""}
     ${canonicalUrl ? tpl`<meta property="og:url" content="${canonicalUrl}" />` : ""}
-    <meta property="og:site_name" content="NFHN">
+    <meta property="og:site_name" content="HN">
     <meta name="twitter:card" content="summary">
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     ${sharedStyles(1)}
@@ -200,13 +200,13 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
     title: item.title,
     author: item.user,
     datePublished: item.time,
-    url: item.url ?? canonicalUrl ?? `https://nfhn.netlify.app/item/${item.id}`,
+    url: item.url ?? canonicalUrl ?? `https://hn.jakechampion.name/item/${item.id}`,
     commentCount: totalComments,
     discussionUrl: `https://news.ycombinator.com/item?id=${item.id}`,
   });
 
   return shellPage(
-    `NFHN: ${item.title}`,
+    `HN: ${item.title}`,
     tpl`
       ${structuredData}
       ${headerBar(activeFeed)}
@@ -288,7 +288,7 @@ export const userProfile = (
   canonicalUrl?: string,
 ): HTML =>
   shellPage(
-    `NFHN: ${user.id}`,
+    `HN: ${user.id}`,
     tpl`
       ${headerBar("top")}
       <main id="main-content" aria-label="Main content">
@@ -349,14 +349,14 @@ export const savedPage = (canonicalUrl?: string): HTML =>
     ${canonicalUrl ? tpl`<link rel="canonical" href="${canonicalUrl}">` : ""}
     <meta name="description" content="Your saved Hacker News stories for offline reading.">
     <meta property="og:type" content="website">
-    <meta property="og:title" content="NFHN: Saved Stories">
+    <meta property="og:title" content="HN: Saved Stories">
     <meta property="og:description" content="Your saved Hacker News stories for offline reading.">
     ${canonicalUrl ? tpl`<meta property="og:url" content="${canonicalUrl}">` : ""}
-    <meta property="og:site_name" content="NFHN">
+    <meta property="og:site_name" content="HN">
     <meta name="twitter:card" content="summary">
     <link rel="icon" type="image/svg+xml" href="/icon.svg">
     ${sharedStyles(1)}
-    <title>NFHN: Saved Stories</title>
+    <title>HN: Saved Stories</title>
   </head>
   <body>
     ${readingProgress()}
