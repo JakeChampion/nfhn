@@ -42,8 +42,11 @@ jobs:
           ! grep -rE "\.innerHTML\s*=" netlify/edge-functions tests --include="*.ts" || echo "Warning: innerHTML assignment found"
           echo "Security checks completed"
 
+      # Keep these flags in sync with the test scripts in package.json.
+      # --allow-read: some tests assert against the real files in static/,
+      # e.g. that the sitemap robots.txt advertises is actually served.
       - name: Run tests with coverage
-        run: deno test --allow-net --allow-env --coverage=coverage tests/
+        run: deno test --allow-net --allow-env --allow-read --coverage=coverage tests/
 
       - name: Generate coverage report
         run: deno coverage coverage --lcov > coverage/lcov.info
