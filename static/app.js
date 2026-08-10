@@ -476,32 +476,73 @@ document.querySelectorAll('a[href^="http"]:not(.reader-mode-link)').forEach((lin
   });
 })();
 
-// --- Navigation API for View Transitions ---
-(function initNavigationAPI() {
-  // Use Navigation API if available for enhanced view transitions
-  if (!("navigation" in window)) return;
+// --- View transition types ---
+//
+// Cross-document view transitions are opted into from CSS (@view-transition in
+// styles.css). This classifies each navigation and hands the result to the
+// transition as a *type*, which is what `:active-view-transition-type(...)`
+// selectors match on. Without this every navigation animates identically:
+// paging forward looks the same as going back, and drilling into a story looks
+// the same as returning from one.
+//
+// Types are assigned in both pageswap (outgoing document) and pagereveal
+// (incoming document) because each side runs its own half of the animation.
+(function initViewTransitionTypes() {
+  const routeKind = (pathname) => {
+    const feed = pathname.match(/^\/(top|newest|ask|show|jobs)\/(\d+)$/);
+    if (feed) return { kind: "feed", feed: feed[1], page: Number(feed[2]) };
+    if (/^\/item\/\d+$/.test(pathname)) return { kind: "item" };
+    if (/^\/user\//.test(pathname)) return { kind: "user" };
+    return { kind: "other" };
+  };
 
-  let lastDirection = null;
+  // Returns the transition type for a navigation, or null to leave the default.
+  const classify = (fromUrl, toUrl) => {
+    if (!fromUrl || !toUrl) return null;
 
-  navigation.addEventListener("navigate", function (e) {
-    // Determine navigation direction for view transition animations
-    const currentIndex = navigation.currentEntry?.index ?? 0;
-    const destinationIndex = e.destination?.index ?? currentIndex;
+    let from, to;
+    try {
+      from = new URL(fromUrl);
+      to = new URL(toUrl);
+    } catch {
+      return null;
+    }
+    if (from.origin !== to.origin) return null;
 
-    if (destinationIndex < currentIndex) {
-      lastDirection = "backward";
-    } else if (destinationIndex > currentIndex) {
-      lastDirection = "forward";
-    } else {
-      lastDirection = null;
+    const a = routeKind(from.pathname);
+    const b = routeKind(to.pathname);
+
+    // Paging within one feed: direction follows the page number.
+    if (a.kind === "feed" && b.kind === "feed" && a.feed === b.feed) {
+      if (b.page > a.page) return "forward";
+      if (b.page < a.page) return "backward";
+      return null;
     }
 
-    // Set direction as data attribute for CSS view transitions
-    if (lastDirection) {
-      document.documentElement.dataset.navDirection = lastDirection;
-    } else {
-      delete document.documentElement.dataset.navDirection;
-    }
+    // Feed to story and back: the story title is a shared element, so these get
+    // their own types rather than the horizontal slide used for paging.
+    if (a.kind === "feed" && b.kind === "item") return "drill-in";
+    if (a.kind === "item" && b.kind === "feed") return "drill-out";
+
+    return null;
+  };
+
+  const apply = (transition, fromUrl, toUrl) => {
+    if (!transition || !transition.types) return;
+    const type = classify(fromUrl, toUrl);
+    if (type) transition.types.add(type);
+  };
+
+  addEventListener("pageswap", (event) => {
+    if (!event.viewTransition) return;
+    const activation = event.activation;
+    apply(event.viewTransition, activation?.from?.url, activation?.entry?.url);
+  });
+
+  addEventListener("pagereveal", (event) => {
+    if (!event.viewTransition) return;
+    const from = globalThis.navigation?.activation?.from?.url;
+    apply(event.viewTransition, from, location.href);
   });
 })();
 

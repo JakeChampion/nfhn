@@ -1521,6 +1521,64 @@ Deno.test("pages advertise No-Vary-Search so decorated URLs reuse the cache", as
   });
 });
 
+Deno.test("speculation rules declare the same No-Vary-Search the server sends", async () => {
+  const routes = { [topStoriesUrl]: [noVarySearchStory] };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/1"));
+    const body = await res.text();
+    const header = res.headers.get("no-vary-search");
+
+    assert(header, "expected a No-Vary-Search header");
+    // A prefetch still in flight has no response header yet, so the browser
+    // cannot know a decorated URL matches it. expects_no_vary_search closes
+    // that window - and only works if it matches what the server actually
+    // sends, hence asserting against the header rather than a literal.
+    assertStringIncludes(body, `"expects_no_vary_search": "${header}"`);
+
+    const declarations = body.match(/"expects_no_vary_search"/g) ?? [];
+    assertEquals(
+      declarations.length,
+      2,
+      "both the prefetch and prerender rules should declare it",
+    );
+  });
+});
+
+Deno.test("story titles carry matching view-transition-names on feed and item pages", async () => {
+  const routes = {
+    [topStoriesUrl]: [{ ...noVarySearchStory, id: 4242 }],
+    "https://api.hnpwa.com/v0/item/4242.json": {
+      id: 4242,
+      title: "Tracked Story",
+      points: 10,
+      user: "author",
+      time: Math.floor(Date.now() / 1000) - 3600,
+      type: "link",
+      url: "https://example.com",
+      domain: "example.com",
+      comments_count: 0,
+      comments: [],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    const feed = await handler(new Request("https://nfhn.test/top/1"));
+    const feedBody = await feed.text();
+    assertStringIncludes(
+      feedBody,
+      'li[data-story-id="4242"] .story-title-text{view-transition-name:story-4242',
+    );
+
+    const item = await handler(new Request("https://nfhn.test/item/4242"));
+    const itemBody = await item.text();
+    // Same name on both pages is what makes the title morph rather than
+    // crossfade; if these ever drift apart the effect silently degrades.
+    assertStringIncludes(itemBody, "view-transition-name:story-4242");
+    assertStringIncludes(itemBody, "view-transition-class:story-title");
+  });
+});
+
 Deno.test("tracking parameters reuse the cached entry instead of re-rendering", async () => {
   const routes = {
     [topStoriesUrl]: [noVarySearchStory],

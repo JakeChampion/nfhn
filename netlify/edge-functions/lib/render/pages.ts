@@ -2,6 +2,7 @@
 
 import { type HTML, html as tpl, unsafeHTML } from "../html.ts";
 import { type FeedSlug, type Item, type SubmissionItem, type User } from "../hn.ts";
+import { NO_VARY_SEARCH } from "../config.ts";
 import {
   articleJsonLd,
   backToTop,
@@ -9,8 +10,10 @@ import {
   commentsSection,
   countComments,
   estimateReadingTime,
+  feedTransitionNames,
   getTypeMeta,
   headerBar,
+  itemTransitionName,
   justifyScript,
   keyboardNavScript,
   pipReaderButton,
@@ -29,6 +32,18 @@ import {
 // --- Speculation Rules for prefetching/prerendering ---
 // Uses the declarative Speculation Rules API (Chrome 109+)
 // Replaces JavaScript-based prefetch with native browser prefetching
+//
+// `expects_no_vary_search` mirrors the `No-Vary-Search` response header set in
+// lib/security.ts, and closes the gap that header alone leaves open. When a
+// click arrives on a link decorated with `?utm_source=…`, the browser looks for
+// that exact URL in its prefetch cache. If the prefetch for the clean URL has
+// *completed*, its response header is known and the entries match. If it is
+// still in flight there is no header yet, so the browser cannot know they are
+// equivalent and starts a second, redundant fetch. Declaring it up front closes
+// that window. The value must match what the server actually sends, so it is
+// interpolated from the same constant rather than written out twice.
+//
+// See docs/api-proposals/19-view-transition-types-and-speculation.md
 
 const speculationRules = (): HTML =>
   tpl`<script type="speculationrules">
@@ -43,7 +58,8 @@ const speculationRules = (): HTML =>
           { "not": { "selector_matches": ".external-link" } }
         ]
       },
-      "eagerness": "moderate"
+      "eagerness": "moderate",
+      "expects_no_vary_search": "${NO_VARY_SEARCH}"
     }
   ],
   "prefetch": [
@@ -55,7 +71,8 @@ const speculationRules = (): HTML =>
           { "not": { "href_matches": "/reader*" } }
         ]
       },
-      "eagerness": "conservative"
+      "eagerness": "conservative",
+      "expects_no_vary_search": "${NO_VARY_SEARCH}"
     }
   ]
 }
@@ -103,6 +120,7 @@ export const home = (
     <meta name="twitter:card" content="summary">
     <link rel="icon" type="image/svg+xml" href="/icon.svg">
     ${sharedStyles(pageNumber)}
+    ${feedTransitionNames(content)}
     ${
     websiteJsonLd({
       name: "Hacker News Reader",
@@ -209,6 +227,7 @@ export const article = (item: Item, canonicalUrl?: string): HTML => {
     `HN: ${item.title}`,
     tpl`
       ${structuredData}
+      ${itemTransitionName(item.id)}
       ${headerBar(activeFeed)}
       <main id="main-content" aria-label="Main content">
         <article>
