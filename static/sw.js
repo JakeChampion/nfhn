@@ -1,5 +1,6 @@
 // Service Worker for NFHN
-const CACHE_NAME = "nfhn1-__DEPLOY_ID__";
+const DEPLOY_ID = "__DEPLOY_ID__";
+const CACHE_NAME = "nfhn1-" + DEPLOY_ID;
 const SAVED_CACHE_NAME = "nfhn-saved-v1";
 const STATIC_ASSETS = [
   "/styles.css",
@@ -9,6 +10,20 @@ const STATIC_ASSETS = [
   "/offline.html",
   "/saved",
 ];
+
+// Assets the pages request with `?v=<deploy id>`.
+//
+// Those two are served `immutable` for a year so they can be used as compression
+// dictionaries, which is only safe because the URL changes every deploy - see
+// netlify/edge-functions/asset.ts. The precache has to store them under the *same*
+// URL the pages ask for, or the entry is there and never found: `caches.match`
+// keys on the full URL, query included.
+const VERSIONED_ASSETS = ["/styles.css", "/app.js"];
+
+// The URL to precache a given asset under, and the one the pages request.
+function assetUrl(path) {
+  return VERSIONED_ASSETS.includes(path) ? path + "?v=" + DEPLOY_ID : path;
+}
 
 // Static routes, applied by the browser *before* the service worker starts.
 //
@@ -71,7 +86,7 @@ self.addEventListener("install", (event) => {
 
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
+      return cache.addAll(STATIC_ASSETS.map(assetUrl));
     }),
   );
   self.skipWaiting();
@@ -110,11 +125,22 @@ self.addEventListener("fetch", (event) => {
   if (STATIC_ASSETS.some((asset) => url.pathname === asset)) {
     event.respondWith(
       caches.match(request).then((cached) => {
-        return cached || fetch(request).then((response) => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          return response;
-        });
+        if (cached) return cached;
+        // Same asset, different `?v=`. Two ways to get here: an unversioned
+        // reference (offline.html links plain /styles.css), or a deploy id that
+        // differs from the one the pages ask for. The search-insensitive lookup is
+        // scoped to *this* deploy's cache, which holds exactly one version of each
+        // asset - widening it to caches.match would risk answering with the
+        // previous deploy's copy in the window before activate() prunes it.
+        return caches.open(CACHE_NAME)
+          .then((cache) => cache.match(request, { ignoreSearch: true }))
+          .then((sameAsset) =>
+            sameAsset || fetch(request).then((response) => {
+              const clone = response.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+              return response;
+            })
+          );
       }),
     );
     return;

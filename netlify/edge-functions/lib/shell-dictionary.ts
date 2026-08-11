@@ -9,9 +9,9 @@
 // than a hand-maintained list of fragments means it cannot drift: whatever the
 // renderer emits is what the dictionary contains.
 //
-// It is deterministic - fixed synthetic stories, fixed page number, no clock -
-// so every isolate in every region derives byte-identical dictionary content and
-// therefore the same hash. That is a hard requirement: the browser hashes the
+// It is deterministic - fixed synthetic stories, fixed page number, no clock, and
+// a deploy id that is constant for the deploy - so every isolate in every region
+// derives byte-identical dictionary content and therefore the same hash. That is a hard requirement: the browser hashes the
 // bytes it was served, and we must be able to reproduce them exactly to compress
 // against them.
 //
@@ -21,6 +21,7 @@ import { htmlToString } from "./html.ts";
 import { home } from "./render.ts";
 import type { Item } from "./hn.ts";
 import { sha256 } from "./dictionary.ts";
+import { deployVersion } from "./deploy.ts";
 import { SITE_ORIGIN } from "./config.ts";
 
 /**
@@ -53,8 +54,19 @@ let cached: Promise<ShellDictionary> | null = null;
 
 /**
  * Build (once per isolate) the dictionary bytes and their SHA-256.
+ *
+ * Rejects until the deploy id is known. The rendered head contains versioned
+ * asset URLs, so the deploy id is part of the dictionary's bytes: building before
+ * it is known would give this isolate a different dictionary - and so a different
+ * hash - from every isolate that built after, and a client holding one would be
+ * declined by the other. Every request carries the deploy id, so this only bites
+ * for the instant before an isolate's first request. See lib/deploy.ts.
  */
 export function getShellDictionary(): Promise<ShellDictionary> {
+  if (!deployVersion()) {
+    return Promise.reject(new Error("Deploy id unknown; refusing to build the shell dictionary"));
+  }
+
   if (!cached) {
     cached = (async () => {
       const markup = await htmlToString(

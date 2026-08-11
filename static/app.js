@@ -547,55 +547,85 @@ const SavedIndex = (function () {
       },
     };
 
-    function escapeHtml(text) {
-      const div = document.createElement("div");
-      div.textContent = text;
-      return div.innerHTML;
+    // Built as DOM nodes rather than concatenated markup.
+    //
+    // The strings this renders are all escaped, so the old innerHTML version was
+    // not a live XSS - but it was an innerHTML assignment, which is the sink
+    // Trusted Types blocks, and it was the reason `require-trusted-types-for` had
+    // to stay report-only. Nodes need no escaping to be safe, so the escapeHtml()
+    // helper that used to live here is gone too: there is nothing left to escape.
+    // See docs/api-proposals/20-hardening-inp-and-modern-syntax.md
+    const SVG_NS = "http://www.w3.org/2000/svg";
+
+    function el(tag, props, children) {
+      const node = document.createElement(tag);
+      for (const [name, value] of Object.entries(props || {})) {
+        if (name === "text") node.textContent = value;
+        else if (name === "dataset") Object.assign(node.dataset, value);
+        else node.setAttribute(name, value);
+      }
+      for (const child of children || []) node.appendChild(child);
+      return node;
+    }
+
+    // The bookmark icons are SVG, so they need createElementNS: an <svg> made with
+    // createElement lands in the XHTML namespace and renders as nothing.
+    function bookmarkIcon(className, path) {
+      const svg = document.createElementNS(SVG_NS, "svg");
+      svg.setAttribute("class", className);
+      svg.setAttribute("viewBox", "0 0 24 24");
+      svg.setAttribute("aria-hidden", "true");
+      svg.setAttribute("width", "18");
+      svg.setAttribute("height", "18");
+      const shape = document.createElementNS(SVG_NS, "path");
+      shape.setAttribute("d", path);
+      svg.appendChild(shape);
+      return svg;
     }
 
     function renderSavedStory(item) {
       const meta = TYPE_META[item.type] || TYPE_META.link;
-      const href = meta.href(item);
 
-      return (
-        '<li data-story-id="' +
-        item.id +
-        '">' +
-        '<a class="title" href="' +
-        escapeHtml(href) +
-        '">' +
-        (meta.label
-          ? '<span class="badge ' + meta.badgeClass + '">' + meta.label + "</span>"
-          : "") +
-        '<span class="story-title-text">' +
-        escapeHtml(item.title) +
-        "</span>" +
-        (item.domain ? '<span class="story-meta">(' + escapeHtml(item.domain) + ")</span>" : "") +
-        "</a>" +
-        '<div class="story-actions">' +
-        '<a class="comments" href="/item/' +
-        item.id +
-        '">' +
-        "view " +
-        (item.comments_count > 0 ? item.comments_count + " comments" : "discussion") +
-        "</a>" +
-        '<button type="button" class="bookmark-btn" ' +
-        'aria-pressed="true" ' +
-        'data-story-id="' +
-        item.id +
-        '" ' +
-        'title="Remove from saved" aria-label="Remove from saved">' +
-        '<svg class="bookmark-icon-outline" viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">' +
-        '<path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z"/>' +
-        "</svg>" +
-        '<svg class="bookmark-icon-filled" viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">' +
-        '<path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/>' +
-        "</svg>" +
-        '<span class="sr-only">Remove</span>' +
-        "</button>" +
-        "</div>" +
-        "</li>"
-      );
+      const titleParts = [];
+      if (meta.label) {
+        titleParts.push(el("span", { class: "badge " + meta.badgeClass, text: meta.label }));
+      }
+      titleParts.push(el("span", { class: "story-title-text", text: item.title }));
+      if (item.domain) {
+        titleParts.push(el("span", { class: "story-meta", text: "(" + item.domain + ")" }));
+      }
+
+      const removeButton = el("button", {
+        type: "button",
+        class: "bookmark-btn",
+        "aria-pressed": "true",
+        dataset: { storyId: item.id },
+        title: "Remove from saved",
+        "aria-label": "Remove from saved",
+      }, [
+        bookmarkIcon(
+          "bookmark-icon-outline",
+          "M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z",
+        ),
+        bookmarkIcon(
+          "bookmark-icon-filled",
+          "M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z",
+        ),
+        el("span", { class: "sr-only", text: "Remove" }),
+      ]);
+
+      return el("li", { dataset: { storyId: item.id } }, [
+        el("a", { class: "title", href: meta.href(item) }, titleParts),
+        el("div", { class: "story-actions" }, [
+          el("a", {
+            class: "comments",
+            href: "/item/" + item.id,
+            text: "view " +
+              (item.comments_count > 0 ? item.comments_count + " comments" : "discussion"),
+          }),
+          removeButton,
+        ]),
+      ]);
     }
 
     function removeFromSaved(id) {
@@ -613,24 +643,25 @@ const SavedIndex = (function () {
       const items = Object.values(stories);
 
       if (items.length === 0) {
-        container.innerHTML = '<div class="empty-saved">' +
-          "<p>No saved stories yet.</p>" +
-          "<p>Click the bookmark icon on any story to save it for offline reading.</p>" +
-          "</div>";
+        container.replaceChildren(el("div", { class: "empty-saved" }, [
+          el("p", { text: "No saved stories yet." }),
+          el("p", {
+            text: "Click the bookmark icon on any story to save it for offline reading.",
+          }),
+        ]));
         return;
       }
 
       // Sort by saved_at descending (most recently saved first)
       items.sort((a, b) => (b.saved_at || 0) - (a.saved_at || 0));
 
-      container.innerHTML = '<p class="saved-count">' +
-        items.length +
-        " saved stor" +
-        (items.length === 1 ? "y" : "ies") +
-        "</p>" +
-        '<ol class="stories">' +
-        items.map(renderSavedStory).join("") +
-        "</ol>";
+      container.replaceChildren(
+        el("p", {
+          class: "saved-count",
+          text: items.length + " saved stor" + (items.length === 1 ? "y" : "ies"),
+        }),
+        el("ol", { class: "stories" }, items.map(renderSavedStory)),
+      );
 
       // Add click handlers for remove buttons
       container.querySelectorAll(".bookmark-btn").forEach((btn) => {
@@ -1874,18 +1905,35 @@ const ReaderPiP = (function () {
       // Apply theme
       pipWindow.document.documentElement.setAttribute("data-theme", currentTheme);
 
-      // Create loading state
-      pipWindow.document.body.innerHTML = '<div class="pip-container">' +
-        '<header class="pip-header">' +
-        '<h1 class="pip-title">' +
-        escapeHtml(articleTitle) +
-        "</h1>" +
-        '<button class="pip-close" onclick="window.close()" aria-label="Close">×</button>' +
-        "</header>" +
-        '<main class="pip-content">' +
-        '<div class="pip-loading">Loading article...</div>' +
-        "</main>" +
-        "</div>";
+      // Create loading state.
+      //
+      // Built as nodes in the PiP document rather than assigned as markup: this
+      // was an innerHTML sink, and the close button's `onclick` attribute was an
+      // inline handler that the page's own CSP blocks - the PiP document inherits
+      // the opener's policy container, so the button did nothing when clicked.
+      // A listener works and needs no CSP allowance.
+      const pipDoc = pipWindow.document;
+      const make = (tag, className, text) => {
+        const node = pipDoc.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+      };
+
+      const closeButton = make("button", "pip-close", "×");
+      closeButton.type = "button";
+      closeButton.setAttribute("aria-label", "Close");
+      closeButton.addEventListener("click", () => pipWindow.close());
+
+      const header = make("header", "pip-header");
+      header.append(make("h1", "pip-title", articleTitle), closeButton);
+
+      const content = make("main", "pip-content");
+      content.append(make("div", "pip-loading", "Loading article..."));
+
+      const container = make("div", "pip-container");
+      container.append(header, content);
+      pipDoc.body.replaceChildren(container);
 
       // Fetch article content
       const response = await fetch("/reader/" + articleUrl);
@@ -1897,12 +1945,22 @@ const ReaderPiP = (function () {
       const articleContent = doc.querySelector("#article, main, article, .reader-content");
 
       if (articleContent) {
-        pipWindow.document.querySelector(".pip-content").innerHTML = articleContent.innerHTML;
+        // Adopt the parsed nodes instead of re-serialising them through innerHTML.
+        //
+        // The round trip was the worst of the sinks. `articleContent` comes out of
+        // a DOMParser document, which is inert - images do not load, handlers do
+        // not run - and serialising it back into a *live* same-origin document
+        // brought all of that to life. Assigning innerHTML does not execute
+        // <script>, but `<img onerror>` fires perfectly well, and this is
+        // third-party article HTML.
+        content.replaceChildren(...adoptSanitized(pipDoc, articleContent));
       } else {
-        pipWindow.document.querySelector(".pip-content").innerHTML =
-          '<p>Unable to load article content. <a href="/reader/' +
-          articleUrl +
-          '" target="_blank">Open in new tab</a></p>';
+        const fallback = make("p", null, "Unable to load article content. ");
+        const link = make("a", null, "Open in new tab");
+        link.href = "/reader/" + articleUrl;
+        link.target = "_blank";
+        fallback.append(link);
+        content.replaceChildren(fallback);
       }
 
       return { success: true };
@@ -1937,10 +1995,69 @@ const ReaderPiP = (function () {
     );
   }
 
-  function escapeHtml(text) {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
+  /**
+   * Import an element's children into `targetDoc`, dropping what should not run.
+   *
+   * Returns the imported child nodes, ready to append. What comes in is article
+   * markup from a third-party page - Readability has already had a pass at it, but
+   * it is not a sanitiser and this is a same-origin document, so the active parts
+   * come off here: elements that fetch or execute, `on*` handlers, and
+   * javascript: URLs. Everything else, including images and links, is kept, which
+   * is the whole point of reader mode.
+   */
+  function adoptSanitized(targetDoc, source) {
+    const DROP_ELEMENTS = new Set([
+      "SCRIPT",
+      "IFRAME",
+      "OBJECT",
+      "EMBED",
+      "LINK",
+      "META",
+      "BASE",
+      "FORM",
+      "STYLE",
+    ]);
+    // Anything that can carry a URL, and the subset of those that navigate. A
+    // `data:` URL is only dangerous where it navigates - `data:image/...` in an
+    // `src` is how plenty of articles inline their images, so it stays.
+    const URL_ATTRIBUTES = ["href", "src", "srcset", "action", "formaction", "xlink:href"];
+    const NAVIGATING_ATTRIBUTES = ["href", "action", "formaction", "xlink:href"];
+    const SCRIPT_URL = /^\s*(javascript|vbscript):/i;
+    const DATA_URL = /^\s*data:/i;
+
+    const strip = (node) => {
+      if (node.nodeType !== 1) return;
+
+      // getAttributeNames() rather than `attributes`: that is a live NamedNodeMap,
+      // and removing an entry while iterating it skips the next one.
+      for (const attributeName of node.getAttributeNames()) {
+        const name = attributeName.toLowerCase();
+        if (name.startsWith("on")) {
+          node.removeAttribute(attributeName);
+          continue;
+        }
+        // A javascript: URL in a link is a script that runs on click. Relative
+        // URLs are left alone: they resolve against this origin, which is what
+        // the reader route already serves.
+        if (!URL_ATTRIBUTES.includes(name)) continue;
+        const value = node.getAttribute(attributeName) || "";
+        if (
+          SCRIPT_URL.test(value) ||
+          (NAVIGATING_ATTRIBUTES.includes(name) && DATA_URL.test(value))
+        ) {
+          node.removeAttribute(attributeName);
+        }
+      }
+
+      for (const child of Array.from(node.children)) {
+        if (DROP_ELEMENTS.has(child.tagName.toUpperCase())) child.remove();
+        else strip(child);
+      }
+    };
+
+    const imported = targetDoc.importNode(source, true);
+    strip(imported);
+    return Array.from(imported.childNodes);
   }
 
   // Initialize PiP button handlers
@@ -1970,6 +2087,10 @@ const ReaderPiP = (function () {
     isSupported: isSupported,
     openInPiP: openInPiP,
     init: init,
+    // Exposed for tests. The PiP window itself cannot be opened in one, so this is
+    // the only way to assert on what a third-party article is allowed to bring
+    // into a same-origin document.
+    adoptSanitized: adoptSanitized,
   };
 })();
 

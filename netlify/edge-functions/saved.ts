@@ -1,10 +1,13 @@
 // saved.ts - Saved stories page (client-rendered from localStorage)
-import type { Config } from "@netlify/edge-functions";
+import type { Config, Context } from "@netlify/edge-functions";
 import { savedPage } from "./lib/render/pages.ts";
 import { htmlToString } from "./lib/html.ts";
 import { applySecurityHeaders } from "./lib/security.ts";
+import { rememberDeploy } from "./lib/deploy.ts";
 
-export default async (request: Request): Promise<Response> => {
+export default async (request: Request, context: Context): Promise<Response> => {
+  // The head this page renders carries versioned asset URLs. See lib/deploy.ts.
+  rememberDeploy(context);
   const url = new URL(request.url);
   const canonicalUrl = `${url.origin}/saved`;
 

@@ -20,19 +20,37 @@ to find out whether anything already violates it — and the reports go to the c
 that already exists, so this is one header and no new infrastructure. Firefox 145+ acts on it,
 everything else ignores it.
 
-## 2. Trusted Types — report-only, and it has to stay that way for now
+## 2. Trusted Types — now enforced
 
 `require-trusted-types-for 'script'` is the strongest available defence against DOM XSS, and it is
 the natural next step for a CSP that already runs `script-src 'self'` plus a pinned hash.
 
-It cannot be enforced today. `static/app.js` assigns `innerHTML` in five places — the saved-stories
-list (`renderSavedStories`) and the picture-in-picture reader. Those values go through `escapeHtml()`
-so they are not a live XSS, but they are exactly the sinks Trusted Types blocks, and turning it on
-would break both features immediately.
+It could not be enforced at first. `static/app.js` assigned `innerHTML` in five places — the
+saved-stories list (`renderSavedStories`) and the picture-in-picture reader. Those values went through
+`escapeHtml()` so they were not a live XSS, but they are exactly the sinks Trusted Types blocks, and
+turning it on would have broken both features immediately.
 
-So it ships as `Content-Security-Policy-Report-Only`, which tells us which sinks actually fire in the
-field. **Removing those five assignments is the prerequisite for enforcing it**, and the reports are
-how we will know we got them all.
+So it shipped as `Content-Security-Policy-Report-Only` first, and that did its job: "Trusted Type
+expected, but got String" in the console was those exact sinks firing, on the pages that use them.
+
+**All five are gone.** Both features build DOM nodes now, which is why the directives moved into the
+enforced `CSP_DIRECTIVES`:
+
+- The saved list builds `<li>` trees with `createElement`, `textContent` and `replaceChildren`, and
+  SVG icons with `createElementNS` — an `<svg>` built with `createElement` lands in the XHTML
+  namespace and renders as nothing. `escapeHtml()` went with them: a node needs no escaping.
+- The PiP reader builds its shell in the PiP document, and its close button now uses a listener rather
+  than an `onclick` attribute — that attribute was blocked by the page's own CSP all along (the PiP
+  document inherits the opener's policy container), so the button did nothing when clicked.
+- The worst one was `pipContent.innerHTML = articleContent.innerHTML`. `articleContent` comes out of a
+  `DOMParser` document, which is inert; serialising it back into a live same-origin document brought
+  all of it to life. `innerHTML` does not execute `<script>`, but `<img onerror>` fires perfectly
+  well, and this is third-party article HTML. It now imports the parsed nodes and strips what runs:
+  script-ish elements, `on*` handlers, and `javascript:` URLs.
+
+`trusted-types 'none'` stays, which bans creating a policy at all — the strongest form, and correct
+while nothing needs one. A test walks every file in `static/` for sinks, so reintroducing one fails
+in CI rather than in a reader's browser.
 
 ## 3. `scheduler.yield()` — the site's biggest INP problem
 

@@ -13,6 +13,12 @@
 // we do not hold that exact version, negotiation declines and the visitor gets
 // the ordinary response.
 //
+// Both files are requested with `?v=<deploy id>` (see lib/deploy.ts), which is
+// what makes the year-long `immutable` response below safe, and what lets the
+// browser store them as dictionaries at all. The `Use-As-Dictionary` `match` is
+// the bare pathname, and URLPattern defaults the search component to `*`, so a
+// dictionary stored from `/app.js?v=A` is still advertised on `/app.js?v=B`.
+//
 // See docs/netlify-proposals/01-compression-dictionary-transport.md
 
 import type { Config, Context } from "@netlify/edge-functions";
@@ -121,7 +127,8 @@ async function retainVersion(
 }
 
 export default async (request: Request, context: Context): Promise<Response> => {
-  const pathname = new URL(request.url).pathname;
+  const url = new URL(request.url);
+  const pathname = url.pathname;
   const asset = ASSETS[pathname];
 
   // `context.next()` hands the request to the rest of the chain - here, Netlify's
@@ -131,11 +138,38 @@ export default async (request: Request, context: Context): Promise<Response> => 
   const upstream = await context.next();
   if (!DICTIONARY_TRANSPORT_ENABLED || !asset || !upstream.ok) return upstream;
 
+  // Only a versioned URL gets the dictionary treatment, because that treatment
+  // includes a year of `immutable` - and a browser refuses to store a dictionary
+  // whose response is not fresh, which is what `max-age=0, must-revalidate`
+  // (Netlify's default for static files, inherited straight from `context.next()`)
+  // amounts to. That default was why DevTools reported "the response can't be used
+  // as a dictionary because its freshness is expired" for both files.
+  //
+  // Freshness and immutability are the same header, so there is no way to serve one
+  // URL that is both a valid dictionary and safe to change on the next deploy. The
+  // renderer therefore asks for `/app.js?v=<deploy id>`, and an unversioned request
+  // - `offline.html`'s stylesheet link, a bookmarked URL, a crawler - is handed
+  // straight through with Netlify's revalidating response rather than being pinned
+  // in a cache for a year with no way to update it.
+  if (!url.searchParams.has("v")) {
+    // Still normalise the content type - that is true of the file however it was
+    // requested - but stream the body straight through rather than buffering a
+    // response nothing is going to compress.
+    const passthrough = new Headers(upstream.headers);
+    passthrough.set("content-type", asset.contentType);
+    return new Response(upstream.body, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: passthrough,
+    });
+  }
+
   const bytes = new Uint8Array(await upstream.arrayBuffer());
   const currentHex = toHex(await sha256(bytes));
 
   const headers = new Headers(upstream.headers);
   headers.set("content-type", asset.contentType);
+  headers.set("cache-control", "public, max-age=31536000, immutable");
 
   // Offer this file as the dictionary for its own future versions. `match` is the
   // path itself: the next deploy's app.js is what we want compressed against this
