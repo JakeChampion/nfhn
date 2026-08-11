@@ -2,7 +2,7 @@
 
 import { type HTML, html, raw, unsafeHTML } from "../html.ts";
 import { FEEDS } from "../feeds.ts";
-import { SITE_ORIGIN } from "../config.ts";
+import { SITE_ORIGIN, SRI } from "../config.ts";
 import { DICTIONARY_TRANSPORT_ENABLED } from "../dictionary.ts";
 import { type FeedSlug, type HNAPIItem, type Item, type ItemType } from "../hn.ts";
 
@@ -200,21 +200,21 @@ export const justifyScript = (): HTML =>
   html`
     <script
       src="/tex-linebreak.js"
-      integrity="sha384-Mz2e2ZKHUt95NE5A4Q3jnM4vMi3TW/aI+z0XpUTTtvDOGtOicI7DlGTmCj3yVG0x"
+      integrity="${SRI.texLineBreak}"
       crossorigin="anonymous"
       fetchpriority="low"
       defer
     ></script>
     <script
       src="/hyphens_en-us.js"
-      integrity="sha384-O18JzLDtmRj8lMDKjQ/VZOo09Ye41get5V+PDYP1atYLjrMbCO390FdScF4XAZts"
+      integrity="${SRI.hyphens}"
       crossorigin="anonymous"
       fetchpriority="low"
       defer
     ></script>
     <script
       src="/justify.js"
-      integrity="sha384-FI/M0Xsdr+Yk/caRCCNCvazelNiHYTHJDbPjVQ+5tt+AIoP2DoNt9Suks7KP+Mc8"
+      integrity="${SRI.justify}"
       crossorigin="anonymous"
       fetchpriority="low"
       defer

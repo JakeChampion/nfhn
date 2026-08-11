@@ -1,42 +1,33 @@
 // Text justification using tex-linebreak
 // https://github.com/robertknight/tex-linebreak
+//
+// Shared by the main site and by reader mode. Reader mode used to carry its own
+// inline copy of this logic, which meant fixes landed in one place and not the
+// other - and reader mode is where the longest articles are.
 (function () {
   "use strict";
 
-  // Wait for both libraries to load
-  var ready = false;
+  // Paragraphs worth justifying: comment bodies and article text on the main
+  // site, and the extracted article in reader mode (<main id="article">).
+  var SELECTOR = "details > div p, article > p, #article p";
 
-  function justify() {
-    if (!window.texLineBreak_lib || !window["texLineBreak_hyphens_en-us"]) {
-      return;
-    }
-
-    var lib = window.texLineBreak_lib;
-    var hyphenate = lib.createHyphenator(window["texLineBreak_hyphens_en-us"]);
-
-    // Target comment content paragraphs and article text content
-    var paragraphs = Array.from(
-      document.querySelectorAll("details > div p, article > p")
-    );
-
-    if (paragraphs.length > 0) {
-      justifyInChunks(paragraphs, lib, hyphenate);
-    }
-
-    ready = true;
-  }
-
-  // TeX line-breaking a thousand-comment thread in one call is a single task
-  // hundreds of milliseconds long, and nothing - scrolling, tapping, the
-  // keyboard shortcuts - can happen while it runs. Chunking it and yielding
-  // between chunks keeps the work but gives the main thread somewhere to
-  // breathe.
-  //
-  // scheduler.yield() resumes at the *front* of the task queue, so unlike
-  // setTimeout(0) the remaining chunks are not starved by whatever else is
-  // pending. Falls back where it does not exist.
+  // Number of paragraphs to justify before handing the main thread back.
   var CHUNK_SIZE = 40;
 
+  var lib = null;
+  var hyphenate = null;
+
+  function libraries() {
+    if (lib) return true;
+    if (!window.texLineBreak_lib || !window["texLineBreak_hyphens_en-us"]) return false;
+    lib = window.texLineBreak_lib;
+    hyphenate = lib.createHyphenator(window["texLineBreak_hyphens_en-us"]);
+    return true;
+  }
+
+  // scheduler.yield() resumes at the *front* of the task queue, so unlike
+  // setTimeout(0) the remaining chunks are not starved behind whatever else is
+  // pending. Falls back where it does not exist.
   function yieldToMain() {
     if (typeof scheduler !== "undefined" && typeof scheduler.yield === "function") {
       return scheduler.yield();
@@ -46,11 +37,35 @@
     });
   }
 
-  async function justifyInChunks(paragraphs, lib, hyphenate) {
+  // A paragraph inside a `content-visibility: auto` subtree that the browser is
+  // currently skipping has no layout, so measuring it produces nonsense line
+  // breaks. getClientRects() is empty for exactly those elements (and for
+  // display:none), which makes it the right filter.
+  function isRendered(el) {
+    return el.getClientRects().length > 0;
+  }
+
+  function pending(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    return Array.prototype.filter.call(
+      scope.querySelectorAll(SELECTOR),
+      function (p) {
+        return p.dataset.justified !== "1" && isRendered(p);
+      },
+    );
+  }
+
+  async function justify(root) {
+    if (!libraries()) return;
+
+    var paragraphs = pending(root);
     for (var i = 0; i < paragraphs.length; i += CHUNK_SIZE) {
       var chunk = paragraphs.slice(i, i + CHUNK_SIZE);
       try {
         lib.justifyContent(chunk, hyphenate);
+        chunk.forEach(function (p) {
+          p.dataset.justified = "1";
+        });
       } catch (err) {
         console.error("tex-linebreak justification error:", err);
         return;
@@ -61,42 +76,52 @@
     }
   }
 
-  // Initial justification when libraries are loaded
-  function init() {
-    var checkInterval = setInterval(function () {
-      if (window.texLineBreak_lib && window["texLineBreak_hyphens_en-us"]) {
-        clearInterval(checkInterval);
-        justify();
-      }
-    }, 50);
-
-    // Timeout after 5 seconds
-    setTimeout(function () {
-      clearInterval(checkInterval);
-    }, 5000);
+  // Re-justify everything: the measure changed, so previous results are stale.
+  function rejustifyAll() {
+    Array.prototype.forEach.call(document.querySelectorAll(SELECTOR), function (p) {
+      delete p.dataset.justified;
+    });
+    justify();
   }
 
-  // Re-justify on window resize (debounced)
+  // Comment subtrees are skipped by content-visibility until they approach the
+  // viewport. This is the moment they gain layout and can be measured - before
+  // it, justifying them is both wrong and wasted.
+  function watchVisibility() {
+    if (!("oncontentvisibilityautostatechange" in HTMLElement.prototype)) return;
+
+    var containers = document.querySelectorAll(
+      '[aria-label="Comments"] > details, [aria-label="Comments"] ul > li',
+    );
+    Array.prototype.forEach.call(containers, function (el) {
+      el.addEventListener("contentvisibilityautostatechange", function (event) {
+        if (!event.skipped) justify(el);
+      });
+    });
+  }
+
+  function start() {
+    // The three scripts are deferred and load in order (library, hyphenation
+    // data, this file), so by the time this runs the other two have executed.
+    // No polling required.
+    justify();
+    watchVisibility();
+  }
+
   var resizeTimeout;
   window.addEventListener("resize", function () {
-    if (!ready) return;
     clearTimeout(resizeTimeout);
-    resizeTimeout = setTimeout(justify, 250);
+    resizeTimeout = setTimeout(rejustifyAll, 250);
   });
 
-  // Re-justify after Turbo page loads
-  document.addEventListener("turbo:load", function () {
-    if (ready) {
-      justify();
-    } else {
-      init();
-    }
+  // Restored from bfcache: the DOM is intact, but the viewport may not be.
+  window.addEventListener("pageshow", function (event) {
+    if (event.persisted) rejustifyAll();
   });
 
-  // Start on DOMContentLoaded
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
+    document.addEventListener("DOMContentLoaded", start);
   } else {
-    init();
+    start();
   }
 })();

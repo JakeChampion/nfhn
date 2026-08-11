@@ -86,6 +86,25 @@ export const ogImageUrl = (id: number): string =>
     encodeURIComponent(`/og/item/${id}.svg`)
   }&w=${OG_IMAGE_WIDTH}&h=${OG_IMAGE_HEIGHT}&fm=png`;
 
+// Subresource Integrity hashes for the scripts in static/.
+//
+// These are served by both the main site (render/components.ts) and reader mode,
+// so they live here rather than being written out twice. A test hashes the real
+// files and fails if any of these drifts - which it silently did once, leaving
+// justify.js blocked by SRI and justification quietly switched off site-wide.
+export const SRI = {
+  texLineBreak: "sha384-Mz2e2ZKHUt95NE5A4Q3jnM4vMi3TW/aI+z0XpUTTtvDOGtOicI7DlGTmCj3yVG0x",
+  hyphens: "sha384-O18JzLDtmRj8lMDKjQ/VZOo09Ye41get5V+PDYP1atYLjrMbCO390FdScF4XAZts",
+  justify: "sha384-Vm8GFeJLr5zlqkkKiFdMW6A6t4wzeUxLPc2F/FG1rhsQRBHLnezcQ46x2u0h4Hl2",
+} as const;
+
+/** Maps each SRI entry to the file it must match. */
+export const SRI_FILES: Record<keyof typeof SRI, string> = {
+  texLineBreak: "tex-linebreak.js",
+  hyphens: "hyphens_en-us.js",
+  justify: "justify.js",
+};
+
 // Reporting API (https://www.w3.org/TR/reporting-1/)
 // The endpoint group named by `Reporting-Endpoints` and by the CSP `report-to`
 // directive. Both must agree, so they read from the same constant.
@@ -113,6 +132,29 @@ export const TRUSTED_TYPES_DIRECTIVES = [
   "trusted-types 'none'",
   `report-to ${REPORTING_GROUP}`,
 ] as const;
+
+/**
+ * CSP for reader pages.
+ *
+ * `script-src` previously had no `'self'`, which blocked every same-origin
+ * script on the page - the three justification scripts included, so justified
+ * text never worked here at all. An explicit `script-src` overrides
+ * `default-src` entirely, so inheriting `'self'` from it was never going to
+ * happen. It also allowed a third-party CDN that nothing has loaded from in a
+ * long time; that allowance is gone.
+ *
+ * `'unsafe-inline'` remains only for the inline theme script, which has to run
+ * before first paint.
+ */
+export const READER_CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'unsafe-inline'",
+  "img-src * data:",
+  "frame-ancestors 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+].join("; ");
 
 // Content Security Policy directives
 // Note: unsafe-inline for styles is needed for dynamic counter-set on <ol>

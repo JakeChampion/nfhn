@@ -13,7 +13,11 @@ import {
   isSpeculative,
   waiterFrom,
 } from "../netlify/edge-functions/lib/background.ts";
-import { SITE_ORIGIN, THEME_SCRIPT_HASH } from "../netlify/edge-functions/lib/config.ts";
+import {
+  READER_CSP,
+  SITE_ORIGIN,
+  THEME_SCRIPT_HASH,
+} from "../netlify/edge-functions/lib/config.ts";
 import { applyCacheTags } from "../netlify/edge-functions/lib/security.ts";
 import { FEEDS } from "../netlify/edge-functions/lib/feeds.ts";
 import sitemapHandler from "../netlify/edge-functions/sitemap.ts";
@@ -2242,4 +2246,31 @@ Deno.test("streamed pages block first paint until main content arrives", async (
       assertStringIncludes(body, 'id="main-content"');
     }
   });
+});
+
+// =============================================================================
+// Reader mode
+// =============================================================================
+
+Deno.test("reader CSP allows its own scripts and no third-party origin", () => {
+  // An explicit script-src overrides default-src, so omitting 'self' blocked
+  // every same-origin script on the page - the justification scripts included.
+  assertStringIncludes(READER_CSP, "script-src 'self' 'unsafe-inline'");
+
+  // No remote origin should be reachable for any resource type except images,
+  // which reader mode needs in order to show the article's own illustrations.
+  const withoutImages = READER_CSP.split("; ").filter((d) => !d.startsWith("img-src")).join("; ");
+  assertEquals(/https?:\/\//.test(withoutImages), false, withoutImages);
+});
+
+Deno.test("reader pages carry the article's own language and direction", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../netlify/edge-functions/reader.ts", import.meta.url),
+  );
+
+  // Every reader page used to be <html lang="en"> with no dir, whatever the
+  // article was written in. Readability reports both; they were discarded.
+  assertStringIncludes(source, 'lang="${lang}" dir="${dir}"');
+  assertStringIncludes(source, "safeLangAttr");
+  assertStringIncludes(source, "safeDirAttr");
 });

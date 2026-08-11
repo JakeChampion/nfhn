@@ -3,6 +3,7 @@ import { Readability } from "./lib/readability.js";
 import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.45/deno-dom-wasm.ts";
 import { waiterFrom, type WaitUntilCapable } from "./lib/background.ts";
 import { READER_STORE, readerKey, readMirror, writeMirror } from "./lib/store.ts";
+import { READER_CSP, SRI } from "./lib/config.ts";
 
 // Escape HTML to prevent XSS
 function escapeHtml(text: string): string {
@@ -45,7 +46,23 @@ interface CachedExtraction {
   title: string;
   content: string;
   readingTime: number;
+  /**
+   * Readability computes all of the below and `parse()` returns them; until now
+   * they were discarded. `lang` and `dir` in particular were a correctness bug:
+   * every reader page was served as `<html lang="en">` with no direction, so a
+   * Japanese, Arabic or Hebrew article was announced to screen readers in the
+   * wrong language and RTL text laid out left-to-right.
+   */
+  byline?: string;
+  siteName?: string;
+  publishedTime?: string;
+  excerpt?: string;
+  lang?: string;
+  dir?: string;
 }
+
+/** Below this, Readability found a page rather than an article. */
+const MIN_ARTICLE_LENGTH = 250;
 
 export default async (req: Request, context?: WaitUntilCapable) => {
   const waitUntil = waiterFrom(context);
@@ -81,10 +98,7 @@ export default async (req: Request, context?: WaitUntilCapable) => {
   const cacheKey = await readerKey(url);
   const cached = await readMirror<CachedExtraction>(READER_STORE, cacheKey);
   if (cached?.value?.content) {
-    return new Response(
-      renderHtml(url, cached.value.title, cached.value.content, cached.value.readingTime),
-      { status: 200, headers: getHeaders() },
-    );
+    return new Response(renderHtml(url, cached.value), { status: 200, headers: getHeaders() });
   }
 
   try {
@@ -104,19 +118,39 @@ export default async (req: Request, context?: WaitUntilCapable) => {
       throw Error("Could not extract readable content from this page");
     }
 
-    const title = (parsed.title as string) || "Untitled";
-    const content = parsed.content as string;
     const textContent = parsed.textContent as string || "";
-    const readingTime = estimateReadingTime(textContent);
 
-    writeMirror(
-      READER_STORE,
-      cacheKey,
-      { title, content, readingTime } satisfies CachedExtraction,
-      waitUntil,
-    );
+    // Readability reports how much text it recovered. A handful of characters
+    // means it found navigation and boilerplate, not an article - saying so
+    // beats rendering an empty page, and keeps junk out of the cache.
+    if (textContent.trim().length < MIN_ARTICLE_LENGTH) {
+      return new Response(
+        renderError(
+          "Not an article",
+          "There was not enough readable text on this page to show in reader mode.",
+        ),
+        { status: 422, headers: getHeaders() },
+      );
+    }
 
-    return new Response(renderHtml(url, title, content, readingTime), {
+    const asString = (value: unknown): string | undefined =>
+      typeof value === "string" && value.trim() ? value.trim() : undefined;
+
+    const extraction: CachedExtraction = {
+      title: (parsed.title as string) || "Untitled",
+      content: parsed.content as string,
+      readingTime: estimateReadingTime(textContent),
+      byline: asString(parsed.byline),
+      siteName: asString(parsed.siteName),
+      publishedTime: asString(parsed.publishedTime),
+      excerpt: asString(parsed.excerpt),
+      lang: asString(parsed.lang),
+      dir: asString(parsed.dir),
+    };
+
+    writeMirror(READER_STORE, cacheKey, extraction, waitUntil);
+
+    return new Response(renderHtml(url, extraction), {
       status: 200,
       headers: getHeaders(),
     });
@@ -140,8 +174,7 @@ function getHeaders(): HeadersInit {
     // duplicate of the publisher's content in the index under our domain;
     // `follow` still credits the links inside it.
     "x-robots-tag": "noindex, follow",
-    "content-security-policy":
-      "default-src 'self'; script-src 'unsafe-inline' https://unpkg.com; style-src 'unsafe-inline'; img-src * data:; frame-ancestors 'none';",
+    "content-security-policy": READER_CSP,
     "x-content-type-options": "nosniff",
     "referrer-policy": "no-referrer",
   };
@@ -291,6 +324,16 @@ function getStyles(): string {
 
     .back-btn svg {
       flex-shrink: 0;
+    }
+
+    .reader-attribution {
+      margin: 0.5rem 0 0;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .reader-byline {
+      font-weight: 600;
     }
 
     .reader-meta {
@@ -480,46 +523,16 @@ function getThemeScript(): string {
 }
 
 function getJustifyScripts(): string {
+  // The same three scripts, and the same SRI hashes, as the main site
+  // (render/components.ts). Reader mode used to inline its own copy of the
+  // justification logic; sharing /justify.js means a fix lands in both places at
+  // once, and reader mode - which has by far the longest text on the site -
+  // finally gets the chunked, visibility-aware version.
   return `
-  <script src="/tex-linebreak.js"></script>
-  <script src="/hyphens_en-us.js"></script>
-  <script>
-    (function() {
-      var ready = false;
-
-      function justify() {
-        if (!window.texLineBreak_lib || !window['texLineBreak_hyphens_en-us']) return;
-        var lib = window.texLineBreak_lib;
-        var hyphenate = lib.createHyphenator(window['texLineBreak_hyphens_en-us']);
-        var paragraphs = Array.from(document.querySelectorAll('#article p'));
-        if (paragraphs.length > 0) {
-          try {
-            lib.justifyContent(paragraphs, hyphenate);
-          } catch (err) {
-            console.error('tex-linebreak error:', err);
-          }
-        }
-        ready = true;
-      }
-
-      // Poll for libraries to load
-      var checkInterval = setInterval(function() {
-        if (window.texLineBreak_lib && window['texLineBreak_hyphens_en-us']) {
-          clearInterval(checkInterval);
-          justify();
-        }
-      }, 50);
-      setTimeout(function() { clearInterval(checkInterval); }, 5000);
-
-      // Re-justify on window resize (debounced)
-      var resizeTimeout;
-      window.addEventListener('resize', function() {
-        if (!ready) return;
-        clearTimeout(resizeTimeout);
-        resizeTimeout = setTimeout(justify, 250);
-      });
-    })();
-  </script>`;
+  <script src="/tex-linebreak.js" integrity="${SRI.texLineBreak}" crossorigin="anonymous" defer></script>
+  <script src="/hyphens_en-us.js" integrity="${SRI.hyphens}" crossorigin="anonymous" defer></script>
+  <script src="/justify.js" integrity="${SRI.justify}" crossorigin="anonymous" defer></script>
+  `;
 }
 
 function getThemeToggle(): string {
@@ -553,15 +566,47 @@ function getThemeToggle(): string {
   `;
 }
 
-function renderHtml(url: string, title: string, content: string, readingTime: number): string {
-  const safeTitle = escapeHtml(title);
+/** BCP 47-ish sanity check, so a hostile `lang` cannot escape the attribute. */
+const safeLangAttr = (lang: string | undefined): string =>
+  lang && /^[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*$/.test(lang) ? lang : "en";
+
+/** Only the three values the HTML `dir` attribute defines. */
+const safeDirAttr = (dir: string | undefined): string =>
+  dir === "rtl" || dir === "ltr" || dir === "auto" ? dir : "auto";
+
+/** Render an ISO date as a <time>, or nothing if it is not parseable. */
+function renderPublished(publishedTime: string | undefined): string {
+  if (!publishedTime) return "";
+  const parsed = new Date(publishedTime);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return `<time datetime="${escapeHtml(parsed.toISOString())}">${
+    escapeHtml(parsed.toLocaleDateString("en", { year: "numeric", month: "long", day: "numeric" }))
+  }</time>`;
+}
+
+function renderHtml(url: string, article: CachedExtraction): string {
+  const safeTitle = escapeHtml(article.title);
   const safeUrl = escapeHtml(url);
 
+  // `dir="auto"` rather than "ltr" as the fallback: when Readability could not
+  // determine direction, letting the browser infer it from the first strong
+  // character is right far more often than assuming left-to-right.
+  const lang = safeLangAttr(article.lang);
+  const dir = safeDirAttr(article.dir);
+
+  // Author, publication and date - all of which Readability already extracted.
+  const attribution = [
+    article.byline ? `<span class="reader-byline">${escapeHtml(article.byline)}</span>` : "",
+    article.siteName ? `<span>${escapeHtml(article.siteName)}</span>` : "",
+    renderPublished(article.publishedTime),
+  ].filter(Boolean).join(" · ");
+
   return `<!DOCTYPE html>
-<html lang="en" data-theme="auto">
+<html lang="${lang}" dir="${dir}" data-theme="auto">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  ${article.excerpt ? `<meta name="description" content="${escapeHtml(article.excerpt)}">` : ""}
   <title>${safeTitle} - hn Reader</title>
   <style>${getStyles()}</style>
 </head>
@@ -579,14 +624,15 @@ function renderHtml(url: string, title: string, content: string, readingTime: nu
       ${getThemeToggle()}
     </nav>
     <h1>${safeTitle}</h1>
+    ${attribution ? `<p class="reader-attribution">${attribution}</p>` : ""}
     <div class="reader-meta">
-      <span>${readingTime} min read</span>
+      <span>${article.readingTime} min read</span>
       <a href="${safeUrl}" target="_blank" rel="noopener noreferrer">Original article ↗</a>
     </div>
   </header>
 
   <main id="article">
-    ${content}
+    ${article.content}
   </main>
 
   <script>${getThemeScript()}</script>

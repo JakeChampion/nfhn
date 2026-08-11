@@ -1737,3 +1737,46 @@ Deno.test("parseHttpsRecord reads the per-site Netlify record too", () => {
   assertEquals(support.alpn, ["h2"]);
   assertEquals(support.ech, false);
 });
+
+// =============================================================================
+// Subresource Integrity hashes match the files on disk
+// =============================================================================
+
+import { SRI, SRI_FILES } from "../netlify/edge-functions/lib/config.ts";
+
+async function sriFor(file: string): Promise<string> {
+  const bytes = await Deno.readFile(new URL(`../static/${file}`, import.meta.url));
+  const digest = await crypto.subtle.digest("SHA-384", bytes);
+  let binary = "";
+  for (const byte of new Uint8Array(digest)) binary += String.fromCharCode(byte);
+  return `sha384-${btoa(binary)}`;
+}
+
+Deno.test("every declared SRI hash matches the file it guards", async () => {
+  // This drifted once and nothing noticed: justify.js was edited without
+  // updating its hash, so browsers refused to execute it and justification was
+  // silently off site-wide. An SRI mismatch has no visible symptom beyond the
+  // feature quietly not working, which is exactly why it needs a test.
+  for (const [key, file] of Object.entries(SRI_FILES) as [keyof typeof SRI, string][]) {
+    assertEquals(
+      SRI[key],
+      await sriFor(file),
+      `SRI for static/${file} is stale - update SRI.${key} in config.ts`,
+    );
+  }
+});
+
+Deno.test("both places that load the scripts use the shared hashes", async () => {
+  const components = await Deno.readTextFile(
+    new URL("../netlify/edge-functions/lib/render/components.ts", import.meta.url),
+  );
+  const reader = await Deno.readTextFile(
+    new URL("../netlify/edge-functions/reader.ts", import.meta.url),
+  );
+
+  // A literal hash in either file is a hash that can drift independently.
+  assertEquals(/integrity="sha384-[A-Za-z0-9+/=]/.test(components), false);
+  assertEquals(/integrity="sha384-[A-Za-z0-9+/=]/.test(reader), false);
+  // Reader mode must load the shared file rather than inlining its own copy.
+  assertStringIncludes(reader, "/justify.js");
+});
