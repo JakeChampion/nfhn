@@ -99,7 +99,8 @@ work used: reader pages are arbitrary third-party content and share no structure
 
 ### B. The static-asset dictionary
 
-`app.js` (34 KB) and `styles.css` (63 KB) change by a few lines per deploy but are re-downloaded
+`app.js` (71 KB, 20 KB over the wire under Brotli) and `styles.css` (73 KB, 16 KB) change by a few
+lines per deploy but are re-downloaded
 whole. Emit `Use-As-Dictionary` on each, keep **the previous deploy's bytes in Netlify Blobs** keyed
 by `DEPLOY_ID`, and delta-compress the new one against whatever the client already has:
 
@@ -157,7 +158,7 @@ is exactly where the review predicted: the shell is free, and only the story row
 ## What it took to make any of that real
 
 Every number above was measured in the test suite. In production the feature did not work at all
-until four bugs later, and the shape of them is worth more than the numbers.
+until six bugs later, and the shape of them is worth more than the numbers.
 
 **1. The `Use-As-Dictionary` header was malformed, so no browser ever stored the dictionary.** The
 match pattern was `/(top|newest|ask|show|jobs)/:page(\d+)`, which is wrong twice: `\d` is not a legal
@@ -181,6 +182,33 @@ above the actual wall, and both chased with a deploy each.
 **4. So the browser build is vendored.** `scripts/vendor-zstd.mjs` bundles `dist/web` by file path —
 bypassing the `exports` map that hides it — into one ESM module with the wasm inlined as base64. No
 filesystem, no second request for the binary, no exports map.
+
+**5. The dictionary URL was not versioned, so bug 1 could never be fixed for anyone.** The snippet in
+section A above says `/_dict/shell-<build-hash>.txt`; what shipped was the fixed path `/_dict/shell`,
+still served `public, max-age=31536000, immutable` — with a comment claiming the URL carried a hash.
+The first response a browser ever received was therefore the one it kept for a year, malformed header
+and all. Fixing bug 1 fixed nothing for anybody who had already visited, and DevTools kept reporting
+"`Use-As-Dictionary` HTTP response header isn't a valid Structured Field Value" against a header that
+had been correct on the wire for days.
+
+The general form is worse than the header bug: the shell's bytes change whenever the markup does, and
+a visitor still holding an old copy advertises a hash the server no longer builds. Negotiation then
+declines, silently, forever — the failure mode of this whole feature is *no error at all*. The link
+now points at `/_dict/shell?v=<deploy id>`, so a deploy is a new URL.
+
+**6. `app.js` and `styles.css` were never fresh enough to be stored as dictionaries.** `asset.ts`
+inherited its headers from `context.next()`, which for a static file means Netlify's
+`public, max-age=0, must-revalidate`. A freshness lifetime of zero is expired on arrival, so browsers
+refused to store either file: "the response can't be used as a dictionary because its freshness is
+expired". RFC 9842 also derives the *stored dictionary's* lifetime from that same `max-age`, so there
+is no short value that works either — the dictionary has to outlive the gap between deploys.
+
+Freshness and immutability are the same header, so an unversioned URL cannot be both a valid
+dictionary and safe to change. Pages now request `?v=<deploy id>` and get
+`max-age=31536000, immutable`; an unversioned request is handed through untouched rather than pinned
+for a year. `match` stays the bare pathname, and URLPattern defaults the search component to `*`, so
+a dictionary stored from `/app.js?v=A` is still advertised on `/app.js?v=B` — which is the point, as
+the previous deploy's file is the dictionary for this one.
 
 The lesson is the reproduction, not the bugs. `@netlify/edge-bundler` is an npm package and Deno runs
 locally, so **the entire pipeline can be verified before deploying**: bundle the real edge functions

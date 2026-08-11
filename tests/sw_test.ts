@@ -526,3 +526,49 @@ Deno.test("app.js registers the same periodic sync tag sw.js listens for", async
   // And writes the index to the URL the worker reads.
   assertEquals(source.includes("/__nfhn/saved-index"), true);
 });
+
+// =============================================================================
+// Versioned asset URLs
+// =============================================================================
+//
+// styles.css and app.js are served `immutable` for a year so browsers will accept
+// them as compression dictionaries, which is only safe because every deploy asks
+// for a new URL. Three files have to agree on that URL - the renderer, the service
+// worker, and the offline page - and a disagreement is invisible: the worker
+// caches one URL, the page asks for another, and the cache silently never hits.
+
+Deno.test("the worker precaches the same versioned URLs the pages request", async () => {
+  const source = await Deno.readTextFile(new URL("../static/sw.js", import.meta.url));
+
+  // Exactly the two files asset.ts serves with `immutable`.
+  assertEquals(/const VERSIONED_ASSETS = \["\/styles\.css", "\/app\.js"\]/.test(source), true);
+
+  // The precache must map through assetUrl, or it stores the unversioned URL and
+  // every lookup for the versioned one misses.
+  assertEquals(source.includes("cache.addAll(STATIC_ASSETS.map(assetUrl))"), true);
+
+  // The `?v=` value has to be the deploy id build.ts stamps in.
+  assertEquals(source.includes('const DEPLOY_ID = "__DEPLOY_ID__"'), true);
+  assertEquals(source.includes('path + "?v=" + DEPLOY_ID'), true);
+});
+
+Deno.test("the offline page links the stylesheet URL the worker precached", async () => {
+  const offline = await Deno.readTextFile(new URL("../static/offline.html", import.meta.url));
+
+  // This page is shown when the network is gone, so its stylesheet has to be the
+  // copy already in the cache. An unversioned href would be a request nothing can
+  // answer, and an unstyled offline page.
+  assertEquals(offline.includes('href="/styles.css?v=__DEPLOY_ID__"'), true);
+});
+
+Deno.test("build.ts stamps the deploy id into every file that names it", async () => {
+  const build = await Deno.readTextFile(new URL("../scripts/build.ts", import.meta.url));
+
+  // A file carrying the placeholder that build.ts does not rewrite ships the
+  // literal `__DEPLOY_ID__` to browsers, which caches under a URL that never
+  // changes again - the exact failure this versioning exists to prevent.
+  for (const file of ["static/sw.js", "static/offline.html"]) {
+    assertEquals(build.includes(file), true, `build.ts must stamp ${file}`);
+  }
+  assertEquals(build.includes("/__DEPLOY_ID__/g"), true);
+});

@@ -97,6 +97,14 @@ export class El {
   text = "";
   /** Set by `focus()`, so tests can assert where focus landed. */
   focused = false;
+  /**
+   * The namespace `createElementNS` was called with, if it was.
+   *
+   * An <svg> built with createElement lands in the XHTML namespace and renders as
+   * nothing, which is invisible to every assertion about tags and attributes - so
+   * the shim records which call built the node.
+   */
+  namespace: string | null = null;
   /** Arguments the module passed to `focus()`. */
   focusOptions: unknown = undefined;
 
@@ -158,6 +166,88 @@ export class El {
 
   setAttribute(name: string, value: string): void {
     this.attributes[name] = value;
+  }
+
+  removeAttribute(name: string): void {
+    delete this.attributes[name];
+  }
+
+  // --- Building and moving nodes ---
+  //
+  // Needed since the saved list and the PiP reader stopped assigning innerHTML:
+  // both build trees now, and code that is never exercised is code that is never
+  // tested. `attributes` stays a plain record for everything else in here, so this
+  // exposes the {name, value} view a sanitiser walk expects alongside it.
+
+  get tagName(): string {
+    return this.tag.toUpperCase();
+  }
+
+  get className(): string {
+    return this.attributes.class ?? "";
+  }
+
+  set className(value: string) {
+    this.attributes.class = value;
+  }
+
+  /**
+   * A static list of attribute names, which is what a sanitiser walk wants.
+   *
+   * `node.attributes` is a live NamedNodeMap, so removing entries while iterating
+   * it skips the next one. Client code uses this instead for that reason, and it
+   * is also the part of the API this shim can honestly model.
+   */
+  getAttributeNames(): string[] {
+    return Object.keys(this.attributes);
+  }
+
+  appendChild(child: El): El {
+    child.parent?.removeChild(child);
+    child.parent = this;
+    // A node cannot hold both text and children, same as the real thing.
+    this.text = "";
+    this.children.push(child);
+    return child;
+  }
+
+  append(...nodes: El[]): void {
+    for (const node of nodes) this.appendChild(node);
+  }
+
+  replaceChildren(...nodes: El[]): void {
+    for (const child of this.children) child.parent = null;
+    this.children.length = 0;
+    this.text = "";
+    for (const node of nodes) this.appendChild(node);
+  }
+
+  removeChild(child: El): void {
+    const index = this.children.indexOf(child);
+    if (index !== -1) this.children.splice(index, 1);
+    child.parent = null;
+  }
+
+  remove(): void {
+    this.parent?.removeChild(this);
+  }
+
+  /** A deep copy, so an "imported" tree is not the same nodes as the source. */
+  cloneNode(deep = false): El {
+    const copy = new El(this.tag, { ...this.attributes });
+    copy.text = this.text;
+    copy.namespace = this.namespace;
+    if (deep) { for (const child of this.children) copy.appendChild(child.cloneNode(true)); }
+    return copy;
+  }
+
+  /** Elements only, which is all the shim models - there are no text nodes. */
+  get childNodes(): El[] {
+    return [...this.children];
+  }
+
+  get nodeType(): number {
+    return 1;
   }
 
   matches(selector: string): boolean {
@@ -373,6 +463,17 @@ export class FakeWindow {
           querySelector: (selector: string) => this.root.querySelector(selector),
           querySelectorAll: (selector: string) => this.root.querySelectorAll(selector),
           getElementById: (id: string) => this.root.querySelector(`[id="${id}"]`),
+          // Node building, for the modules that render DOM rather than markup.
+          // The namespace is recorded rather than acted on: what matters to a test
+          // is that an <svg> was created with createElementNS at all, since one made
+          // with createElement lands in the wrong namespace and renders as nothing.
+          createElement: (tag: string) => new El(tag),
+          createElementNS: (namespace: string, tag: string) => {
+            const node = new El(tag);
+            node.namespace = namespace;
+            return node;
+          },
+          importNode: (node: El, deep = false) => node.cloneNode(deep),
           addEventListener: (type: string, listener: Listener) => {
             const existing = this.listeners.get(`document:${type}`) ?? [];
             existing.push(listener);

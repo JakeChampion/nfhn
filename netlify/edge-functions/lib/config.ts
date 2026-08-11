@@ -121,16 +121,23 @@ export const INTEGRITY_POLICY_REPORT_ONLY =
   `blocked-destinations=(script), endpoints=(${REPORTING_GROUP})`;
 
 // Trusted Types
-// Sent report-only, and it has to stay that way for now: static/app.js assigns
-// innerHTML in five places (the saved-stories list and the picture-in-picture
-// reader). Those are escaped via escapeHtml(), so they are not a live XSS, but
-// they are exactly the sinks Trusted Types blocks - enforcing today would break
-// both features. Report-only tells us which sinks actually fire in the field,
-// which is the prerequisite for removing them.
+// Enforced. This was report-only for as long as static/app.js assigned innerHTML
+// in five places - the saved-stories list and the picture-in-picture reader - and
+// the report-only policy did its job: "Trusted Type expected, but got String" in
+// the console was those exact sinks firing. All five now build DOM nodes instead,
+// so there is nothing left to report and nothing left to break.
+//
+// `trusted-types 'none'` bans creating a policy at all, which is the strongest
+// form and the one to keep while no sink needs one. Anything that reintroduces a
+// sink fails loudly at the point of the assignment rather than quietly widening
+// the XSS surface.
+//
+// These are spliced into CSP_DIRECTIVES rather than sent as their own header, so
+// they inherit that policy's `report-to` and a violation still reaches the
+// collector in reports.ts.
 export const TRUSTED_TYPES_DIRECTIVES = [
   "require-trusted-types-for 'script'",
   "trusted-types 'none'",
-  `report-to ${REPORTING_GROUP}`,
 ] as const;
 
 /**
@@ -173,6 +180,7 @@ export const CSP_DIRECTIVES = [
   "base-uri 'none'",
   "form-action 'none'",
   "upgrade-insecure-requests",
+  ...TRUSTED_TYPES_DIRECTIVES,
   // Violations are posted to the collector in netlify/edge-functions/reports.ts.
   // Without this the strict policy above is unverifiable in the field: the test
   // that pins THEME_SCRIPT_HASH proves the hash matches the markup we render, not

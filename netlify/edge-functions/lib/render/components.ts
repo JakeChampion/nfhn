@@ -4,6 +4,7 @@ import { type HTML, html, raw, unsafeHTML } from "../html.ts";
 import { FEEDS } from "../feeds.ts";
 import { SITE_ORIGIN, SRI } from "../config.ts";
 import { DICTIONARY_TRANSPORT_ENABLED } from "../dictionary.ts";
+import { assetVersionQuery, deployVersion } from "../deploy.ts";
 import { type FeedSlug, type HNAPIItem, type Item, type ItemType } from "../hn.ts";
 
 // --- JSON-LD Structured Data ---
@@ -232,14 +233,22 @@ export const backToTop = (): HTML =>
 
 // --- PWA head tags ---
 
+// The compression-dictionary URL carries the deploy id because the dictionary is
+// served `immutable` for a year (RFC 9842 refuses a dictionary whose response is
+// not fresh, and derives the dictionary's own lifetime from that `max-age`). The
+// shell's bytes change whenever the markup does, and a visitor still holding an
+// old copy advertises a hash the server no longer builds - which silently
+// disables dictionary compression for them rather than failing loudly. The tag is
+// omitted until the deploy id is known; see lib/deploy.ts for why null is not
+// papered over with a placeholder.
 export const pwaHeadTags = (): HTML =>
   html`
     <link rel="preconnect" href="https://hacker-news.firebaseio.com" fetchpriority="high">
     <link rel="preconnect" href="https://hn.algolia.com" fetchpriority="low">
     <link rel="manifest" href="/manifest.json">
-    ${DICTIONARY_TRANSPORT_ENABLED
+    ${DICTIONARY_TRANSPORT_ENABLED && deployVersion()
       ? html`
-        <link rel="compression-dictionary" href="/_dict/shell">
+        <link rel="compression-dictionary" href="/_dict/shell${assetVersionQuery()}">
       `
       : ""}
     <meta name="color-scheme" content="light dark">
@@ -291,7 +300,7 @@ export const sharedStyles = (pageNumber = 1): HTML => {
   // Only the dynamic counter-set needs to be inline; all other styles are in /styles.css
   const counterStart = pageNumber === 1 ? 0 : (pageNumber - 1) * 30;
   return html`
-    <link rel="stylesheet" href="/styles.css" fetchpriority="high">
+    <link rel="stylesheet" href="/styles.css${assetVersionQuery()}" fetchpriority="high">
     <style>
     ol { counter-set: section ${counterStart}; }
     </style>
@@ -410,9 +419,13 @@ export const themeToggle = (): HTML =>
 
 // Main application script - loaded with defer to not block rendering
 // Note: app.js is first-party code; SRI would require build-time hash generation
+//
+// The `?v=` is what makes the immutable, dictionary-eligible response in asset.ts
+// safe to serve: the bytes at a given versioned URL never change, so a new deploy
+// is a new URL rather than a year-long stale copy.
 export const themeScript = (): HTML =>
   html`
-    <script src="/app.js" defer></script>
+    <script src="/app.js${assetVersionQuery()}" defer></script>
   `;
 
 // --- Navigation ---

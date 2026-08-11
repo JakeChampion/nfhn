@@ -6,8 +6,8 @@ import {
   NO_VARY_SEARCH,
   REPORTING_ENDPOINT,
   REPORTING_GROUP,
-  TRUSTED_TYPES_DIRECTIVES,
 } from "./config.ts";
+import { assetVersionQuery } from "./deploy.ts";
 import { applyDictionaryVary, DICTIONARY_TRANSPORT_ENABLED } from "./dictionary.ts";
 import { SPECULATION_RULES_HEADER } from "./speculation.ts";
 
@@ -41,21 +41,21 @@ export const applySecurityHeaders = (headers: Headers): Headers => {
   // Names the collector that the CSP's `report-to` directive refers to, and
   // enables deprecation, intervention and crash reports at the same time.
   headers.set("Reporting-Endpoints", `${REPORTING_GROUP}="${REPORTING_ENDPOINT}"`);
-  // Both of these are report-only on purpose - see the comments on the constants
-  // in config.ts. They cost nothing in browsers that ignore them and, in the
-  // ones that do not, they turn two silent assumptions into reported data.
+  // Report-only on purpose - see the comment on the constant in config.ts. It costs
+  // nothing in browsers that ignore it and, in the ones that do not, it turns a
+  // silent assumption into reported data.
   headers.set("Integrity-Policy-Report-Only", INTEGRITY_POLICY_REPORT_ONLY);
-  if (!headers.has("Content-Security-Policy-Report-Only")) {
-    headers.set("Content-Security-Policy-Report-Only", TRUSTED_TYPES_DIRECTIVES.join("; "));
-  }
   // Applied to every page, not only the ones actually served as `dcz`. A cache
   // that stored a delta without this would later hand it to a client that never
   // had the dictionary, which cannot decode it. Vary must describe what the
   // response *could* depend on, not what this one happened to use.
   if (DICTIONARY_TRANSPORT_ENABLED) applyDictionaryVary(headers);
-  // Early hint for CSS preload - improves LCP by starting CSS download before HTML parsing
+  // Early hint for CSS preload - improves LCP by starting CSS download before HTML parsing.
+  // The `?v=` has to match the `<link rel=stylesheet>` the renderer emits exactly:
+  // the preload and the stylesheet are the same fetch only if they are the same
+  // URL, and a mismatch would download styles.css twice on every page load.
   if (!headers.has("Link")) {
-    headers.set("Link", "</styles.css>; rel=preload; as=style");
+    headers.set("Link", `</styles.css${assetVersionQuery()}>; rel=preload; as=style`);
   }
   return headers;
 };

@@ -34,6 +34,10 @@ import {
 } from "./security.ts";
 import { withProgrammableCache } from "./cache.ts";
 import { waiterFrom, type WaitUntilCapable } from "./background.ts";
+// Every HTML-rendering handler records the deploy before it renders anything: the
+// asset and dictionary URLs in the head carry the deploy id, and the shell
+// dictionary refuses to build until it is known. See lib/deploy.ts.
+import { type DeployAware, rememberDeploy } from "./deploy.ts";
 import { feedKey, HN_MIRROR_STORE, itemKey, readMirror, writeMirror } from "./store.ts";
 import { encodeWithDictionary } from "./dictionary.ts";
 import { renderErrorPage, renderOfflinePage } from "./errors.ts";
@@ -120,8 +124,9 @@ export function handleFeed(
   pageNumber: number,
   emptyTitle: string,
   emptyDescription: string,
-  context?: WaitUntilCapable,
+  context?: WaitUntilCapable & DeployAware,
 ): Promise<Response> {
+  rememberDeploy(context);
   const requestId = getRequestId(request);
   const startTime = performance.now();
 
@@ -225,8 +230,9 @@ export function handleFeed(
 export function handleItem(
   request: Request,
   id: number,
-  context?: WaitUntilCapable,
+  context?: WaitUntilCapable & DeployAware,
 ): Promise<Response> {
+  rememberDeploy(context);
   const requestId = getRequestId(request);
   const startTime = performance.now();
   const waitUntil = waiterFrom(context);
@@ -348,8 +354,9 @@ const isValidUsername = (username: string): boolean => {
 export function handleUser(
   request: Request,
   username: string,
-  context?: WaitUntilCapable,
+  context?: WaitUntilCapable & DeployAware,
 ): Promise<Response> {
+  rememberDeploy(context);
   const requestId = getRequestId(request);
   const startTime = performance.now();
 

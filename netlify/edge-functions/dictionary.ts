@@ -7,9 +7,10 @@
 //
 // See docs/netlify-proposals/01-compression-dictionary-transport.md
 
-import type { Config } from "@netlify/edge-functions";
+import type { Config, Context } from "@netlify/edge-functions";
 import { DICTIONARY_TRANSPORT_ENABLED, toHex, useAsDictionaryHeader } from "./lib/dictionary.ts";
 import { tryGetShellDictionary } from "./lib/shell-dictionary.ts";
+import { rememberDeploy } from "./lib/deploy.ts";
 
 /**
  * Routes the dictionary applies to.
@@ -32,7 +33,13 @@ import { tryGetShellDictionary } from "./lib/shell-dictionary.ts";
  */
 export const DICTIONARY_MATCH = "/:section/:page";
 
-export default async (): Promise<Response> => {
+export default async (_request: Request, context: Context): Promise<Response> => {
+  // The shell's bytes include the deploy id (it is in the head's own asset URLs),
+  // and it must not be built before that is known - two isolates disagreeing about
+  // it would produce two dictionaries with two hashes, and a client holding one
+  // would be declined by the other.
+  rememberDeploy(context);
+
   if (!DICTIONARY_TRANSPORT_ENABLED) {
     return new Response("Dictionary transport disabled", { status: 404 });
   }
@@ -53,8 +60,17 @@ export default async (): Promise<Response> => {
         matchDest: ["document"],
         id: `shell-${toHex(dictionary.hash).slice(0, 16)}`,
       }),
-      // The content is derived from the deployed render code, so it is immutable
-      // for the life of the deploy, and the URL carries a hash.
+      // Immutable for a year, which RFC 9842 effectively requires: a dictionary
+      // whose response is not fresh is refused, and the stored dictionary's own
+      // lifetime comes from this same `max-age`, so anything short would expire it
+      // before the deploy it exists to compress against.
+      //
+      // That is only safe because the URL is versioned. It used to claim "the URL
+      // carries a hash" while `path` was the fixed string `/_dict/shell`, so the
+      // first response a browser ever got was the one it kept for a year: when the
+      // malformed `Use-As-Dictionary` header was fixed, no returning visitor could
+      // see the fix, and every one of them kept advertising a hash this deploy no
+      // longer builds. The renderer now points the link at `?v=<deploy id>`.
       "cache-control": "public, max-age=31536000, immutable",
       "x-content-type-options": "nosniff",
       "x-robots-tag": "noindex, nofollow",

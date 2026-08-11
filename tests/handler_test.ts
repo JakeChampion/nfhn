@@ -58,10 +58,21 @@ async function settleBackgroundWork(): Promise<void> {
   }
 }
 
+/**
+ * The deploy id every mock context reports.
+ *
+ * Not decoration: the asset and dictionary URLs in every rendered head carry it,
+ * and the shell dictionary refuses to build without it. A handler under test that
+ * never sees a deploy id renders a page with unversioned asset URLs, which is
+ * exactly the state these tests exist to catch.
+ */
+export const TEST_DEPLOY_ID = "test-deploy-0001";
+
 // Create a mock context with params
 function createContext(params: Record<string, string> = {}): Context {
   return {
     params,
+    deploy: { id: TEST_DEPLOY_ID },
     waitUntil: (promise: Promise<unknown>) => {
       backgroundWork.push(promise);
     },
@@ -1888,7 +1899,7 @@ Deno.test("robots.txt points at a sitemap that exists", async () => {
 });
 
 Deno.test("saved page is not indexable", async () => {
-  const res = await savedHandler(new Request("https://nfhn.test/saved"));
+  const res = await savedHandler(new Request("https://nfhn.test/saved"), createContext());
   await res.text();
   assertStringIncludes(res.headers.get("x-robots-tag") ?? "", "noindex");
 });
@@ -2240,7 +2251,7 @@ Deno.test("structured data points at the canonical origin", async () => {
   });
 });
 
-Deno.test("pages send Integrity-Policy and Trusted Types in report-only", async () => {
+Deno.test("pages send Integrity-Policy report-only and Trusted Types enforced", async () => {
   const routes = { [topStoriesUrl]: [noVarySearchStory] };
 
   await withMockedEnv(routes, async () => {
@@ -2252,17 +2263,56 @@ Deno.test("pages send Integrity-Policy and Trusted Types in report-only", async 
     // Must name a group Reporting-Endpoints defines, or reports go nowhere.
     assertStringIncludes(integrity ?? "", "endpoints=(default)");
 
-    const reportOnlyCsp = res.headers.get("content-security-policy-report-only") ?? "";
-    assertStringIncludes(reportOnlyCsp, "require-trusted-types-for 'script'");
-
-    // Enforcing Trusted Types today would break the saved page and the PiP
-    // reader, both of which assign innerHTML. The enforced policy must not
-    // carry the directive until those sinks are gone.
-    assertEquals(
-      (res.headers.get("content-security-policy") ?? "").includes("require-trusted-types-for"),
-      false,
-    );
+    // Trusted Types is enforced now that no client code assigns innerHTML. The
+    // sinks that kept it report-only - the saved list and the PiP reader - build
+    // DOM nodes instead, and the test below walks the source to keep it that way.
+    const csp = res.headers.get("content-security-policy") ?? "";
+    assertStringIncludes(csp, "require-trusted-types-for 'script'");
+    assertStringIncludes(csp, "trusted-types 'none'");
+    // Enforced, so it must reach the collector through the enforced policy's own
+    // report-to rather than a second report-only header nothing else sets.
+    assertStringIncludes(csp, "report-to default");
+    assertEquals(res.headers.has("content-security-policy-report-only"), false);
   });
+});
+
+Deno.test("no client script assigns a Trusted Types sink", async () => {
+  // `trusted-types 'none'` is enforced, so any of these in shipped client code is
+  // a hard failure at runtime rather than a report - and it would be a failure on
+  // the exact features (saved stories, PiP) that the report-only period was
+  // measuring. Cheaper to catch here than in a console.
+  const files = ["app.js", "sw.js", "justify.js", "tex-linebreak.js", "hyphens_en-us.js"];
+  const sinks = [
+    /\.innerHTML\s*=/,
+    /\.outerHTML\s*=/,
+    /insertAdjacentHTML\s*\(/,
+    /document\.write\s*\(/,
+    /\.srcdoc\s*=/,
+    /createContextualFragment\s*\(/,
+    /\beval\s*\(/,
+    /new Function\s*\(/,
+    // A string first argument to either is compiled as script.
+    /set(?:Timeout|Interval)\s*\(\s*["'`]/,
+  ];
+
+  for (const file of files) {
+    const source = await Deno.readTextFile(new URL(`../static/${file}`, import.meta.url));
+    // Comments in these files discuss innerHTML by name, so strip them first
+    // rather than matching the prose.
+    const code = source
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("//"))
+      .join("\n");
+
+    for (const sink of sinks) {
+      assertEquals(
+        sink.test(code),
+        false,
+        `static/${file} uses ${sink}, which Trusted Types blocks`,
+      );
+    }
+  }
 });
 
 Deno.test("streamed pages block first paint until main content arrives", async () => {
@@ -2319,4 +2369,124 @@ Deno.test("reader pages carry the article's own language and direction", async (
   assertStringIncludes(source, 'lang="${lang}" dir="${dir}"');
   assertStringIncludes(source, "safeLangAttr");
   assertStringIncludes(source, "safeDirAttr");
+});
+
+// =============================================================================
+// Assets served as compression dictionaries
+// =============================================================================
+
+import assetHandler from "../netlify/edge-functions/asset.ts";
+import dictionaryHandler, { DICTIONARY_MATCH } from "../netlify/edge-functions/dictionary.ts";
+
+/** A context whose `next()` returns what Netlify's static file serving would. */
+function assetContext(body: string): Context {
+  return {
+    deploy: { id: TEST_DEPLOY_ID },
+    waitUntil: (promise: Promise<unknown>) => {
+      backgroundWork.push(promise);
+    },
+    next: () =>
+      Promise.resolve(
+        new Response(body, {
+          status: 200,
+          headers: {
+            // Netlify's default for a static file, and the reason DevTools reported
+            // "the response can't be used as a dictionary because its freshness is
+            // expired": a freshness lifetime of zero is expired on arrival.
+            "cache-control": "public,max-age=0,must-revalidate",
+            "content-type": "text/javascript",
+          },
+        }),
+      ),
+  } as unknown as Context;
+}
+
+Deno.test("a versioned asset is fresh enough to be stored as a dictionary", async () => {
+  const res = await assetHandler(
+    new Request(`https://nfhn.test/app.js?v=${TEST_DEPLOY_ID}`),
+    assetContext("console.log('hello')"),
+  );
+  await res.text();
+
+  const cacheControl = res.headers.get("cache-control") ?? "";
+  // The whole fix. Anything with a zero freshness lifetime is refused outright,
+  // and RFC 9842 derives the stored dictionary's own lifetime from this value -
+  // so a short max-age would expire the dictionary before the deploy it exists
+  // to compress against.
+  assertStringIncludes(cacheControl, "max-age=31536000");
+  assertStringIncludes(cacheControl, "immutable");
+  assertEquals(cacheControl.includes("must-revalidate"), false);
+
+  assertStringIncludes(res.headers.get("use-as-dictionary") ?? "", 'match="/app.js"');
+  assertStringIncludes(res.headers.get("use-as-dictionary") ?? "", 'match-dest=("script")');
+  assertStringIncludes(res.headers.get("vary") ?? "", "Available-Dictionary");
+  assertEquals(res.headers.get("netlify-vary"), "header=Available-Dictionary");
+});
+
+Deno.test("an unversioned asset is handed through, not pinned for a year", async () => {
+  // `immutable` on a URL whose bytes change every deploy is how the shell
+  // dictionary became unfixable for a year. An unversioned request - offline.html
+  // before build.ts stamps it, a bookmark, a crawler - keeps Netlify's
+  // revalidating response and simply is not offered as a dictionary.
+  const res = await assetHandler(
+    new Request("https://nfhn.test/app.js"),
+    assetContext("console.log('hello')"),
+  );
+  await res.text();
+
+  assertStringIncludes(res.headers.get("cache-control") ?? "", "must-revalidate");
+  assertEquals(res.headers.has("use-as-dictionary"), false);
+  // The content type is a property of the file, not of how it was asked for.
+  assertEquals(res.headers.get("content-type"), "text/javascript; charset=utf-8");
+});
+
+Deno.test("the Use-As-Dictionary offers parse as Structured Field dictionaries", async () => {
+  // DevTools reported "`Use-As-Dictionary` HTTP response header isn't a valid
+  // Structured Field Value" because a `\d` in the old match pattern was an illegal
+  // string escape. A parse of the real header is the only assertion that catches
+  // that class of mistake for any input, rather than the one input we thought of.
+  const parseDictionary = (value: string): Map<string, string> => {
+    const members = new Map<string, string>();
+    for (const member of value.split(/,(?![^(]*\))/)) {
+      const [rawKey = "", ...rest] = member.trim().split("=");
+      const key = rawKey.trim();
+      const raw = rest.join("=");
+      if (!/^[a-z*][a-z0-9_.*-]*$/.test(key)) {
+        throw new Error(`not a Structured Field key: ${key}`);
+      }
+      // Every value we emit is a quoted string or an inner list of them, so any
+      // backslash must be escaping a quote or another backslash.
+      for (const quoted of raw.matchAll(/"((?:[^"\\]|\\.)*)"/g)) {
+        for (const escape of (quoted[1] ?? "").matchAll(/\\(.)/g)) {
+          if (escape[1] !== '"' && escape[1] !== "\\") {
+            throw new Error(`illegal escape \\${escape[1]} in ${raw}`);
+          }
+        }
+      }
+      if (/^\(.*\)$/.test(raw.trim()) === false && /^".*"$/.test(raw.trim()) === false) {
+        throw new Error(`not a string or inner list: ${raw}`);
+      }
+      members.set(key.trim(), raw.trim());
+    }
+    return members;
+  };
+
+  const asset = await assetHandler(
+    new Request(`https://nfhn.test/styles.css?v=${TEST_DEPLOY_ID}`),
+    assetContext("body{}"),
+  );
+  await asset.text();
+  const parsed = parseDictionary(asset.headers.get("use-as-dictionary")!);
+  assertEquals(parsed.get("match"), '"/styles.css"');
+  assertEquals(parsed.get("match-dest"), '("style")');
+
+  // And the shell offer, which is the one that was actually malformed.
+  const shell = await dictionaryHandler(
+    new Request("https://nfhn.test/_dict/shell?v=" + TEST_DEPLOY_ID),
+    createContext(),
+  );
+  await shell.arrayBuffer();
+  const shellOffer = parseDictionary(shell.headers.get("use-as-dictionary")!);
+  assertEquals(shellOffer.get("match"), `"${DICTIONARY_MATCH}"`);
+  assertStringIncludes(shell.headers.get("cache-control") ?? "", "immutable");
 });

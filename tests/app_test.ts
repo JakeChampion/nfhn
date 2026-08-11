@@ -5,7 +5,7 @@
 
 import { assert, assertEquals, assertStringIncludes } from "std/testing/asserts.ts";
 import {
-  type El,
+  El,
   el,
   FakeCaches,
   FakeEventSource,
@@ -841,4 +841,263 @@ Deno.test("paragraphs with no layout are left for when they gain it", async () =
   );
 
   assertEquals(justified, ["Visible."]);
+});
+
+// =============================================================================
+// The saved list, built as nodes
+// =============================================================================
+//
+// This used to be a string of concatenated markup assigned to innerHTML, which is
+// the sink Trusted Types blocks and the reason `require-trusted-types-for` had to
+// ship report-only. It builds DOM nodes now, and `trusted-types 'none'` is
+// enforced - so this code has to work, and until now none of it was tested.
+
+const BOOKMARKS_MODULE = "Favorites/Bookmarks";
+
+interface SavedStory {
+  id: number;
+  title: string;
+  type: string;
+  url?: string | null;
+  domain?: string | null;
+  comments_count?: number;
+  saved_at?: number;
+}
+
+async function renderSavedList(stories: SavedStory[]): Promise<El> {
+  const container = el("div", { id: "saved-stories-container" });
+  const root = el("body", {}, container);
+  const stored: Record<string, SavedStory> = {};
+  for (const story of stories) stored[String(story.id)] = story;
+
+  const document = {
+    getElementById: (id: string) => root.querySelector(`[id="${id}"]`),
+    querySelectorAll: (selector: string) => root.querySelectorAll(selector),
+    createElement: (tag: string) => new El(tag),
+    createElementNS: (namespace: string, tag: string) => {
+      const node = new El(tag);
+      node.namespace = namespace;
+      return node;
+    },
+  };
+
+  await runModuleReturning(BOOKMARKS_MODULE, "app.js", {
+    document,
+    localStorage: {
+      getItem: () => JSON.stringify(stored),
+      setItem: () => {},
+    },
+    // The list render is all this test drives; the storage, sync and background
+    // fetch paths this module also sets up have their own tests.
+    navigator: {},
+    SavedIndex: { publish: () => {}, markSeen: () => {} },
+    console,
+    JSON,
+    Object,
+    Date,
+    parseInt,
+    Number,
+  }, []);
+
+  return container;
+}
+
+Deno.test("the saved list renders one row per story, as nodes", async () => {
+  const container = await renderSavedList([
+    {
+      id: 1,
+      title: "First story",
+      type: "link",
+      url: "https://example.com/one",
+      domain: "example.com",
+      comments_count: 4,
+      saved_at: 200,
+    },
+    { id: 2, title: "An Ask HN", type: "ask", comments_count: 0, saved_at: 100 },
+  ]);
+
+  assertEquals(container.querySelector(".saved-count")?.textContent, "2 saved stories");
+
+  const rows = container.querySelectorAll("li");
+  assertEquals(rows.length, 2);
+  // Newest first.
+  assertEquals(rows[0]?.dataset.storyId, "1");
+  assertEquals(rows[1]?.dataset.storyId, "2");
+
+  assertEquals(rows[0]?.querySelector(".story-title-text")?.textContent, "First story");
+  assertEquals(rows[0]?.querySelector(".story-meta")?.textContent, "(example.com)");
+  assertEquals(rows[0]?.querySelector("a.title")?.getAttribute("href"), "https://example.com/one");
+  assertEquals(rows[0]?.querySelector("a.comments")?.textContent, "view 4 comments");
+
+  // An Ask HN gets its badge and links to the discussion, and with no comments
+  // the link says so rather than reading "view 0 comments".
+  assertEquals(rows[1]?.querySelector(".badge")?.textContent, "Ask HN");
+  assertEquals(rows[1]?.querySelector("a.title")?.getAttribute("href"), "/item/2");
+  assertEquals(rows[1]?.querySelector("a.comments")?.textContent, "view discussion");
+
+  // The remove button is what the module attaches its click handler to.
+  const button = rows[0]?.querySelector(".bookmark-btn");
+  assertEquals(button?.getAttribute("aria-pressed"), "true");
+  assertEquals(button?.dataset.storyId, "1");
+
+  // SVG needs createElementNS: an <svg> built with createElement lands in the
+  // XHTML namespace and renders as nothing at all.
+  const icon = button?.querySelector("svg");
+  assertEquals(icon?.namespace, "http://www.w3.org/2000/svg");
+  assert(icon?.querySelector("path")?.getAttribute("d")?.startsWith("M17 3H7"));
+});
+
+Deno.test("a story title is text, not markup", async () => {
+  // The old version escaped this by hand before concatenating it into innerHTML.
+  // A node cannot be escaped wrongly: the title is text, and the only way to read
+  // it back is as text.
+  const container = await renderSavedList([
+    {
+      id: 7,
+      title: '<img src=x onerror="alert(1)">',
+      type: "link",
+      url: 'javascript:alert("no")',
+      comments_count: 0,
+    },
+  ]);
+
+  const title = container.querySelector(".story-title-text");
+  assertEquals(title?.textContent, '<img src=x onerror="alert(1)">');
+  assertEquals(title?.querySelectorAll("img").length, 0);
+  // The href is set as an attribute value, so it is never parsed as markup - and a
+  // javascript: URL in a saved story's own url field is not something this list
+  // invents, it is whatever HN had.
+  assertEquals(container.querySelector("a.title")?.getAttribute("href"), 'javascript:alert("no")');
+});
+
+Deno.test("an empty saved list says so", async () => {
+  const container = await renderSavedList([]);
+  assertEquals(container.querySelectorAll("li").length, 0);
+  assertStringIncludes(
+    container.querySelector(".empty-saved")?.textContent ?? "",
+    "No saved stories yet.",
+  );
+});
+
+// =============================================================================
+// What a third-party article may bring into the PiP window
+// =============================================================================
+
+const PIP_MODULE = "Document Picture-in-Picture API (Phase 3)";
+
+async function pipModule() {
+  // The section ends by calling init(), which tags <html> with whether PiP is
+  // available. A classList that only records is enough for that.
+  const classes: string[] = [];
+  const api = await runModuleReturning(PIP_MODULE, "app.js", {
+    window: {},
+    document: {
+      documentElement: { classList: { add: (name: string) => classes.push(name) } },
+      addEventListener: () => {},
+      createElement: (tag: string) => new El(tag),
+    },
+    // Not supported, so init() only adds the no-pip class and returns. The PiP
+    // window cannot be opened from a test at all; the sanitiser is the part with
+    // logic worth asserting on.
+    documentPictureInPicture: undefined,
+    fetch: () => Promise.reject(new Error("not used")),
+    DOMParser: class {},
+    // The section runs to the next heading, which is where app.js hangs the export
+    // helpers off window.NFHN. Declared in a different section, stubbed here.
+    StoriesExport: { exportAsJSON: () => {}, exportAsHTML: () => {}, importFromJSON: () => {} },
+    console,
+    Array,
+    Set,
+    Object,
+  }, ["ReaderPiP"]) as unknown as {
+    ReaderPiP: { adoptSanitized(doc: unknown, source: El): El[] };
+  };
+
+  const targetDoc = { importNode: (node: El, deep: boolean) => node.cloneNode(deep) };
+  return (source: El): El[] => api.ReaderPiP.adoptSanitized(targetDoc, source);
+}
+
+Deno.test("adopting an article keeps its content and drops what runs", async () => {
+  const adopt = await pipModule();
+
+  const article = el(
+    "article",
+    {},
+    el("p", {}, el("img", { src: "https://cdn.example.com/photo.jpg", alt: "A photo" })),
+    el("script", { src: "https://tracker.example.com/t.js" }),
+    el("iframe", { src: "https://ads.example.com/frame" }),
+    el("a", { href: "https://example.com/next" }),
+  );
+
+  const adopted = adopt(article);
+  const root = el("main", {}, ...adopted);
+
+  // Reader mode without images and links is not reader mode.
+  assertEquals(root.querySelector("img")?.getAttribute("src"), "https://cdn.example.com/photo.jpg");
+  assertEquals(root.querySelector("a")?.getAttribute("href"), "https://example.com/next");
+
+  // These load or execute, and the PiP document is same-origin with the page.
+  assertEquals(root.querySelectorAll("script").length, 0);
+  assertEquals(root.querySelectorAll("iframe").length, 0);
+});
+
+Deno.test("adopting an article strips handlers and script URLs", async () => {
+  const adopt = await pipModule();
+
+  const article = el(
+    "article",
+    {},
+    // The one that mattered: innerHTML does not execute <script>, but it very much
+    // fires onerror, and this is somebody else's HTML.
+    el("img", { src: "x", onerror: "alert(1)" }),
+    el("a", { href: "javascript:alert(1)" }),
+    el("a", { href: "data:text/html,<script>alert(1)</script>" }),
+    el("div", { onclick: "steal()", "data-keep": "yes" }),
+    el("img", { src: "data:image/png;base64,iVBORw0KGgo=" }),
+  );
+
+  const root = el("main", {}, ...adopt(article));
+
+  assertEquals(root.querySelector("img")?.getAttribute("onerror"), null);
+  assertEquals(root.querySelectorAll("a")[0]?.getAttribute("href"), null);
+  assertEquals(root.querySelectorAll("a")[1]?.getAttribute("href"), null);
+  assertEquals(root.querySelector("div")?.getAttribute("onclick"), null);
+  // Not everything with a colon is dangerous: a data: image is how plenty of
+  // articles inline their figures, and it navigates nowhere.
+  assertEquals(root.querySelector("div")?.getAttribute("data-keep"), "yes");
+  assertEquals(
+    root.querySelectorAll("img")[1]?.getAttribute("src"),
+    "data:image/png;base64,iVBORw0KGgo=",
+  );
+});
+
+Deno.test("adopting reaches all the way down, not just the top level", async () => {
+  const adopt = await pipModule();
+
+  const article = el(
+    "article",
+    {},
+    el(
+      "div",
+      {},
+      el("section", {}, el("img", { src: "x", onerror: "alert(1)" }), el("script", {})),
+    ),
+  );
+
+  const root = el("main", {}, ...adopt(article));
+  assertEquals(root.querySelectorAll("script").length, 0);
+  assertEquals(root.querySelector("img")?.getAttribute("onerror"), null);
+});
+
+Deno.test("adopting copies rather than moving the parsed nodes", async () => {
+  const adopt = await pipModule();
+
+  const article = el("article", {}, el("p", { onclick: "x()" }));
+  const adopted = adopt(article);
+
+  // importNode, not appendChild: the source document keeps its own tree. If this
+  // moved nodes instead, the fallback path that re-reads the parsed document would
+  // find it emptied.
+  assertEquals(article.querySelector("p")?.getAttribute("onclick"), "x()");
+  assertEquals(adopted[0]?.getAttribute("onclick"), null);
 });

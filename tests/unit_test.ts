@@ -2,6 +2,7 @@
 
 import {
   assertEquals,
+  assertRejects,
   assertStrictEquals,
   assertStringIncludes,
   assertThrows,
@@ -1544,8 +1545,23 @@ Deno.test("manifest separates the maskable icon from the plain one", async () =>
 
 import { createDCtx, decompressUsingDict, init as zstdInit } from "@bokuweb/zstd-wasm";
 import { compressWithDictionary } from "../netlify/edge-functions/lib/zstd.ts";
-import { getShellDictionary } from "../netlify/edge-functions/lib/shell-dictionary.ts";
+import {
+  getShellDictionary,
+  tryGetShellDictionary,
+} from "../netlify/edge-functions/lib/shell-dictionary.ts";
 import { encodeWithDictionary } from "../netlify/edge-functions/lib/dictionary.ts";
+import {
+  assetVersionQuery,
+  deployVersion,
+  rememberDeploy,
+  resetDeployForTesting,
+} from "../netlify/edge-functions/lib/deploy.ts";
+
+// The shell dictionary contains the deploy id (the versioned asset URLs in the
+// head it renders), and refuses to build until one is known - see lib/deploy.ts.
+// Standing in for the context every real request carries.
+const UNIT_TEST_DEPLOY_ID = "unit-test-deploy";
+rememberDeploy({ deploy: { id: UNIT_TEST_DEPLOY_ID } });
 
 Deno.test("a dcz response decodes back to the exact original bytes", async () => {
   // The test that matters: everything else is a header contract, but if this
@@ -2144,3 +2160,90 @@ function dictionaryStories() {
     comments_count: 12 + i,
   }));
 }
+
+// =============================================================================
+// Versioned URLs for immutable, dictionary-eligible responses
+// =============================================================================
+//
+// /app.js, /styles.css and /_dict/shell are all served `public, max-age=31536000,
+// immutable`, because a browser refuses to store a dictionary whose response is
+// not fresh and RFC 9842 takes the stored dictionary's own lifetime from that same
+// max-age. Serving a *mutable* URL that way is a trap, and the shell dictionary
+// fell into it: a fixed `/_dict/shell` path meant the first response a browser
+// ever saw was the one it kept for a year, including a malformed
+// `Use-As-Dictionary` header that was later fixed and could never reach anyone.
+
+import { sharedStyles, themeScript } from "../netlify/edge-functions/lib/render/components.ts";
+
+Deno.test("the rendered head asks for versioned asset and dictionary URLs", async () => {
+  const head = await htmlToString(pwaHeadTags());
+  assertStringIncludes(head, `<link rel="compression-dictionary" href="/_dict/shell?v=`);
+  assertStringIncludes(head, `?v=${UNIT_TEST_DEPLOY_ID}"`);
+
+  assertStringIncludes(
+    await htmlToString(sharedStyles(1)),
+    `href="/styles.css?v=${UNIT_TEST_DEPLOY_ID}"`,
+  );
+  assertStringIncludes(
+    await htmlToString(themeScript()),
+    `src="/app.js?v=${UNIT_TEST_DEPLOY_ID}"`,
+  );
+});
+
+Deno.test("a versioned asset URL still matches the dictionary it was stored from", () => {
+  // The load-bearing detail behind the whole `?v=` approach. RFC 9842 builds the
+  // pattern as `new URLPattern(match, dictionaryURL)`, and because the match
+  // string specifies a pathname, the search component defaults to `*` rather than
+  // being inherited from the dictionary's own URL. So a dictionary stored from
+  // /app.js?v=A is advertised on /app.js?v=B, which is the entire point: the
+  // previous deploy's file is the dictionary for this one.
+  const stored = "https://nfhn.test/app.js?v=deploy-a";
+  const pattern = new URLPattern("/app.js", stored);
+  assertEquals(pattern.search, "*");
+  assertEquals(pattern.test("https://nfhn.test/app.js?v=deploy-b"), true);
+  assertEquals(pattern.test("https://nfhn.test/app.js"), true);
+
+  // Same for the shell: navigations carry no query, and the dictionary URL does.
+  const shell = new URLPattern(DICTIONARY_MATCH, "https://nfhn.test/_dict/shell?v=deploy-a");
+  assertEquals(shell.test("https://nfhn.test/top/1"), true);
+  assertEquals(shell.test("https://nfhn.test/item/123"), true);
+});
+
+Deno.test("assetVersionQuery is a query string, or nothing at all", () => {
+  assertEquals(assetVersionQuery(), `?v=${UNIT_TEST_DEPLOY_ID}`);
+  assertEquals(deployVersion(), UNIT_TEST_DEPLOY_ID);
+
+  try {
+    resetDeployForTesting();
+    // Empty rather than a placeholder: asset.ts hands an unversioned request
+    // straight through with Netlify's revalidating response, so a page rendered
+    // before the deploy is known loads working, uncached assets instead of
+    // pinning a guessed URL in the browser cache for a year.
+    assertEquals(assetVersionQuery(), "");
+    assertEquals(deployVersion(), null);
+  } finally {
+    rememberDeploy({ deploy: { id: UNIT_TEST_DEPLOY_ID } });
+  }
+});
+
+Deno.test("the shell dictionary refuses to build before the deploy is known", async () => {
+  // Determinism is the requirement: every isolate in every region must derive
+  // byte-identical dictionary content, and the deploy id is part of those bytes
+  // now that the head it renders carries versioned URLs. An isolate that built
+  // before it knew the id would hold a dictionary nothing else agrees with, and
+  // clients holding it would silently be declined by every other isolate.
+  try {
+    resetDeployForTesting();
+    await assertRejects(
+      () => getShellDictionary(),
+      Error,
+      "Deploy id unknown",
+    );
+    assertEquals(await tryGetShellDictionary(), null);
+  } finally {
+    rememberDeploy({ deploy: { id: UNIT_TEST_DEPLOY_ID } });
+  }
+
+  // And it builds again once a request has supplied one.
+  assertEquals((await getShellDictionary()).hash.length, 32);
+});
