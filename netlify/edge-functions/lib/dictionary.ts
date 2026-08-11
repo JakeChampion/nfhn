@@ -24,6 +24,8 @@
 //
 // See docs/netlify-proposals/01-compression-dictionary-transport.md
 
+import { isSpeculative } from "./background.ts";
+
 /**
  * Master switch, on by default.
  *
@@ -215,6 +217,14 @@ export async function encodeWithDictionary(
   response: Response,
 ): Promise<Response> {
   if (!DICTIONARY_TRANSPORT_ENABLED) return response;
+
+  // Speculative fetches get the plain body. Dictionary compression is real CPU
+  // and nobody is waiting on these bytes: a prerender that is never activated
+  // spent that work for nothing, and one that is activated is served from cache
+  // rather than recompressed. isSpeculative/isPrerender shipped with the
+  // Sec-Purpose work and until now nothing consumed them.
+  if (isSpeculative(request)) return response;
+
   // Only complete, uncompressed HTML bodies. 304s have no body, error pages are
   // not worth the CPU, and anything already encoded must not be double-wrapped.
   if (response.status !== 200 || !response.body) return response;

@@ -12,7 +12,31 @@ export type Waiter = (promise: Promise<unknown>) => void;
  */
 export interface WaitUntilCapable {
   waitUntil?: (promise: Promise<unknown>) => void;
+  geo?: { timezone?: string };
 }
+
+/**
+ * The reader's IANA time zone, as reported by Netlify's edge, or UTC.
+ *
+ * Only used for calendar arithmetic (month and year boundaries), which is
+ * genuinely local. Anything finer than a day is the same everywhere, and the
+ * client re-renders timestamps against its own clock anyway - this is about the
+ * server-rendered string being right for readers without JavaScript.
+ *
+ * Validated rather than trusted: an unparseable zone would throw inside
+ * Temporal, and this value reaches it from a request-scoped source.
+ */
+export const timeZoneFrom = (context?: WaitUntilCapable): string => {
+  const zone = context?.geo?.timezone;
+  if (!zone) return "UTC";
+  try {
+    // Throws for anything that is not a real IANA identifier.
+    new Intl.DateTimeFormat("en", { timeZone: zone });
+    return zone;
+  } catch {
+    return "UTC";
+  }
+};
 
 /**
  * Build a `Waiter` from an edge function's context.

@@ -221,11 +221,10 @@ async function fetchJsonWithRetry<T>(
  * silently falling back to the old approximation is strictly better than
  * throwing while rendering a page.
  */
-function calendarAgo(thenMs: number, nowMs: number): string | null {
+function calendarAgo(thenMs: number, nowMs: number, zone = "UTC"): string | null {
   if (typeof Temporal === "undefined") return null;
 
   try {
-    const zone = "UTC";
     const from = Temporal.Instant.fromEpochMilliseconds(thenMs).toZonedDateTimeISO(zone);
     const to = Temporal.Instant.fromEpochMilliseconds(nowMs).toZonedDateTimeISO(zone);
     const diff = from.until(to, { largestUnit: "year" });
@@ -242,10 +241,16 @@ function calendarAgo(thenMs: number, nowMs: number): string | null {
  * @param unixSeconds when the item was posted
  * @param referenceMs the clock to measure against; injected so tests do not
  *   depend on which month they run in, which calendar arithmetic makes matter.
+ * @param timeZone IANA zone the calendar arithmetic happens in. Month and year
+ *   boundaries are local, not UTC: for a reader in Auckland, "1 month ago"
+ *   changes over at a different instant than it does in London. Netlify reports
+ *   the reader's zone as `context.geo.timezone`, so the edge can get this right
+ *   rather than defaulting everyone to UTC.
  */
 export function formatTimeAgo(
   unixSeconds: number | undefined,
   referenceMs: number = now(),
+  timeZone = "UTC",
 ): string {
   if (!unixSeconds) return "";
   const then = unixSeconds * 1000;
@@ -264,7 +269,7 @@ export function formatTimeAgo(
 
   // 28 days rather than 30: February means a full calendar month can be 28 days,
   // and handing those to the calendar path is the whole point.
-  const calendar = calendarAgo(then, current);
+  const calendar = calendarAgo(then, current, timeZone);
   if (calendar) return calendar;
 
   // No Temporal, or a gap that is over 28 days but under one calendar month.
