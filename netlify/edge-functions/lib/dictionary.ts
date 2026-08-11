@@ -234,12 +234,47 @@ export function canServeDictionaryDelta(
  * holds plain HTML and the delta is computed per request, against whatever
  * dictionary that particular client actually advertised.
  *
- * Any failure returns the original response unchanged. A missed optimisation is
- * invisible; a corrupted body is not.
+ * Any failure serves the plain body. A missed optimisation is invisible; a
+ * corrupted body is not - and so is a 500.
+ *
+ * **Nothing past the point where the body is read may return `response`.** A
+ * response whose stream has been consumed cannot be re-wrapped, and Netlify's
+ * platform re-wraps every response on the way out to apply its own header
+ * mutations - `new Response(response.body, ...)`, which throws `ReadableStream
+ * is locked or disturbed` on a disturbed stream and turns the page into a 500.
+ * That is what happened the first time a browser actually advertised the
+ * dictionary: the compress step threw, the catch handed back the drained
+ * response, and `/top/1` started returning 500 instead of quietly skipping the
+ * optimisation. Every return below the read builds a new Response from the
+ * bytes we already hold.
  */
+/** Compresses a body against a raw dictionary, returning a zstd frame. */
+export type Compressor = (body: Uint8Array, dictionary: Uint8Array) => Promise<Uint8Array>;
+
+/**
+ * True until the compressor has failed once in this isolate.
+ *
+ * Whether the WASM module can be instantiated is a property of the runtime, not
+ * of any particular request: it either works here or it never will. Latching it
+ * off means a broken compressor costs one failed attempt per isolate rather
+ * than one per request, and says so in the log once rather than continuously.
+ */
+let compressorWorks = true;
+
+/** Reset the latch. Tests only - production has no reason to un-fail. */
+export const resetCompressorLatch = (): void => {
+  compressorWorks = true;
+};
+
+const defaultCompressor: Compressor = async (body, dictionary) => {
+  const { compressWithDictionary } = await import("./zstd.ts");
+  return await compressWithDictionary(body, dictionary);
+};
+
 export async function encodeWithDictionary(
   request: Request,
   response: Response,
+  compress: Compressor = defaultCompressor,
 ): Promise<Response> {
   if (!DICTIONARY_TRANSPORT_ENABLED) return response;
 
@@ -257,15 +292,33 @@ export async function encodeWithDictionary(
 
   const advertised = parseAvailableDictionary(request.headers.get("Available-Dictionary"));
   if (!advertised) return response;
+  if (!compressorWorks) return response;
+
+  const dictionary = await (await import("./shell-dictionary.ts")).tryGetShellDictionary();
+  if (!dictionary || !canServeDictionaryDelta(request, dictionary.hash)) return response;
+
+  // From here the body is gone, so `response` is no longer a thing we can hand
+  // back. `plain` is.
+  let plain: Uint8Array;
+  try {
+    plain = new Uint8Array(await response.arrayBuffer());
+  } catch (error) {
+    // The stream itself failed. There is nothing to serve and nothing to
+    // salvage, so let the platform turn it into an error page rather than
+    // pretending we have a body.
+    console.error("Reading the response body failed:", error);
+    throw error;
+  }
+
+  const asPlain = () =>
+    new Response(plain as BodyInit, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: new Headers(response.headers),
+    });
 
   try {
-    const { tryGetShellDictionary } = await import("./shell-dictionary.ts");
-    const dictionary = await tryGetShellDictionary();
-    if (!dictionary || !canServeDictionaryDelta(request, dictionary.hash)) return response;
-
-    const plain = new Uint8Array(await response.arrayBuffer());
-    const { compressWithDictionary } = await import("./zstd.ts");
-    const frame = await compressWithDictionary(plain, dictionary.bytes);
+    const frame = await compress(plain, dictionary.bytes);
     const body = frameDcz(dictionary.hash, frame);
 
     const headers = new Headers(response.headers);
@@ -279,7 +332,13 @@ export async function encodeWithDictionary(
       headers,
     });
   } catch (error) {
-    console.error("Dictionary encoding failed, serving uncompressed:", error);
-    return response;
+    // Almost certainly the WASM module: instantiating it is the only part of
+    // this that depends on the runtime rather than on our own bytes, and it
+    // either works in an isolate or never will. Latch it off so a broken
+    // compressor costs one failed attempt per isolate instead of one per
+    // request, and so the logs say it once.
+    compressorWorks = false;
+    console.error("Dictionary compression unavailable, serving plain:", error);
+    return asPlain();
   }
 }
