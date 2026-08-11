@@ -245,6 +245,9 @@ export const pwaHeadTags = (): HTML =>
     <meta name="color-scheme" content="light dark">
     <meta name="theme-color" content="#f5f5f5" media="(prefers-color-scheme: light)">
     <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
+    <!-- The standard name; the apple- prefixed one below is deprecated but is
+        still what older iOS reads, so both ship. -->
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="NFHN">

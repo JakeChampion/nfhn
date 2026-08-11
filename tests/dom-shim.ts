@@ -40,28 +40,45 @@ const parseCompound = (selector: string): Compound => {
   return compound;
 };
 
+/** A compound plus how it relates to the compound on its right. */
+interface Step {
+  compound: Compound;
+  /** " " = descendant, ">" = direct child. Ignored on the rightmost step. */
+  combinator: " " | ">";
+}
+
 /**
- * Split a selector into descendant parts, ignoring spaces inside `:not(...)`.
+ * Split a complex selector into steps, ignoring spaces inside `:not(...)`.
  *
- * Only the descendant combinator is supported - it is the only one these
- * modules use, and `>` / `+` / `~` would each need their own traversal.
+ * Descendant and child are supported, which is what these modules use. `+` and
+ * `~` would each need their own traversal and are not here.
  */
-const parseDescendants = (selector: string): Compound[] => {
+const parseSteps = (selector: string): Step[] => {
   const parts: string[] = [];
   let depth = 0;
   let current = "";
   for (const character of selector.trim()) {
     if (character === "(") depth++;
     if (character === ")") depth--;
-    if (character === " " && depth === 0) {
+    if (depth === 0 && (character === " " || character === ">")) {
       if (current) parts.push(current);
+      if (character === ">") parts.push(">");
       current = "";
       continue;
     }
     current += character;
   }
   if (current) parts.push(current);
-  return parts.map(parseCompound);
+
+  const steps: Step[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    if (parts[i] === ">") continue;
+    steps.push({
+      compound: parseCompound(parts[i]!),
+      combinator: parts[i + 1] === ">" ? ">" : " ",
+    });
+  }
+  return steps;
 };
 
 /** `data-story-id` <-> `storyId`, the same mapping `dataset` uses. */
@@ -145,15 +162,20 @@ export class El {
 
   matches(selector: string): boolean {
     return selector.split(",").some((part) => {
-      const compounds = parseDescendants(part);
-      if (!this.matchesCompound(compounds.pop()!)) return false;
+      const steps = parseSteps(part);
+      const last = steps.pop();
+      if (!last || !this.matchesCompound(last.compound)) return false;
 
-      // Ancestors, innermost first. Each has to be found somewhere above the
-      // last one matched, not necessarily as its direct parent.
+      // Ancestors, innermost first. A descendant combinator lets each one be
+      // found anywhere above; a child combinator pins it to the direct parent.
       let node = this.parent;
-      for (const ancestor of compounds.reverse()) {
-        while (node && !node.matchesCompound(ancestor)) node = node.parent;
-        if (!node) return false;
+      for (const step of steps.reverse()) {
+        if (step.combinator === ">") {
+          if (!node?.matchesCompound(step.compound)) return false;
+        } else {
+          while (node && !node.matchesCompound(step.compound)) node = node.parent;
+          if (!node) return false;
+        }
         node = node.parent;
       }
       return true;

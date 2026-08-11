@@ -95,7 +95,7 @@ export const ogImageUrl = (id: number): string =>
 export const SRI = {
   texLineBreak: "sha384-Mz2e2ZKHUt95NE5A4Q3jnM4vMi3TW/aI+z0XpUTTtvDOGtOicI7DlGTmCj3yVG0x",
   hyphens: "sha384-O18JzLDtmRj8lMDKjQ/VZOo09Ye41get5V+PDYP1atYLjrMbCO390FdScF4XAZts",
-  justify: "sha384-Vm8GFeJLr5zlqkkKiFdMW6A6t4wzeUxLPc2F/FG1rhsQRBHLnezcQ46x2u0h4Hl2",
+  justify: "sha384-LFQL8gAFwGgZaV8/gZ5sp9uHHdRBqLKdfPJcsapbMTC44HH/KAanKV8fTOlcvLD3",
 } as const;
 
 /** Maps each SRI entry to the file it must match. */

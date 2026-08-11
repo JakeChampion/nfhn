@@ -21,10 +21,10 @@ export const applySecurityHeaders = (headers: Headers): Headers => {
   }
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   headers.set("X-Content-Type-Options", "nosniff");
-  headers.set(
-    "Permissions-Policy",
-    "camera=(), microphone=(), geolocation=(), interest-cohort=()",
-  );
+  // `interest-cohort=()` was here to opt out of FLoC. FLoC was withdrawn, the
+  // token was never standardised, and Chrome now logs it as an unrecognised
+  // feature on every response - noise that trains you to ignore the console.
+  headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   headers.set(
     "Strict-Transport-Security",
     "max-age=63072000; includeSubDomains; preload",

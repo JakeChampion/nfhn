@@ -738,3 +738,107 @@ Deno.test("a thread read while it was still growing keeps the higher count", asy
 
   assertEquals((await module.read())["5"], { seen: 3, latest: 9 });
 });
+
+// =============================================================================
+// Justification survives a paragraph tex-linebreak cannot handle
+// =============================================================================
+
+/**
+ * Run static/justify.js against a tiny stub of the tex-linebreak library.
+ *
+ * The whole file is one IIFE, so it runs as-is rather than by heading. What is
+ * under test is the error handling around the library, not the library.
+ */
+async function runJustify(
+  paragraphs: { text: string; rendered?: boolean }[],
+  failsOn: (text: string) => boolean,
+) {
+  const source = await Deno.readTextFile(new URL("../static/justify.js", import.meta.url));
+
+  const elements = paragraphs.map(({ text, rendered = true }) => {
+    const node = el("p", {});
+    node.textContent = text;
+    // content-visibility skipping is what getClientRects() detects.
+    (node as unknown as { getClientRects(): unknown[] }).getClientRects = () =>
+      rendered ? [{}] : [];
+    return node;
+  });
+  const root = el("article", {}, ...elements);
+
+  const justified: string[] = [];
+  const lib = {
+    createHyphenator: () => () => [],
+    justifyContent: (chunk: El[]) => {
+      for (const p of chunk) {
+        if (failsOn(p.textContent)) {
+          throw new TypeError("Range.setStart: Argument 1 is not an object");
+        }
+      }
+      for (const p of chunk) justified.push(p.textContent);
+    },
+  };
+
+  const window = new FakeWindow("/item/1", root);
+  const globals: Record<string, unknown> = {
+    ...window.globals(),
+    window: {
+      texLineBreak_lib: lib,
+      "texLineBreak_hyphens_en-us": {},
+      addEventListener: () => {},
+    },
+    HTMLElement: { prototype: {} },
+    console: { error: () => {}, warn: () => {} },
+    Array,
+    Promise,
+    setTimeout,
+    clearTimeout,
+  };
+  (globals.document as Record<string, unknown>).readyState = "complete";
+
+  const names = Object.keys(globals);
+  new Function(...names, source)(...names.map((name) => globals[name]));
+  // justify() is async and yields between chunks.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  return { justified, elements };
+}
+
+Deno.test("an empty paragraph is never handed to tex-linebreak", async () => {
+  // tex-linebreak walks to the first text node to build a Range, so an empty
+  // <p> - which HN comment bodies and story text both produce - reaches
+  // Range.setStart with undefined and throws.
+  const { justified } = await runJustify(
+    [{ text: "First." }, { text: "   " }, { text: "Third." }],
+    () => false,
+  );
+
+  assertEquals(justified, ["First.", "Third."]);
+});
+
+Deno.test("a paragraph tex-linebreak chokes on does not take the page with it", async () => {
+  // This used to `return`, so one bad paragraph switched justification off for
+  // everything below it - which is what Firefox was doing on any thread
+  // containing one. Chrome happened not to throw, so it looked fine there.
+  const { justified, elements } = await runJustify(
+    [{ text: "One." }, { text: "poison" }, { text: "Three." }, { text: "Four." }],
+    (text) => text === "poison",
+  );
+
+  assertEquals(justified.includes("Three."), true, "the rest of the page still justifies");
+  assertEquals(justified.includes("Four."), true);
+  assertEquals(justified.includes("poison"), false);
+  // Marked done anyway: it will fail again next pass, and retrying forever
+  // costs the same as never trying.
+  assertEquals(elements.every((p) => p.dataset.justified === "1"), true);
+});
+
+Deno.test("paragraphs with no layout are left for when they gain it", async () => {
+  // A comment subtree still skipped by content-visibility has no layout, so
+  // measuring it produces nonsense line breaks.
+  const { justified } = await runJustify(
+    [{ text: "Visible." }, { text: "Skipped.", rendered: false }],
+    () => false,
+  );
+
+  assertEquals(justified, ["Visible."]);
+});

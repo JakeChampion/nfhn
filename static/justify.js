@@ -45,14 +45,42 @@
     return el.getClientRects().length > 0;
   }
 
+  // A paragraph with no text has nothing to break. tex-linebreak walks to the
+  // first text node to build a Range, so an empty <p> - which HN comment bodies
+  // and story text both produce - reaches Range.setStart with undefined and
+  // throws. Filtering here is cheaper than catching there.
+  function hasText(el) {
+    return (el.textContent || "").trim() !== "";
+  }
+
   function pending(root) {
     var scope = root && root.querySelectorAll ? root : document;
     return Array.prototype.filter.call(
       scope.querySelectorAll(SELECTOR),
       function (p) {
-        return p.dataset.justified !== "1" && isRendered(p);
+        return p.dataset.justified !== "1" && hasText(p) && isRendered(p);
       },
     );
+  }
+
+  function markDone(paragraphs) {
+    paragraphs.forEach(function (p) {
+      p.dataset.justified = "1";
+    });
+  }
+
+  // One paragraph at a time, so that whichever one tex-linebreak cannot handle
+  // is the only one that loses out. Marked done either way: it will fail again
+  // on the next pass, and retrying it forever costs the same as never trying.
+  function justifyIndividually(chunk) {
+    chunk.forEach(function (p) {
+      try {
+        lib.justifyContent([p], hyphenate);
+      } catch (err) {
+        console.warn("tex-linebreak skipped a paragraph:", err);
+      }
+      p.dataset.justified = "1";
+    });
   }
 
   async function justify(root) {
@@ -63,12 +91,13 @@
       var chunk = paragraphs.slice(i, i + CHUNK_SIZE);
       try {
         lib.justifyContent(chunk, hyphenate);
-        chunk.forEach(function (p) {
-          p.dataset.justified = "1";
-        });
-      } catch (err) {
-        console.error("tex-linebreak justification error:", err);
-        return;
+        markDone(chunk);
+      } catch (_err) {
+        // This used to `return`, so a single paragraph tex-linebreak choked on
+        // switched justification off for everything below it on the page -
+        // which is what Firefox was doing, silently, on any thread containing
+        // an empty <p>. Retry the chunk one at a time instead of giving up.
+        justifyIndividually(chunk);
       }
       if (i + CHUNK_SIZE < paragraphs.length) {
         await yieldToMain();

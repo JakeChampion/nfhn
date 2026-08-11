@@ -271,32 +271,57 @@ Deno.test("pageCacheOptions: keeps the query string for reader URLs", () => {
 // exactly the cost the routes exist to avoid.
 const ROUTED_ASSETS = STATIC_ASSETS.filter((path) => path !== "/saved");
 
-function staticAssetPattern(): URLPattern {
-  return new URLPattern({ pathname: `(${ROUTED_ASSETS.join("|")})` });
+/** One pattern per asset, as sw.js now builds them. */
+function assetPatterns(): URLPattern[] {
+  return ROUTED_ASSETS.map((asset) => new URLPattern({ pathname: asset }));
 }
 
-Deno.test("static routing: the pattern matches every precached asset", () => {
-  const pattern = staticAssetPattern();
+const anyAssetPatternMatches = (path: string): boolean =>
+  assetPatterns().some((pattern) => pattern.test(`https://nfhn.test${path}`));
+
+Deno.test("static routing: every precached asset has a route", () => {
   for (const asset of ROUTED_ASSETS) {
     assertEquals(
-      pattern.test(`https://nfhn.test${asset}`),
+      anyAssetPatternMatches(asset),
       true,
       `${asset} should be routed straight to the cache`,
     );
   }
 });
 
+Deno.test("static routing: no route contains a regexp group", () => {
+  // addRoutes rejects any pattern with one, and it takes the whole array at
+  // once - so the single `(a|b|c)` alternation this used to build did not just
+  // fail for the assets, it took the network-only routes with it and left the
+  // worker booting for every request. The rejection is a promise, so the
+  // try/catch around addRoutes never saw it either.
+  for (const asset of ROUTED_ASSETS) {
+    assertEquals(/[()]/.test(asset), false, `${asset} would need escaping`);
+  }
+  for (const pathname of ["/reader/*", "/api/*"]) {
+    assertEquals(/[()]/.test(pathname), false);
+  }
+  const source = Deno.readTextFileSync(new URL("../static/sw.js", import.meta.url));
+  assertEquals(
+    source.includes('assets.join("|")'),
+    false,
+    "sw.js must not build one alternation over all the assets",
+  );
+  // And the rejected promise has to be handled, or it surfaces as an unhandled
+  // rejection in every visitor's console.
+  assertEquals(source.includes("addRoutes(staticRoutes())?.catch"), true);
+});
+
 Deno.test("static routing: /saved is excluded so the worker still handles it", () => {
   // /saved is precached but is a page, not an immutable asset: it must keep
   // going through the fetch handler's offline fallback logic.
-  assertEquals(staticAssetPattern().test("https://nfhn.test/saved"), false);
+  assertEquals(anyAssetPatternMatches("/saved"), false);
 });
 
 Deno.test("static routing: pages and API paths are not captured", () => {
-  const pattern = staticAssetPattern();
   for (const path of ["/top/1", "/item/123", "/user/alice", "/styles.css.map"]) {
     assertEquals(
-      pattern.test(`https://nfhn.test${path}`),
+      anyAssetPatternMatches(path),
       false,
       `${path} should not be routed to the static cache`,
     );

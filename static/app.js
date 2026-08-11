@@ -852,6 +852,10 @@ const Summarise = (function () {
       type: options.type || "key-points",
       format: "plain-text",
       length: "short",
+      // Without this Chrome warns that output quality and safety attestation
+      // are both degraded. The site is served lang="en" and the summary is
+      // rendered into an English page, so there is nothing to detect.
+      outputLanguage: "en",
       sharedContext: options.context,
       monitor(monitor) {
         monitor.addEventListener("downloadprogress", (event) => {
