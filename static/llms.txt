@@ -13,11 +13,11 @@ browser.
 
 ## Feeds
 
-- [Top stories](https://nfhn.netlify.app/top/1): the front page, paginated as /top/:page
-- [Newest](https://nfhn.netlify.app/newest/1): most recently submitted, /newest/:page
-- [Ask HN](https://nfhn.netlify.app/ask/1): question threads, /ask/:page
-- [Show HN](https://nfhn.netlify.app/show/1): things people built, /show/:page
-- [Jobs](https://nfhn.netlify.app/jobs/1): who's hiring postings, /jobs/:page
+- [Top stories](https://hn.jakechampion.name/top/1): the front page, paginated as /top/:page
+- [Newest](https://hn.jakechampion.name/newest/1): most recently submitted, /newest/:page
+- [Ask HN](https://hn.jakechampion.name/ask/1): question threads, /ask/:page
+- [Show HN](https://hn.jakechampion.name/show/1): things people built, /show/:page
+- [Jobs](https://hn.jakechampion.name/jobs/1): who's hiring postings, /jobs/:page
 
 ## Item and profile URLs
 

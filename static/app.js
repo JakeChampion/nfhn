@@ -496,6 +496,72 @@ document.querySelectorAll('a[href^="http"]:not(.reader-mode-link)').forEach((lin
   });
 })();
 
+// --- Prerender gating ---
+//
+// Speculation Rules prerender pages that may never be activated. Work that
+// measures, reports or warms an expensive resource must not run in that state:
+// it inflates whatever it measures and spends the visitor's battery on a page
+// they may never see. `document.prerendering` is true during prerender, and
+// `prerenderingchange` fires if and when the page is actually activated.
+function whenActivated(fn) {
+  if (!document.prerendering) {
+    fn();
+    return;
+  }
+  document.addEventListener("prerenderingchange", () => fn(), { once: true });
+}
+
+// --- Long Animation Frames ---
+//
+// LoAF attributes a slow frame to the script that caused it, which is what INP
+// debugging actually needs - "something blocked for 300ms" is not actionable,
+// "justify.js blocked for 300ms" is. Reported to the same collector as CSP and
+// bfcache reports.
+whenActivated(function observeLongAnimationFrames() {
+  if (typeof PerformanceObserver === "undefined") return;
+  if (!PerformanceObserver.supportedEntryTypes?.includes("long-animation-frame")) return;
+
+  const observer = new PerformanceObserver((list) => {
+    for (const entry of list.getEntries()) {
+      // 200ms is well past "janky"; below that the report volume is not worth it.
+      if (entry.duration < 200) continue;
+
+      const worst = (entry.scripts ?? [])
+        .slice()
+        .sort((a, b) => b.duration - a.duration)[0];
+
+      try {
+        navigator.sendBeacon(
+          "/_report",
+          new Blob([JSON.stringify([{
+            type: "long-animation-frame",
+            url: location.href,
+            body: {
+              duration: Math.round(entry.duration),
+              blockingDuration: Math.round(entry.blockingDuration ?? 0),
+              script: worst
+                ? {
+                  name: worst.name,
+                  source: worst.sourceURL || worst.invoker,
+                  duration: Math.round(worst.duration),
+                }
+                : null,
+            },
+          }])], { type: "application/reports+json" }),
+        );
+      } catch {
+        // Diagnostics must never be load-bearing.
+      }
+    }
+  });
+
+  try {
+    observer.observe({ type: "long-animation-frame", buffered: true });
+  } catch {
+    // Nothing to do; the entry type is simply unavailable.
+  }
+});
+
 // --- bfcache diagnostics ---
 //
 // NFHN's whole performance story assumes navigation is nearly free: Speculation
@@ -508,7 +574,7 @@ document.querySelectorAll('a[href^="http"]:not(.reader-mode-link)').forEach((lin
 // same collector as CSP violations (netlify/edge-functions/reports.ts).
 //
 // See docs/netlify-proposals/06-reporting-endpoint.md
-(function reportBfcacheBlocks() {
+whenActivated(function reportBfcacheBlocks() {
   const [nav] = performance.getEntriesByType("navigation");
   if (!nav || !nav.notRestoredReasons) return;
 
@@ -539,7 +605,7 @@ document.querySelectorAll('a[href^="http"]:not(.reader-mode-link)').forEach((lin
   } catch {
     // Diagnostics must never be load-bearing.
   }
-})();
+});
 
 // --- On-device summarisation (Built-in AI) ---
 //
@@ -629,7 +695,7 @@ const Summarise = (function () {
   return { available, run, threadText };
 })();
 
-(function initSummariseControl() {
+whenActivated(function initSummariseControl() {
   const controls = document.querySelector(".comment-controls");
   if (!controls) return;
 
@@ -673,7 +739,7 @@ const Summarise = (function () {
     controls.append(button);
     controls.after(panel);
   });
-})();
+});
 
 // --- Comment thread controls (Invoker Commands) ---
 //
@@ -754,10 +820,42 @@ const RelativeTime = (function () {
     return formatter;
   };
 
+  // Fixed-size units are an approximation: a "month" is not 2,592,000 seconds,
+  // and years are not all 365 days. Temporal does real calendar arithmetic, so
+  // where it exists we use it and get "2 months ago" that means two calendar
+  // months. Everywhere else the approximation below is what you get, which is
+  // exactly today's behaviour.
+  const hasTemporal = typeof Temporal !== "undefined";
+
+  function calendarUnits(date, now) {
+    const from = Temporal.Instant.fromEpochMilliseconds(now)
+      .toZonedDateTimeISO(Temporal.Now.timeZoneId());
+    const to = Temporal.Instant.fromEpochMilliseconds(date.getTime())
+      .toZonedDateTimeISO(Temporal.Now.timeZoneId());
+
+    const diff = from.until(to, { largestUnit: "year" });
+    for (const unit of ["years", "months", "weeks", "days", "hours", "minutes"]) {
+      if (diff[unit] !== 0) {
+        return [diff[unit], unit.slice(0, -1)];
+      }
+    }
+    return null;
+  }
+
   function format(date, now) {
-    const seconds = Math.round((date.getTime() - (now ?? Date.now())) / 1000);
+    const reference = now ?? Date.now();
+    const seconds = Math.round((date.getTime() - reference) / 1000);
     const magnitude = Math.abs(seconds);
     if (magnitude < 45) return "just now";
+
+    if (hasTemporal) {
+      try {
+        const calendar = calendarUnits(date, reference);
+        if (calendar) return getFormatter().format(calendar[0], calendar[1]);
+      } catch {
+        // Fall through to the fixed-size approximation below.
+      }
+    }
 
     for (const [unit, size] of UNITS) {
       if (magnitude >= size) {

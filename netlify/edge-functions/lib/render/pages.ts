@@ -8,6 +8,7 @@ import {
   OG_IMAGE_WIDTH,
   OG_IMAGES_ENABLED,
   ogImageUrl,
+  SITE_ORIGIN,
 } from "../config.ts";
 import {
   articleJsonLd,
@@ -129,11 +130,17 @@ export const home = (
     <meta name="twitter:card" content="summary">
     <link rel="icon" type="image/svg+xml" href="/icon.svg">
     ${sharedStyles(pageNumber)}
+    <!-- Hold first paint until the main content element has streamed in.
+         These pages are streamed, so without this the browser can paint a
+         header above an empty page and then reflow - and a cross-document view
+         transition can capture that half-built frame as the "old" snapshot.
+         If the element never arrives, rendering unblocks when parsing ends. -->
+    <link rel="expect" href="#main-content" blocking="render">
     ${feedTransitionNames(content)}
     ${
     websiteJsonLd({
       name: "Hacker News Reader",
-      url: "https://hn.jakechampion.name",
+      url: SITE_ORIGIN,
       description: "A fast, accessible Hacker News reader.",
     })
   }
@@ -193,6 +200,12 @@ const shellPage = (
     }
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     ${sharedStyles(1)}
+    <!-- Hold first paint until the main content element has streamed in.
+         These pages are streamed, so without this the browser can paint a
+         header above an empty page and then reflow - and a cross-document view
+         transition can capture that half-built frame as the "old" snapshot.
+         If the element never arrives, rendering unblocks when parsing ends. -->
+    <link rel="expect" href="#main-content" blocking="render">
     <title>${title}</title>
   </head>
   <body>
@@ -236,7 +249,7 @@ export const article = (item: Item, canonicalUrl?: string, staleSince?: number):
     title: item.title,
     author: item.user,
     datePublished: item.time,
-    url: item.url ?? canonicalUrl ?? `https://hn.jakechampion.name/item/${item.id}`,
+    url: item.url ?? canonicalUrl ?? `${SITE_ORIGIN}/item/${item.id}`,
     commentCount: totalComments,
     discussionUrl: `https://news.ycombinator.com/item?id=${item.id}`,
   });

@@ -2,6 +2,15 @@
 
 export const HTML_CACHE_NAME = "nfhn-html";
 
+// Canonical public origin.
+// Three different hostnames were baked into the repo - robots.txt and
+// security.txt said nfhn.netlify.app, the JSON-LD said hn.jakechampion.name,
+// and deploys land on a third. Crawlers believe whichever they find first, so
+// they now all read from here. Runtime canonical/og URLs are still derived from
+// the request where one is available; this is for the places that have no
+// request to derive from (static files, structured data).
+export const SITE_ORIGIN = "https://hn.jakechampion.name";
+
 // Pagination
 export const MAX_PAGE_NUMBER = 100;
 
@@ -82,6 +91,28 @@ export const ogImageUrl = (id: number): string =>
 // directive. Both must agree, so they read from the same constant.
 export const REPORTING_GROUP = "default";
 export const REPORTING_ENDPOINT = "/_report";
+
+// Integrity-Policy (https://w3c.github.io/webappsec-subresource-integrity/)
+// The three justify scripts already carry SRI hashes. This turns that from a
+// per-tag habit into a policy: any script without integrity metadata is blocked.
+// Report-only first, because the failure mode of getting it wrong is "no
+// JavaScript at all" - violations go to the same collector as CSP reports, so a
+// missing hash shows up as data rather than as a broken page.
+export const INTEGRITY_POLICY_REPORT_ONLY =
+  `blocked-destinations=(script), endpoints=(${REPORTING_GROUP})`;
+
+// Trusted Types
+// Sent report-only, and it has to stay that way for now: static/app.js assigns
+// innerHTML in five places (the saved-stories list and the picture-in-picture
+// reader). Those are escaped via escapeHtml(), so they are not a live XSS, but
+// they are exactly the sinks Trusted Types blocks - enforcing today would break
+// both features. Report-only tells us which sinks actually fire in the field,
+// which is the prerequisite for removing them.
+export const TRUSTED_TYPES_DIRECTIVES = [
+  "require-trusted-types-for 'script'",
+  "trusted-types 'none'",
+  `report-to ${REPORTING_GROUP}`,
+] as const;
 
 // Content Security Policy directives
 // Note: unsafe-inline for styles is needed for dynamic counter-set on <ol>

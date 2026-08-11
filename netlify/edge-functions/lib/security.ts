@@ -1,6 +1,13 @@
 // security.ts - Security headers utilities
 
-import { CSP_DIRECTIVES, NO_VARY_SEARCH, REPORTING_ENDPOINT, REPORTING_GROUP } from "./config.ts";
+import {
+  CSP_DIRECTIVES,
+  INTEGRITY_POLICY_REPORT_ONLY,
+  NO_VARY_SEARCH,
+  REPORTING_ENDPOINT,
+  REPORTING_GROUP,
+  TRUSTED_TYPES_DIRECTIVES,
+} from "./config.ts";
 import { applyDictionaryVary, DICTIONARY_TRANSPORT_ENABLED } from "./dictionary.ts";
 
 export const buildContentSecurityPolicy = (): string => {
@@ -28,6 +35,13 @@ export const applySecurityHeaders = (headers: Headers): Headers => {
   // Names the collector that the CSP's `report-to` directive refers to, and
   // enables deprecation, intervention and crash reports at the same time.
   headers.set("Reporting-Endpoints", `${REPORTING_GROUP}="${REPORTING_ENDPOINT}"`);
+  // Both of these are report-only on purpose - see the comments on the constants
+  // in config.ts. They cost nothing in browsers that ignore them and, in the
+  // ones that do not, they turn two silent assumptions into reported data.
+  headers.set("Integrity-Policy-Report-Only", INTEGRITY_POLICY_REPORT_ONLY);
+  if (!headers.has("Content-Security-Policy-Report-Only")) {
+    headers.set("Content-Security-Policy-Report-Only", TRUSTED_TYPES_DIRECTIVES.join("; "));
+  }
   // Applied to every page, not only the ones actually served as `dcz`. A cache
   // that stored a delta without this would later hand it to a client that never
   // had the dictionary, which cannot decode it. Vary must describe what the

@@ -1801,7 +1801,7 @@ article table {
   
   /* Print footer with source URL */
   body::after {
-    content: "Printed from NFHN (nfhn.netlify.app)";
+    content: "Printed from NFHN (hn.jakechampion.name)";
     display: block;
     text-align: center;
     font-size: 9pt;
@@ -1978,6 +1978,54 @@ main {
 .comment-controls .comment-count {
   font-size: 0.85rem;
   opacity: 0.7;
+}
+
+/* =============================================================================
+   @scope - keep comment styling from leaking down the tree
+   (Chromium 118+, Safari 17.4+; Firefox in progress)
+   ============================================================================= */
+
+/* Comment threads nest arbitrarily deep, so every descendant selector aimed at
+   a comment also matches every comment inside it. @scope sets a lower boundary:
+   these rules stop at the next nested comment rather than cascading all the way
+   down. Wrapped in @supports so browsers without it keep today's behaviour. */
+@supports at-rule(@scope) {
+  @scope ([aria-label="Comments"] details) to (details) {
+    :scope > summary .comment-meta {
+      opacity: 0.85;
+    }
+  }
+}
+
+/* =============================================================================
+   Styling the no-JavaScript state
+   ============================================================================= */
+
+/* Nearly everything here is progressive enhancement, but until now there was no
+   way to style the fallback state - controls that only do something once app.js
+   runs were shown regardless. `scripting: none` covers both "JS disabled" and
+   "JS not yet supported", which is exactly the audience that should not see a
+   button that cannot work. */
+@media (scripting: none) {
+  .comment-controls,
+  .back-to-top,
+  .share-button,
+  .bookmark-button {
+    display: none;
+  }
+}
+
+/* =============================================================================
+   ::target-text - highlight the sentence a link points at
+   ============================================================================= */
+
+/* Comment permalinks scroll to a comment; a text fragment (#:~:text=...) can
+   point at the exact sentence being quoted. This styles that match with the
+   site's own accent instead of the browser default yellow, so it reads as part
+   of the page in both themes. */
+::target-text {
+  background-color: color-mix(in oklch, var(--accent, Highlight) 30%, transparent);
+  color: inherit;
 }
 
 /* =============================================================================

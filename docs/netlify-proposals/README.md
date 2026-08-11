@@ -19,6 +19,7 @@ platform capabilities, which is why they live on this side.
 | [05 Generated images](./05-generated-images.md) | Medium | Card + maskable icon shipped, `og:image` **behind a flag** | confirm Image CDN accepts SVG; `favicon.ico` |
 | [06 Reporting collector](./06-reporting-endpoint.md) | Medium | Shipped | a way to read the collected reports |
 | [07 `waitUntil` + `Sec-Purpose`](./07-waituntil-and-sec-purpose.md) | Medium | Shipped | `Sec-Purpose` helpers exist but nothing consumes them yet |
+| [08 DNS and transport](./08-dns-and-transport.md) | Medium | Hostname consolidated in code | CAA + DNSSEC at the registrar; HTTPS/SVCB blocked on Netlify HTTP/3 and ECH |
 
 ## What NFHN uses today
 

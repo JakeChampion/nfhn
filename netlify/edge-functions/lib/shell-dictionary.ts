@@ -21,6 +21,7 @@ import { htmlToString } from "./html.ts";
 import { home } from "./render.ts";
 import type { Item } from "./hn.ts";
 import { sha256 } from "./dictionary.ts";
+import { SITE_ORIGIN } from "./config.ts";
 
 /**
  * Synthetic stories whose *shape* matches real ones. The text is deliberately
@@ -57,7 +58,7 @@ export function getShellDictionary(): Promise<ShellDictionary> {
   if (!cached) {
     cached = (async () => {
       const markup = await htmlToString(
-        home(SAMPLE_STORIES, 1, "top", "https://nfhn.netlify.app/top/1"),
+        home(SAMPLE_STORIES, 1, "top", `${SITE_ORIGIN}/top/1`),
       );
       const bytes = new TextEncoder().encode(markup);
       return { bytes, hash: await sha256(bytes) };

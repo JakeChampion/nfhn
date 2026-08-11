@@ -13,7 +13,7 @@ import {
   isSpeculative,
   waiterFrom,
 } from "../netlify/edge-functions/lib/background.ts";
-import { THEME_SCRIPT_HASH } from "../netlify/edge-functions/lib/config.ts";
+import { SITE_ORIGIN, THEME_SCRIPT_HASH } from "../netlify/edge-functions/lib/config.ts";
 import { applyCacheTags } from "../netlify/edge-functions/lib/security.ts";
 import { FEEDS } from "../netlify/edge-functions/lib/feeds.ts";
 import sitemapHandler from "../netlify/edge-functions/sitemap.ts";
@@ -2153,4 +2153,93 @@ Deno.test("normaliseReport bounds untrusted input", () => {
   assertEquals((long?.url as string).length, 2048);
 
   assertEquals(normaliseReport(null as unknown as Record<string, unknown>), null);
+});
+
+// =============================================================================
+// Canonical origin, security headers, render-blocking
+// =============================================================================
+
+Deno.test("one canonical hostname is used everywhere", async () => {
+  const files = [
+    "../static/robots.txt",
+    "../static/llms.txt",
+    "../static/.well-known/security.txt",
+  ];
+
+  for (const file of files) {
+    const text = await Deno.readTextFile(new URL(file, import.meta.url));
+    // Three different hostnames used to be baked in; crawlers believe whichever
+    // they find first, so a stray one is a real signal-splitting bug.
+    assertEquals(
+      text.includes("nfhn.netlify.app"),
+      false,
+      `${file} still references the old hostname`,
+    );
+    if (text.includes("http")) assertStringIncludes(text, SITE_ORIGIN);
+  }
+});
+
+Deno.test("structured data points at the canonical origin", async () => {
+  const routes = { [topStoriesUrl]: [noVarySearchStory] };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/1"));
+    const body = await res.text();
+    assertStringIncludes(body, `"url":"${SITE_ORIGIN}"`);
+    assertEquals(body.includes("nfhn.netlify.app"), false);
+  });
+});
+
+Deno.test("pages send Integrity-Policy and Trusted Types in report-only", async () => {
+  const routes = { [topStoriesUrl]: [noVarySearchStory] };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/1"));
+    await res.text();
+
+    const integrity = res.headers.get("integrity-policy-report-only");
+    assertStringIncludes(integrity ?? "", "blocked-destinations=(script)");
+    // Must name a group Reporting-Endpoints defines, or reports go nowhere.
+    assertStringIncludes(integrity ?? "", "endpoints=(default)");
+
+    const reportOnlyCsp = res.headers.get("content-security-policy-report-only") ?? "";
+    assertStringIncludes(reportOnlyCsp, "require-trusted-types-for 'script'");
+
+    // Enforcing Trusted Types today would break the saved page and the PiP
+    // reader, both of which assign innerHTML. The enforced policy must not
+    // carry the directive until those sinks are gone.
+    assertEquals(
+      (res.headers.get("content-security-policy") ?? "").includes("require-trusted-types-for"),
+      false,
+    );
+  });
+});
+
+Deno.test("streamed pages block first paint until main content arrives", async () => {
+  const routes = {
+    [topStoriesUrl]: [noVarySearchStory],
+    "https://api.hnpwa.com/v0/item/555.json": {
+      id: 555,
+      title: "Blocking Story",
+      points: 1,
+      user: "author",
+      time: Math.floor(Date.now() / 1000),
+      type: "link",
+      url: "https://example.com",
+      domain: "example.com",
+      comments_count: 0,
+      comments: [],
+    },
+  };
+
+  await withMockedEnv(routes, async () => {
+    for (const path of ["/top/1", "/item/555"]) {
+      const res = await handler(new Request(`https://nfhn.test${path}`));
+      const body = await res.text();
+      assertStringIncludes(body, '<link rel="expect" href="#main-content" blocking="render">');
+      // The element it waits for has to actually exist, or paint is deferred
+      // until the parser gives up.
+      assertStringIncludes(body, 'id="main-content"');
+    }
+  });
 });

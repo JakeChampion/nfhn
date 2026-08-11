@@ -154,12 +154,18 @@ function now(): number {
   return Date.now();
 }
 
-function timeoutSignal(timeoutMs: number): { signal: AbortSignal; clear: () => void } {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const clear = (): void => clearTimeout(timeout);
-  controller.signal.addEventListener("abort", clear);
-  return { signal: controller.signal, clear };
+/**
+ * Signal that aborts after `timeoutMs`, optionally composed with a caller's own.
+ *
+ * `AbortSignal.timeout()` replaces the hand-rolled controller-plus-setTimeout
+ * this used to be, including the cleanup that stopped the timer leaking; the
+ * platform owns that now. `AbortSignal.any()` is what makes the caller signal
+ * composable - whichever fires first wins - so a request can be cancelled by
+ * shutdown as well as by its own deadline.
+ */
+function requestSignal(timeoutMs: number, caller?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return caller ? AbortSignal.any([timeout, caller]) : timeout;
 }
 
 async function fetchJsonWithRetry<T>(
@@ -167,6 +173,7 @@ async function fetchJsonWithRetry<T>(
   label: string,
   retries = MAX_RETRIES,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  callerSignal?: AbortSignal,
 ): Promise<T | null> {
   // Check circuit breaker before making request
   if (!checkCircuitBreaker()) {
@@ -175,7 +182,7 @@ async function fetchJsonWithRetry<T>(
   }
 
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const { signal, clear } = timeoutSignal(timeoutMs);
+    const signal = requestSignal(timeoutMs, callerSignal);
     try {
       const res = await fetch(url, { signal });
       if (!res.ok) {
@@ -197,8 +204,6 @@ async function fetchJsonWithRetry<T>(
       }, error);
       recordFailure();
       if (isLast) break;
-    } finally {
-      clear();
     }
   }
   return null;
