@@ -62,12 +62,34 @@ HTTP/3, so publishing that would advertise a protocol that is not there — brow
 QUIC, fail, and fall back, which is slower than never having claimed it. Publishing `alpn="h2"` alone
 buys essentially nothing: TLS ALPN already negotiates h2 during the handshake.
 
-**No confirmed ECH.** The genuinely valuable parameter is `ech=`, which carries the public key that
+**No ECH — now measured, not assumed.** Querying the HTTPS records directly on 2026-08-11:
+
+| Domain | HTTPS record |
+| --- | --- |
+| `netlify.app` | `alpn="h2"` — no h3, no `ech=` |
+| `cloudflare.com` | `alpn="h3,h2"` |
+| `crypto.cloudflare.com` | `alpn="h2" ech=<71 bytes>` |
+
+Netlify publishes an HTTPS record for its own apex and it advertises h2 and nothing else. The
+Cloudflare rows are the positive control: they show what h3 and ECH look like when a provider does
+support them, so the absence on `netlify.app` is a real absence rather than a query that failed.
+
+`scripts/check-transport.ts` re-runs that query on demand (`deno run --allow-net
+scripts/check-transport.ts`). Netlify turning either feature on will show up on their own apex before
+any documentation mentions it, and the script says so explicitly when it does.
+
+**Why ECH is unlikely here soon.** The genuinely valuable parameter is `ech=`, which carries the public key that
 encrypts the TLS ClientHello — the one remaining plaintext field that reveals *which site* a reader
 is visiting. [RFC 9849](https://datatracker.ietf.org/doc/rfc9849/) was finalised in March 2026 and
-browser support is deployable, but ECH needs the *server* to hold the matching key, and there is no
-evidence Netlify offers it. A published `ech=` config that the edge cannot decrypt breaks
-connections outright.
+browser support is deployable, but ECH needs the *server* to hold the matching key. A published
+`ech=` config the edge cannot decrypt breaks connections outright.
+
+There is also a structural reason it is harder for Netlify than for Cloudflare. ECH needs whoever
+controls DNS and whoever terminates TLS to stay in sync, including through key rotation. Cloudflare
+is usually both. Here the domain is at a registrar and TLS terminates at Netlify, so either Netlify
+publishes a documented config for us to copy (and we track their rotations), or the apex CNAMEs to a
+Netlify hostname carrying its own HTTPS record and resolvers follow the chain. The second is the only
+version that scales, and it needs Netlify to publish the record on their side first.
 
 For a Hacker News reader, ECH is the item on this page most worth wanting: it is the difference
 between a network observer knowing you read this site and not.

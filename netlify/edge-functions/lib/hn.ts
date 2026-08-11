@@ -209,27 +209,71 @@ async function fetchJsonWithRetry<T>(
   return null;
 }
 
-export function formatTimeAgo(unixSeconds: number | undefined): string {
+/**
+ * Calendar-accurate months and years, when the runtime has Temporal.
+ *
+ * Below a month, fixed-size units are exact and this is not needed. Above it
+ * they stop being exact: a month is not 30 days and a year is not 365, so the
+ * arithmetic drifts by days over a year and by weeks over a decade.
+ *
+ * Guarded rather than assumed. Temporal is native in current Deno, but the
+ * Netlify edge runtime's version is not something this repository controls, and
+ * silently falling back to the old approximation is strictly better than
+ * throwing while rendering a page.
+ */
+function calendarAgo(thenMs: number, nowMs: number): string | null {
+  if (typeof Temporal === "undefined") return null;
+
+  try {
+    const zone = "UTC";
+    const from = Temporal.Instant.fromEpochMilliseconds(thenMs).toZonedDateTimeISO(zone);
+    const to = Temporal.Instant.fromEpochMilliseconds(nowMs).toZonedDateTimeISO(zone);
+    const diff = from.until(to, { largestUnit: "year" });
+
+    if (diff.years > 0) return `${diff.years} year${diff.years === 1 ? "" : "s"} ago`;
+    if (diff.months > 0) return `${diff.months} month${diff.months === 1 ? "" : "s"} ago`;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param unixSeconds when the item was posted
+ * @param referenceMs the clock to measure against; injected so tests do not
+ *   depend on which month they run in, which calendar arithmetic makes matter.
+ */
+export function formatTimeAgo(
+  unixSeconds: number | undefined,
+  referenceMs: number = now(),
+): string {
   if (!unixSeconds) return "";
   const then = unixSeconds * 1000;
-  const current = now();
+  const current = referenceMs;
   const diff = Math.max(0, current - then);
 
   const seconds = Math.floor(diff / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
-  const years = Math.floor(days / 365);
 
   if (seconds < 60) return "just now";
   if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
   if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  if (days < 28) return `${days} day${days === 1 ? "" : "s"} ago`;
+
+  // 28 days rather than 30: February means a full calendar month can be 28 days,
+  // and handing those to the calendar path is the whole point.
+  const calendar = calendarAgo(then, current);
+  if (calendar) return calendar;
+
+  // No Temporal, or a gap that is over 28 days but under one calendar month.
   if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
   if (days < 365) {
     const months = Math.floor(days / 30);
     return `${months} month${months === 1 ? "" : "s"} ago`;
   }
-  return `${years} year${years === 1 ? "" : "s"} ago`;
+  return `${Math.floor(days / 365)} year${Math.floor(days / 365) === 1 ? "" : "s"} ago`;
 }
 
 // Map HNPWA item → internal Item (sans comments)
