@@ -1780,3 +1780,49 @@ Deno.test("both places that load the scripts use the shared hashes", async () =>
   // Reader mode must load the shared file rather than inlining its own copy.
   assertStringIncludes(reader, "/justify.js");
 });
+
+// =============================================================================
+// Static-asset dictionary retention
+// =============================================================================
+
+import {
+  assetIndexKey,
+  assetVersionKey,
+  MAX_VERSIONS_PER_ASSET,
+  nextIndex,
+} from "../netlify/edge-functions/asset.ts";
+
+Deno.test("asset keys are stable and path-scoped", () => {
+  assertEquals(assetVersionKey("/app.js", "abc123"), "app.js@abc123");
+  assertEquals(assetVersionKey("app.js", "abc123"), "app.js@abc123");
+  assertEquals(assetIndexKey("/styles.css"), "index:styles.css");
+  // Two assets with identical content must not collide on one key.
+  assertEquals(
+    assetVersionKey("/app.js", "same") === assetVersionKey("/styles.css", "same"),
+    false,
+  );
+});
+
+Deno.test("a new version goes to the front of the index", () => {
+  const { index, evicted } = nextIndex(["old", "older"], "new");
+  assertEquals(index, ["new", "old", "older"]);
+  assertEquals(evicted, []);
+});
+
+Deno.test("a redeployed version is promoted rather than duplicated", () => {
+  // Rollbacks are real: deploying yesterday's build again must not leave two
+  // entries for one hash, which would waste a retention slot on a duplicate.
+  const { index } = nextIndex(["b", "a", "c"], "a");
+  assertEquals(index, ["a", "b", "c"]);
+});
+
+Deno.test("the index is bounded and reports what it dropped", () => {
+  const full = Array.from({ length: MAX_VERSIONS_PER_ASSET }, (_, i) => `v${i}`);
+  const { index, evicted } = nextIndex(full, "newest");
+
+  assertEquals(index.length, MAX_VERSIONS_PER_ASSET);
+  assertEquals(index[0], "newest");
+  // The oldest entry falls off the end and is handed back so its blob can be
+  // deleted - an index that forgets a key without deleting it leaks storage.
+  assertEquals(evicted, [`v${MAX_VERSIONS_PER_ASSET - 1}`]);
+});

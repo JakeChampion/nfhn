@@ -1,7 +1,7 @@
 import { Readability } from "./lib/readability.js";
 // deno-lint-ignore no-import-prefix
 import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.45/deno-dom-wasm.ts";
-import { waiterFrom, type WaitUntilCapable } from "./lib/background.ts";
+import { timeZoneFrom, waiterFrom, type WaitUntilCapable } from "./lib/background.ts";
 import { READER_STORE, readerKey, readMirror, writeMirror } from "./lib/store.ts";
 import { READER_CSP, SRI } from "./lib/config.ts";
 
@@ -66,6 +66,12 @@ const MIN_ARTICLE_LENGTH = 250;
 
 export default async (req: Request, context?: WaitUntilCapable) => {
   const waitUntil = waiterFrom(context);
+  // Reader pages are rendered per request (the Blobs cache holds the extraction,
+  // not the HTML), so they can safely carry reader-specific values. Feed and item
+  // pages deliberately do not: their HTML is shared through the CDN, and varying
+  // it by time zone would fragment that cache across hundreds of IANA zones to
+  // fix a string the client re-renders on load anyway.
+  const timeZone = timeZoneFrom(context);
   // need to slice off /reader/
   const requestUrl = new URL(req.url);
   const rawUrl = requestUrl.pathname.slice(8);
@@ -98,7 +104,10 @@ export default async (req: Request, context?: WaitUntilCapable) => {
   const cacheKey = await readerKey(url);
   const cached = await readMirror<CachedExtraction>(READER_STORE, cacheKey);
   if (cached?.value?.content) {
-    return new Response(renderHtml(url, cached.value), { status: 200, headers: getHeaders() });
+    return new Response(renderHtml(url, cached.value, timeZone), {
+      status: 200,
+      headers: getHeaders(),
+    });
   }
 
   try {
@@ -150,7 +159,7 @@ export default async (req: Request, context?: WaitUntilCapable) => {
 
     writeMirror(READER_STORE, cacheKey, extraction, waitUntil);
 
-    return new Response(renderHtml(url, extraction), {
+    return new Response(renderHtml(url, extraction, timeZone), {
       status: 200,
       headers: getHeaders(),
     });
@@ -174,6 +183,9 @@ function getHeaders(): HeadersInit {
     // duplicate of the publisher's content in the index under our domain;
     // `follow` still credits the links inside it.
     "x-robots-tag": "noindex, follow",
+    // `private` because the rendered date is in the reader's own time zone; a
+    // shared cache must not hand one reader's rendering to another.
+    "cache-control": "private, max-age=300",
     "content-security-policy": READER_CSP,
     "x-content-type-options": "nosniff",
     "referrer-policy": "no-referrer",
@@ -575,16 +587,26 @@ const safeDirAttr = (dir: string | undefined): string =>
   dir === "rtl" || dir === "ltr" || dir === "auto" ? dir : "auto";
 
 /** Render an ISO date as a <time>, or nothing if it is not parseable. */
-function renderPublished(publishedTime: string | undefined): string {
+function renderPublished(publishedTime: string | undefined, timeZone: string): string {
   if (!publishedTime) return "";
   const parsed = new Date(publishedTime);
   if (Number.isNaN(parsed.getTime())) return "";
+  // Rendered in the reader's own zone rather than the edge node's. An article
+  // published at 23:30 UTC is "yesterday" in Los Angeles and "tomorrow" in
+  // Auckland, and a date is exactly the kind of value where that shows.
   return `<time datetime="${escapeHtml(parsed.toISOString())}">${
-    escapeHtml(parsed.toLocaleDateString("en", { year: "numeric", month: "long", day: "numeric" }))
+    escapeHtml(
+      parsed.toLocaleDateString("en", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        timeZone,
+      }),
+    )
   }</time>`;
 }
 
-function renderHtml(url: string, article: CachedExtraction): string {
+function renderHtml(url: string, article: CachedExtraction, timeZone = "UTC"): string {
   const safeTitle = escapeHtml(article.title);
   const safeUrl = escapeHtml(url);
 
@@ -598,7 +620,7 @@ function renderHtml(url: string, article: CachedExtraction): string {
   const attribution = [
     article.byline ? `<span class="reader-byline">${escapeHtml(article.byline)}</span>` : "",
     article.siteName ? `<span>${escapeHtml(article.siteName)}</span>` : "",
-    renderPublished(article.publishedTime),
+    renderPublished(article.publishedTime, timeZone),
   ].filter(Boolean).join(" · ");
 
   return `<!DOCTYPE html>

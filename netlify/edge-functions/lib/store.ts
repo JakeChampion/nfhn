@@ -78,7 +78,11 @@ export function writeMirror(
   key: string,
   value: unknown,
   waitUntil: Waiter,
+  options: { skip?: boolean } = {},
 ): void {
+  // Callers pass `skip` for speculative requests: a prerender that is never
+  // activated should not be writing to durable storage on the reader's behalf.
+  if (options.skip) return;
   const store = openStore(storeName);
   if (!store) return;
 
