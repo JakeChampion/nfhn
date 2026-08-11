@@ -103,7 +103,51 @@ hardcoding the string — that way the existing test guarding the header also gu
 Add it to the `prerender` rule too; the same reasoning applies, and a wasted prerender costs
 considerably more than a wasted prefetch.
 
+## 3. Deliver the rules as a header, because CSP was blocking the script
+
+**Found after shipping sections 1 and 2, which is the point of writing this down.**
+
+The rules above were implemented as an inline `<script type="speculationrules">` in every page. They
+never ran once.
+
+A speculation rules script is an inline script as far as CSP is concerned — that is why
+`'inline-speculation-rules'` exists as a dedicated `script-src` source expression. This site's
+policy is:
+
+```
+script-src 'self' 'sha256-6hO62gdSSJDQ6/I94TG7pbIBUb/WZCv/YmMI/Is6yZU='
+```
+
+No `'unsafe-inline'`, no nonce, and the one hash covers the theme initialiser. Chrome refused to
+parse the rules block, and nothing about the page looked wrong. This is the same failure shape as
+the SRI drift: a feature switched silently off, with no visible symptom, for as long as nobody
+thought to check.
+
+There are two fixes and they are not equivalent:
+
+- Add `'inline-speculation-rules'` to `script-src`. One line, but it re-opens `script-src` to a
+  class of inline content on every page for the rest of the site's life.
+- Send the ruleset as a file and point at it with the response header:
+
+  ```http
+  Speculation-Rules: "/_speculation/rules.json"
+  ```
+
+  The fetch is an ordinary same-origin request already covered by `'self'`, so the strict policy
+  stays strict. The ruleset is also fetched and parsed once per browser rather than re-parsed on
+  every navigation, and the bytes leave the HTML entirely.
+
+The header route wins, and it costs no reach: the `Speculation-Rules` header and the document rules
+these use (`where`, `eagerness`, `expects_no_vary_search`) all shipped in Chrome 121, so any browser
+that could have acted on the inline block can fetch the file.
+
+The file must be served as `application/speculationrules+json`. Served as `application/json` it is
+ignored — silently, again — which is why the route sets the type explicitly rather than relying on
+the extension, and why a test asserts it.
+
 ## Sources
 
 - [View transition types | Chrome for Developers](https://developer.chrome.com/docs/web-platform/view-transitions/cross-document#view-transition-types)
+- [`Speculation-Rules` header | MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Speculation-Rules)
+- [`script-src` and `'inline-speculation-rules'` | MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/script-src)
 - [`expects_no_vary_search` in speculation rules](https://developer.mozilla.org/en-US/docs/Web/API/Speculation_Rules_API#expects_no_vary_search)

@@ -18,7 +18,15 @@ import {
   SITE_ORIGIN,
   THEME_SCRIPT_HASH,
 } from "../netlify/edge-functions/lib/config.ts";
-import { applyCacheTags } from "../netlify/edge-functions/lib/security.ts";
+import {
+  applyCacheTags,
+  buildContentSecurityPolicy,
+} from "../netlify/edge-functions/lib/security.ts";
+import serveSpeculationRules from "../netlify/edge-functions/speculation.ts";
+import {
+  SPECULATION_RULES_PATH,
+  speculationRules,
+} from "../netlify/edge-functions/lib/speculation.ts";
 import { FEEDS } from "../netlify/edge-functions/lib/feeds.ts";
 import sitemapHandler from "../netlify/edge-functions/sitemap.ts";
 import savedHandler from "../netlify/edge-functions/saved.ts";
@@ -1536,22 +1544,60 @@ Deno.test("speculation rules declare the same No-Vary-Search the server sends", 
 
   await withMockedEnv(routes, async () => {
     const res = await handler(new Request("https://nfhn.test/top/1"));
-    const body = await res.text();
-    const header = res.headers.get("no-vary-search");
+    await res.text();
+    const noVarySearch = res.headers.get("no-vary-search");
 
-    assert(header, "expected a No-Vary-Search header");
+    assert(noVarySearch, "expected a No-Vary-Search header");
+    assertEquals(res.headers.get("speculation-rules"), `"${SPECULATION_RULES_PATH}"`);
+
     // A prefetch still in flight has no response header yet, so the browser
     // cannot know a decorated URL matches it. expects_no_vary_search closes
     // that window - and only works if it matches what the server actually
     // sends, hence asserting against the header rather than a literal.
-    assertStringIncludes(body, `"expects_no_vary_search": "${header}"`);
-
-    const declarations = body.match(/"expects_no_vary_search"/g) ?? [];
+    const rules = speculationRules();
     assertEquals(
-      declarations.length,
-      2,
+      [...rules.prerender, ...rules.prefetch].map((r) => r.expects_no_vary_search),
+      [noVarySearch, noVarySearch],
       "both the prefetch and prerender rules should declare it",
     );
+  });
+});
+
+Deno.test("the rules the header points at are valid speculation rules", async () => {
+  const res = await serveSpeculationRules();
+  const body = await res.text();
+
+  // The wrong content type makes the browser ignore the file, silently - the
+  // same failure mode as the inline block this replaced.
+  assertEquals(res.headers.get("content-type"), "application/speculationrules+json");
+  assertEquals(JSON.parse(body), speculationRules());
+});
+
+Deno.test("no page ships an inline speculation rules script", async () => {
+  // These rules were inline for months and never once ran: a speculation rules
+  // script is an inline script as far as CSP is concerned, and script-src here
+  // is 'self' plus one hash for the theme initialiser. Nothing about the page
+  // looked wrong, which is exactly why this needs a test rather than a comment.
+  const scriptSrc = buildContentSecurityPolicy()
+    .split(";")
+    .map((directive) => directive.trim())
+    .find((directive) => directive.startsWith("script-src "));
+
+  assert(scriptSrc, "expected a script-src directive");
+  // Neither of the two things that would make an inline rules block run.
+  assertEquals(scriptSrc.includes("'unsafe-inline'"), false);
+  assertEquals(scriptSrc.includes("'inline-speculation-rules'"), false);
+
+  const routes = { [topStoriesUrl]: [noVarySearchStory] };
+  await withMockedEnv(routes, async () => {
+    for (const path of ["/top/1", "/item/123", "/user/alice"]) {
+      const body = await (await handler(new Request(`https://nfhn.test${path}`))).text();
+      assertEquals(
+        body.includes("speculationrules"),
+        false,
+        `${path} must deliver rules by header, not by a script CSP would block`,
+      );
+    }
   });
 });
 

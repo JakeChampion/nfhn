@@ -3,7 +3,6 @@
 import { type HTML, html as tpl, unsafeHTML } from "../html.ts";
 import { type FeedSlug, type Item, type SubmissionItem, type User } from "../hn.ts";
 import {
-  NO_VARY_SEARCH,
   OG_IMAGE_HEIGHT,
   OG_IMAGE_WIDTH,
   OG_IMAGES_ENABLED,
@@ -37,55 +36,6 @@ import {
   userLink,
   websiteJsonLd,
 } from "./components.ts";
-
-// --- Speculation Rules for prefetching/prerendering ---
-// Uses the declarative Speculation Rules API (Chrome 109+)
-// Replaces JavaScript-based prefetch with native browser prefetching
-//
-// `expects_no_vary_search` mirrors the `No-Vary-Search` response header set in
-// lib/security.ts, and closes the gap that header alone leaves open. When a
-// click arrives on a link decorated with `?utm_source=…`, the browser looks for
-// that exact URL in its prefetch cache. If the prefetch for the clean URL has
-// *completed*, its response header is known and the entries match. If it is
-// still in flight there is no header yet, so the browser cannot know they are
-// equivalent and starts a second, redundant fetch. Declaring it up front closes
-// that window. The value must match what the server actually sends, so it is
-// interpolated from the same constant rather than written out twice.
-//
-// See docs/api-proposals/19-view-transition-types-and-speculation.md
-
-const speculationRules = (): HTML =>
-  tpl`<script type="speculationrules">
-{
-  "prerender": [
-    {
-      "where": {
-        "and": [
-          { "href_matches": "/*" },
-          { "not": { "href_matches": "/saved" } },
-          { "not": { "href_matches": "/reader*" } },
-          { "not": { "selector_matches": ".external-link" } }
-        ]
-      },
-      "eagerness": "moderate",
-      "expects_no_vary_search": "${NO_VARY_SEARCH}"
-    }
-  ],
-  "prefetch": [
-    {
-      "where": {
-        "and": [
-          { "href_matches": "/*" },
-          { "not": { "href_matches": "/saved" } },
-          { "not": { "href_matches": "/reader*" } }
-        ]
-      },
-      "eagerness": "conservative",
-      "expects_no_vary_search": "${NO_VARY_SEARCH}"
-    }
-  ]
-}
-</script>`;
 
 // --- Inline script to set theme before page renders (prevents flash) ---
 // Also writes a media-less <meta name="theme-color"> reflecting the *resolved*
@@ -159,7 +109,6 @@ export const home = (
     </main>
     ${backToTop()}
     ${keyboardNavScript()}
-    ${speculationRules()}
     ${themeScript()}
   </body>
 </html>
