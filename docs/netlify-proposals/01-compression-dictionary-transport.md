@@ -154,6 +154,48 @@ and no clock is involved.
 That is **2.8× smaller than zstd alone**, and the 1,815 B includes the 40-byte `dcz` header. The win
 is exactly where the review predicted: the shell is free, and only the story rows cost anything.
 
+## What it took to make any of that real
+
+Every number above was measured in the test suite. In production the feature did not work at all
+until four bugs later, and the shape of them is worth more than the numbers.
+
+**1. The `Use-As-Dictionary` header was malformed, so no browser ever stored the dictionary.** The
+match pattern was `/(top|newest|ask|show|jobs)/:page(\d+)`, which is wrong twice: `\d` is not a legal
+Structured Field String escape, so Chrome could not parse the field at all; and RFC 9842 runs
+URLPattern's "has regexp groups" steps on `match` and rejects the offer if they return true, which
+both the alternation and the `\d+` do. It is now `/:section/:page` — no regexp groups, and a better
+fit anyway, since item and user pages share the same shell.
+
+**2. A drained response body became a 500.** `encodeWithDictionary` read the body, and on failure
+returned the *original* response. Netlify re-wraps every response on the way out to apply header
+mutations, and `new Response(response.body, …)` throws `ReadableStream is locked or disturbed` on a
+consumed stream. This was unreachable while bug 1 existed; fixing bug 1 turned it into a 500 on the
+homepage within minutes.
+
+**3. The npm package cannot be imported in an edge function.** Netlify's bundler resolves
+`@bokuweb/zstd-wasm` through the **node** export condition, selecting a build whose init is
+`readFile(resolve(__dirname, './zstd.wasm'))`. Deno Deploy has no filesystem. This surfaced first as
+a missing named export and then as a namespace containing only `default` — both symptoms one layer
+above the actual wall, and both chased with a deploy each.
+
+**4. So the browser build is vendored.** `scripts/vendor-zstd.mjs` bundles `dist/web` by file path —
+bypassing the `exports` map that hides it — into one ESM module with the wasm inlined as base64. No
+filesystem, no second request for the binary, no exports map.
+
+The lesson is the reproduction, not the bugs. `@netlify/edge-bundler` is an npm package and Deno runs
+locally, so **the entire pipeline can be verified before deploying**: bundle the real edge functions
+with Netlify's own bundler and check the eszip, then run the real encode path under `deno run` with
+no permissions at all, which is the closest local approximation of Deno Deploy. Doing that takes two
+minutes and would have caught bugs 3 and 4 without a single deploy. It is now how this is checked.
+
+Measured that way, through the repo's real `encodeWithDictionary` on a rendered `/top/2`:
+
+```
+Content-Encoding: dcz
+valid dcz framing: true
+plain 69,926 bytes -> 836 bytes   (98.8% smaller)
+```
+
 ## Two things that were easy to get wrong
 
 **The encode must happen outside the cache.** `withProgrammableCache` keys on the URL alone, so a
@@ -172,12 +214,14 @@ body is not.
 
 ## Still worth doing
 
-- **The static-asset dictionary** (section B above) is not built. It needs the previous deploy's
-  bytes in Blobs, and it is worth much less than the HTML win now measured.
 - **Memoising deltas in Blobs**, so a second visitor to `/top/2` with the same dictionary gets a blob
   read rather than a zstd run.
-- **Skipping the encode for `Sec-Purpose: prefetch`**, where nobody is waiting on the bytes. The
-  helpers for this already exist in `lib/background.ts`.
+- **Trimming the vendored bundle.** It is 350 KB, most of it the base64 wasm, parsed lazily on the
+  first dictionary-capable request in an isolate. A build with only the compression half would be a
+  good deal smaller.
+
+The static-asset dictionary (section B) and skipping the encode for `Sec-Purpose: prefetch` are both
+done — see `netlify/edge-functions/asset.ts` and `lib/background.ts`.
 
 ## Sources
 
