@@ -1,7 +1,7 @@
 {
   "name": "hn",
   "version": "1.0.0",
-  "description": "You can view the deployed version at <https://nfhn.netlify.app/>",
+  "description": "You can view the deployed version at <https://hn.jakechampion.name/>",
   "main": "index.js",
   "repository": {
     "type": "git",

@@ -2,6 +2,7 @@
 
 import { type HTML, html, raw, unsafeHTML } from "../html.ts";
 import { FEEDS } from "../feeds.ts";
+import { SITE_ORIGIN } from "../config.ts";
 import { DICTIONARY_TRANSPORT_ENABLED } from "../dictionary.ts";
 import { type FeedSlug, type HNAPIItem, type Item, type ItemType } from "../hn.ts";
 
@@ -41,7 +42,7 @@ export const articleJsonLd = (data: ArticleStructuredData): HTML => {
     isPartOf: {
       "@type": "WebSite",
       name: "NFHN - Hacker News Reader",
-      url: "https://nfhn.netlify.app",
+      url: SITE_ORIGIN,
     },
   };
 
@@ -536,7 +537,7 @@ export const shareButton = (item: Item): HTML =>
       type="button"
       class="share-btn"
       data-share-title="${item.title}"
-      data-share-url="${item.url || `https://nfhn.netlify.app/item/${item.id}`}"
+      data-share-url="${item.url || `${SITE_ORIGIN}/item/${item.id}`}"
       title="Share story"
       aria-label="Share story"
     >
