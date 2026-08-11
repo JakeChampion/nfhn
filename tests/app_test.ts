@@ -6,6 +6,7 @@
 import { assert, assertEquals, assertStringIncludes } from "std/testing/asserts.ts";
 import { type El, el, FakeWindow, moduleSource, runModule } from "./dom-shim.ts";
 import { home } from "../netlify/edge-functions/lib/render.ts";
+import { storyPreviewCard } from "../netlify/edge-functions/lib/render/components.ts";
 import { htmlToString } from "../netlify/edge-functions/lib/html.ts";
 
 const FOCUS_MODULE = "Returning to where you were";
@@ -261,5 +262,198 @@ Deno.test("the markup focus restoration looks for is the markup we render", asyn
   // to something the renderer no longer emits.
   for (const selector of ["li[data-story-id]", "a.comments", "a.title", "a.more-link"]) {
     assertStringIncludes(source, selector);
+  }
+});
+
+// =============================================================================
+// Story previews on hover
+// =============================================================================
+
+const PREVIEW_MODULE = "Story previews on hover";
+
+/** A feed page with the preview card the renderer emits alongside it. */
+const previewPage = () => {
+  const page = feedPage();
+  const card = el(
+    "div",
+    { id: "story-preview", popover: "hint", class: "story-preview", hidden: "" },
+    el("p", { class: "story-preview-title" }),
+    el("p", { class: "story-preview-excerpt" }),
+    el("p", { class: "story-preview-meta" }),
+  );
+  card.parent = page;
+  page.children.push(card);
+  return page;
+};
+
+const cardIn = (page: El) => ({
+  root: page.querySelector("#story-preview")!,
+  title: page.querySelector(".story-preview-title")!,
+  excerpt: page.querySelector(".story-preview-excerpt")!,
+  meta: page.querySelector(".story-preview-meta")!,
+});
+
+const jsonResponse = (body: unknown) => ({
+  ok: true,
+  status: 200,
+  json: () => Promise.resolve(body),
+});
+
+const SAMPLE = {
+  id: 22,
+  title: "A story worth reading",
+  domain: "example.com",
+  points: 1,
+  user: "alice",
+  time: 1700000000,
+  comments: 4,
+  excerpt: "One paragraph about the thing.",
+  source: "story",
+};
+
+/** Let the module's fetch-then-fill chain settle. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+Deno.test("hovering a story fetches its preview and fills the card", async () => {
+  const window = new FakeWindow("/top/1", previewPage());
+  window.fetch = () => Promise.resolve(jsonResponse(SAMPLE));
+  await runModule(PREVIEW_MODULE, window);
+
+  const card = cardIn(window.root);
+  // The renderer ships the card hidden so a browser without popover support
+  // does not paint a stray box; the module unhides it once it knows better.
+  assertEquals(card.root.hidden, false);
+
+  const link = linkIn(window.root, 22, "title");
+  // The browser only fires interest for elements carrying the attribute.
+  assertEquals(link.getAttribute("interestfor"), "story-preview");
+
+  card.root.dispatch({ type: "interest", source: link });
+  // Something before the request lands, so the card does not open empty and
+  // then jump to full height.
+  assertEquals(card.meta.textContent, "Loading…");
+
+  await settle();
+  assertEquals(window.requests, ["/api/preview/22"]);
+  assertEquals(card.title.textContent, SAMPLE.title);
+  assertEquals(card.excerpt.textContent, SAMPLE.excerpt);
+  assertEquals(card.excerpt.hidden, false);
+  assertStringIncludes(card.meta.textContent, "by alice");
+  assertStringIncludes(card.meta.textContent, "1 point");
+});
+
+Deno.test("a second hover on the same story does not hit the network again", async () => {
+  const window = new FakeWindow("/top/1", previewPage());
+  window.fetch = () => Promise.resolve(jsonResponse(SAMPLE));
+  await runModule(PREVIEW_MODULE, window);
+
+  const card = cardIn(window.root);
+  const link = linkIn(window.root, 22, "title");
+
+  card.root.dispatch({ type: "interest", source: link });
+  await settle();
+  card.root.dispatch({ type: "loseinterest" });
+  card.root.dispatch({ type: "interest", source: link });
+
+  // Straight from cache, so it is filled before any await - and no second
+  // request behind the pointer on the way back up the page.
+  assertEquals(card.excerpt.textContent, SAMPLE.excerpt);
+  assertEquals(window.requests.length, 1);
+});
+
+Deno.test("moving on cancels the request nobody is waiting for", async () => {
+  const window = new FakeWindow("/top/1", previewPage());
+  let aborted = false;
+  window.fetch = (_url, init) =>
+    new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => {
+        aborted = true;
+        reject(new DOMException("aborted", "AbortError"));
+      });
+    });
+  await runModule(PREVIEW_MODULE, window);
+
+  const card = cardIn(window.root);
+  card.root.dispatch({ type: "interest", source: linkIn(window.root, 11, "title") });
+  card.root.dispatch({ type: "loseinterest" });
+  await settle();
+
+  assertEquals(aborted, true);
+});
+
+Deno.test("a preview that arrives late does not overwrite the card in front of you", async () => {
+  // Scanning a feed quickly means several of these can be in flight; the slow
+  // one landing last must not repaint the row the reader has settled on.
+  const window = new FakeWindow("/top/1", previewPage());
+  const resolvers: ((value: unknown) => void)[] = [];
+  window.fetch = () => new Promise((resolve) => resolvers.push(resolve));
+  await runModule(PREVIEW_MODULE, window);
+
+  const card = cardIn(window.root);
+  card.root.dispatch({ type: "interest", source: linkIn(window.root, 11, "title") });
+  card.root.dispatch({ type: "interest", source: linkIn(window.root, 33, "title") });
+
+  resolvers[1]!(jsonResponse({ ...SAMPLE, id: 33, title: "Story thirty-three" }));
+  await settle();
+  resolvers[0]!(jsonResponse({ ...SAMPLE, id: 11, title: "Story eleven" }));
+  await settle();
+
+  assertEquals(card.title.textContent, "Story thirty-three");
+});
+
+Deno.test("a story with no excerpt shows the metadata and no empty paragraph", async () => {
+  const window = new FakeWindow("/top/1", previewPage());
+  window.fetch = () =>
+    Promise.resolve(jsonResponse({ ...SAMPLE, excerpt: undefined, source: undefined }));
+  await runModule(PREVIEW_MODULE, window);
+
+  const card = cardIn(window.root);
+  card.root.dispatch({ type: "interest", source: linkIn(window.root, 22, "title") });
+  await settle();
+
+  assertEquals(card.excerpt.hidden, true);
+  assertEquals(card.excerpt.textContent, "");
+  assertStringIncludes(card.meta.textContent, "by alice");
+});
+
+Deno.test("a failed request leaves a card rather than a spinner", async () => {
+  const window = new FakeWindow("/top/1", previewPage());
+  window.fetch = () => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) });
+  await runModule(PREVIEW_MODULE, window);
+
+  const card = cardIn(window.root);
+  card.root.dispatch({ type: "interest", source: linkIn(window.root, 22, "title") });
+  await settle();
+
+  // The title came off the row itself, so the card still says something true.
+  assertEquals(card.meta.textContent, "");
+  assertEquals(card.excerpt.hidden, true);
+});
+
+Deno.test("without interest invokers nothing is attached and nothing is unhidden", async () => {
+  // The card is only useful if the browser will open it. Attaching interestfor
+  // to links a browser ignores would be harmless; unhiding a card it will
+  // never open would leave a stray box on the page.
+  const window = new FakeWindow("/top/1", previewPage());
+  window.supportsInterestInvokers = false;
+  await runModule(PREVIEW_MODULE, window);
+
+  assertEquals(cardIn(window.root).root.hidden, true);
+  assertEquals(linkIn(window.root, 22, "title").getAttribute("interestfor"), null);
+});
+
+Deno.test("the card the renderer emits is the card the module expects", async () => {
+  const markup = await htmlToString(storyPreviewCard());
+
+  assertStringIncludes(markup, 'id="story-preview"');
+  // popover="hint" specifically: it is the only type interest invokers drive.
+  assertStringIncludes(markup, 'popover="hint"');
+  // Rendered hidden, or a browser without popover paints it inline.
+  assertStringIncludes(markup, "hidden");
+
+  const source = await moduleSource(PREVIEW_MODULE);
+  for (const part of ["story-preview-title", "story-preview-excerpt", "story-preview-meta"]) {
+    assertStringIncludes(markup, part);
+    assertStringIncludes(source, part);
   }
 });

@@ -2176,6 +2176,71 @@ p, .comment-content, .story-meta {
   }
 }
 
+/* --- Story preview hint (interest invokers) ---
+   Opened by hovering, long-pressing or focusing a story title. The browser
+   owns when it opens and closes; this owns where it sits and what it looks
+   like. See the module in app.js. */
+
+#story-preview {
+  /* Interest invokers make the link the popover's implicit anchor, which is
+     what `position-area` resolves against here - no anchor-name needed, and
+     no per-row names for thirty rows. */
+  position: fixed;
+  position-area: block-end span-inline-end;
+  /* A row near the bottom of the viewport flips the card above the link
+     rather than letting it hang off the screen. */
+  position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+  margin-block-start: 0.35rem;
+
+  max-width: min(90vw, 36rem);
+  padding: 0.85em 1em;
+  font-size: 0.95rem;
+  /* Lighter than the modal shadow: this is a hint, not a layer above the page. */
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+  border: 1px solid var(--border-color);
+}
+
+/* A hint takes no backdrop - it does not block the page behind it. */
+#story-preview::backdrop {
+  background: none;
+  backdrop-filter: none;
+}
+
+#story-preview p {
+  margin: 0;
+}
+
+.story-preview-title {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.story-preview-excerpt {
+  margin-block-start: 0.5em !important;
+  color: var(--text-primary);
+  /* Long excerpts are clipped server-side; this is the belt to that braces,
+     and keeps a card from growing taller than the row it describes. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+}
+
+.story-preview-meta {
+  margin-block-start: 0.5em !important;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+
+/* Without popover support the element is left `hidden` by app.js and never
+   reaches this, but a browser that supports popover and not interest invokers
+   would keep a card nothing can open. Belt and braces. */
+@supports not selector(:popover-open) {
+  #story-preview {
+    display: none;
+  }
+}
+
 /* =============================================================================
    CSS Anchor Positioning (Baseline 2024)
    Position popovers, tooltips, and menus relative to their trigger elements
@@ -2458,7 +2523,10 @@ body:has(:focus-visible) .kbd-hint {
 /* --- Popover/Modal open states --- */
 /* Dim main content when any popover is open */
 /* Note: pointer-events not disabled because popover may be inside main */
-body:has([popover]:popover-open) main {
+/* The story preview is deliberately exempt: it is a hint, opened by hovering a
+   row in the very list this rule would dim, and dimming the page behind a
+   hover card makes the page flicker as the pointer moves down it. */
+body:has([popover]:popover-open:not(#story-preview)) main {
   opacity: 0.6;
   transition: opacity 0.15s ease;
 }
@@ -2578,6 +2646,13 @@ main:has(.loading) {
   body:has(:focus-visible) *,
   body:has([popover]:popover-open) * {
     transition-duration: 0.01ms !important;
+  }
+
+  /* Same reason as the dimming rule: a hint that fades in as the pointer
+     crosses each row is motion nobody asked for. */
+  #story-preview {
+    transition: none;
+    transform: none;
   }
 }
 

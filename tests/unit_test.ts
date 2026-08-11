@@ -1826,3 +1826,79 @@ Deno.test("the index is bounded and reports what it dropped", () => {
   // deleted - an index that forgets a key without deleting it leaks storage.
   assertEquals(evicted, [`v${MAX_VERSIONS_PER_ASSET - 1}`]);
 });
+
+// =============================================================================
+// Story preview excerpts
+// =============================================================================
+
+import {
+  chooseExcerpt,
+  clip,
+  PREVIEW_LENGTH,
+  toPlainText,
+} from "../netlify/edge-functions/preview.ts";
+
+Deno.test("HN's HTML fragments come out as readable plain text", () => {
+  assertEquals(
+    toPlainText("<p>First paragraph.</p><p>Second one.</p>"),
+    "First paragraph. Second one.",
+  );
+  // Run together, this reads as "paragraph.Second" - a rendering bug, in a
+  // string the card shows as prose.
+  assertEquals(toPlainText("one<br>two"), "one two");
+  assertEquals(toPlainText("A &amp; B &lt;tag&gt; &quot;quoted&quot;"), 'A & B <tag> "quoted"');
+  assertEquals(toPlainText('<a href="x">link</a> text'), "link text");
+  // An entity we do not map must not survive as raw markup-ish text.
+  assertEquals(toPlainText("a &hellip; b"), "a b");
+});
+
+Deno.test("clipping stops at a word boundary and says that it clipped", () => {
+  assertEquals(clip("short", 20), "short");
+
+  const clipped = clip("the quick brown fox jumps over the lazy dog", 20);
+  assertEquals(clipped, "the quick brown fox…");
+  assertEquals(clipped.length <= 21, true);
+
+  // A single long token has no boundary to fall back to; cutting it is still
+  // better than returning the whole thing.
+  assertEquals(clip("a".repeat(50), 10), `${"a".repeat(10)}…`);
+});
+
+Deno.test("the excerpt comes from the submitter first, a comment last", () => {
+  const own = "This is the text the submitter wrote, which is always on topic.";
+  const article = "This is what the article itself says, extracted by reader mode.";
+  const comments = [{
+    id: 1,
+    type: "comment" as const,
+    content: "A reply long enough to be worth showing.",
+  }];
+
+  assertEquals(chooseExcerpt(own, article, comments), { excerpt: own, source: "story" });
+  assertEquals(chooseExcerpt("", article, comments), { excerpt: article, source: "article" });
+  assertEquals(chooseExcerpt("", undefined, comments), {
+    excerpt: "A reply long enough to be worth showing.",
+    source: "comment",
+  });
+  // A link story with nothing extracted and no comments has nothing to add
+  // beyond what the row already shows, and says so rather than inventing.
+  assertEquals(chooseExcerpt("", undefined, []), {});
+});
+
+Deno.test("deleted and trivial comments are not offered as an excerpt", () => {
+  const comments = [
+    { id: 1, type: "comment" as const, content: "gone", deleted: true },
+    { id: 2, type: "comment" as const, content: "dead too", dead: true },
+    { id: 3, type: "comment" as const, content: "this." },
+    { id: 4, type: "comment" as const, content: "The first one worth reading, at some length." },
+  ];
+  assertEquals(chooseExcerpt("", undefined, comments), {
+    excerpt: "The first one worth reading, at some length.",
+    source: "comment",
+  });
+});
+
+Deno.test("an excerpt is never longer than the card is built for", () => {
+  const long = "word ".repeat(500);
+  const { excerpt } = chooseExcerpt(long, undefined, undefined);
+  assertEquals((excerpt ?? "").length <= PREVIEW_LENGTH + 1, true);
+});

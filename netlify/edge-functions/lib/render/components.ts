@@ -150,6 +150,34 @@ export const readingProgress = (): HTML =>
     <div class="reading-progress" aria-hidden="true"></div>
   `;
 
+// --- Story preview card (interest invokers) ---
+//
+// One card, shared by every row on the page - `interestfor` allows many
+// invokers per target, and thirty empty popovers would be thirty times the
+// markup for no gain.
+//
+// It is inert until app.js fills it and attaches `interestfor` to the story
+// links. That is deliberate rather than lazy: without JavaScript there is
+// nothing to put in the card, and a hover that opens an empty box is worse
+// than a hover that does nothing at all. The element ships anyway because
+// app.js needs somewhere to write, and it costs a few dozen bytes that the
+// compression dictionary reduces to approximately none.
+//
+// `hidden` covers the browsers that do not implement popover: there the
+// attribute is inert and the div would otherwise render as a stray box. app.js
+// removes it once it knows the popover will behave.
+//
+// See docs/api-proposals/14-invoker-commands.md
+
+export const storyPreviewCard = (): HTML =>
+  html`
+    <div id="story-preview" popover="hint" class="story-preview" hidden>
+      <p class="story-preview-title"></p>
+      <p class="story-preview-excerpt"></p>
+      <p class="story-preview-meta"></p>
+    </div>
+  `;
+
 // --- Back to Top Button (Scroll-Driven Animations) ---
 
 export const backToTop = (): HTML =>
