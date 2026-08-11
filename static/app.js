@@ -994,6 +994,110 @@ const TextSegments = (function () {
   });
 })();
 
+// --- Returning to where you were ---
+//
+// Cross-document navigation resets focus to the start of the document. On the
+// way *into* a story that is correct - the new page is the new context. On the
+// way back out it is not: the browser restores your scroll position to the
+// story you clicked, and then puts focus a hundred rows above it. Tab, and you
+// are back at the skip link.
+//
+// So this restores the one thing the platform does not: which link you left
+// from. It only ever fires on a traversal (Back, or a gesture the browser
+// reports as one), only when the recorded page is the page we landed on, and
+// only when the exact link still exists - a forward navigation to the same URL
+// is a fresh visit and gets the default.
+//
+// `preventScroll` matters. The browser has already restored the scroll offset
+// by this point and it is more accurate than anything derived from an element,
+// so focusing without it would jump the page a few pixels for no reason.
+(function initFocusRestoration() {
+  const KEY = "nfhn:left-from";
+  const STORY = "li[data-story-id]";
+
+  // What to come back to, or null when the answer is "nothing in particular".
+  const departure = (link) => {
+    const story = link.closest(STORY);
+    if (story) {
+      return {
+        id: story.dataset.storyId,
+        // Title and comments links sit in one row; coming back to the wrong one
+        // of the two would be its own small annoyance.
+        via: link.classList.contains("comments") ? "comments" : "title",
+      };
+    }
+    // Paging back and forth should leave you on the pager, not send you to the
+    // top of a list you have already read.
+    if (link.classList.contains("more-link")) return { via: "more" };
+    return null;
+  };
+
+  const remember = (event) => {
+    const link = event.target.closest?.("a[href]");
+    if (!link) return;
+
+    const leaving = departure(link);
+    try {
+      // An unrecognised link overwrites rather than leaves the old record in
+      // place: whatever it was, it is no longer where the reader left from.
+      if (leaving) {
+        sessionStorage.setItem(KEY, JSON.stringify({ path: location.pathname, ...leaving }));
+      } else {
+        sessionStorage.removeItem(KEY);
+      }
+    } catch {
+      // Private mode, or a full quota. Losing this is not worth an error.
+    }
+  };
+
+  // Capture, because a click on the title span never reaches the anchor as
+  // `target` and because nothing else here should be able to stop it.
+  addEventListener("click", remember, { capture: true });
+  // Keyboard activation of a link fires click too, but a middle-click or a
+  // modified click opens a new tab and must not overwrite the record.
+  addEventListener("auxclick", (event) => event.button === 1 && remember(event), {
+    capture: true,
+  });
+
+  const cameBack = () => {
+    const type = globalThis.navigation?.activation?.navigationType;
+    if (type) return type === "traverse";
+    // No Navigation API: the Performance entry says the same thing, later.
+    return performance.getEntriesByType?.("navigation")[0]?.type === "back_forward";
+  };
+
+  const restore = () => {
+    if (!cameBack()) return;
+
+    let record;
+    try {
+      record = JSON.parse(sessionStorage.getItem(KEY) || "null");
+    } catch {
+      return;
+    }
+    if (!record || record.path !== location.pathname) return;
+
+    const link = record.via === "more" ? document.querySelector("a.more-link") : document
+      .querySelector(`${STORY}[data-story-id="${CSS.escape(String(record.id))}"]`)
+      ?.querySelector(record.via === "comments" ? "a.comments" : "a.title");
+    if (!link) return;
+
+    link.focus({ preventScroll: true });
+  };
+
+  // After the transition, not during it: focusing mid-animation scrolls the
+  // snapshot rather than the page in some browsers, and the old and new
+  // documents are both alive at that point.
+  addEventListener("pagereveal", (event) => {
+    if (event.viewTransition) event.viewTransition.finished.then(restore, restore);
+    else restore();
+  });
+  // pagereveal is Chrome-only so far, and bfcache restores focus itself.
+  addEventListener("pageshow", (event) => {
+    if (!event.persisted && !("onpagereveal" in globalThis)) restore();
+  });
+})();
+
 // --- Compression Streams API (Phase 3) ---
 // Utilities for compressing/decompressing data to reduce storage usage
 const CompressionUtils = (function () {
