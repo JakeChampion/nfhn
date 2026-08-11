@@ -425,17 +425,17 @@ export class FakeWindow {
 }
 
 /**
- * Pull one `// --- Heading ---` section out of static/app.js.
+ * Pull one `// --- Heading ---` section out of a file in static/.
  *
  * Extracting by heading rather than by line number means the test breaks
  * loudly if the module is renamed or removed, instead of silently testing a
  * neighbouring one.
  */
-export async function moduleSource(heading: string): Promise<string> {
-  const source = await Deno.readTextFile(new URL("../static/app.js", import.meta.url));
+export async function moduleSource(heading: string, file = "app.js"): Promise<string> {
+  const source = await Deno.readTextFile(new URL(`../static/${file}`, import.meta.url));
   const marker = `// --- ${heading} ---`;
   const start = source.indexOf(marker);
-  if (start === -1) throw new Error(`static/app.js has no section "${heading}"`);
+  if (start === -1) throw new Error(`static/${file} has no section "${heading}"`);
 
   const next = source.indexOf("\n// --- ", start + marker.length);
   return source.slice(start, next === -1 ? undefined : next);
@@ -446,4 +446,56 @@ export async function runModule(heading: string, window: FakeWindow): Promise<vo
   const globals = window.globals();
   const names = Object.keys(globals);
   new Function(...names, await moduleSource(heading))(...names.map((name) => globals[name]));
+}
+
+/**
+ * Run a section that declares functions rather than running an IIFE, and hand
+ * the named ones back so a test can call them.
+ *
+ * Service worker code is written this way: top-level function declarations plus
+ * event listeners. Returning the declarations is the only way to reach them
+ * from outside without exporting from a file the browser loads as a classic
+ * worker script.
+ */
+export async function runModuleReturning(
+  heading: string,
+  file: string,
+  globals: Record<string, unknown>,
+  returns: string[],
+): Promise<Record<string, (...args: never[]) => unknown>> {
+  const source = await moduleSource(heading, file);
+  const names = Object.keys(globals);
+  const body = `${source}\nreturn { ${returns.join(", ")} };`;
+  return new Function(...names, body)(...names.map((name) => globals[name]));
+}
+
+/**
+ * A `CacheStorage` with just what these modules use: open, match, put, delete.
+ *
+ * Entries are keyed by URL string. Request objects are reduced to their url,
+ * which is what the real thing does for the default (no `ignoreSearch`) case.
+ */
+export class FakeCaches {
+  readonly caches = new Map<string, Map<string, Response>>();
+
+  open(name: string) {
+    const existing = this.caches.get(name) ?? new Map<string, Response>();
+    this.caches.set(name, existing);
+    const key = (request: string | { url: string }) =>
+      typeof request === "string" ? request : request.url;
+    return Promise.resolve({
+      match: (request: string | { url: string }) =>
+        Promise.resolve(existing.get(key(request))?.clone()),
+      put: (request: string | { url: string }, response: Response) => {
+        existing.set(key(request), response);
+        return Promise.resolve();
+      },
+      delete: (request: string | { url: string }) => Promise.resolve(existing.delete(key(request))),
+    });
+  }
+
+  /** Everything stored under `name`, as URLs. */
+  keysIn(name: string): string[] {
+    return [...(this.caches.get(name)?.keys() ?? [])];
+  }
 }

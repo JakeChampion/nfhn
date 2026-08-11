@@ -278,6 +278,168 @@ self.addEventListener("message", (event) => {
   }
 });
 
+// --- Saving a thread for offline, properly ---
+//
+// The CACHE_ITEM message handler above already fetches an item page, the
+// article and the reader version into the saved cache. Its weakness is that it
+// is an ordinary fetch started from a message handler: nothing holds the worker
+// alive, so a slow article on a slow connection can be killed halfway, and the
+// reader gets no indication either way.
+//
+// Background Fetch is the API for exactly this. The browser owns the download:
+// it survives the page closing and the browser restarting, it shows OS-level
+// progress, and it hands the whole set of responses back here when it is done.
+// A saved story then actually is saved, rather than probably saved.
+//
+// It is Chrome-only, so the message handler stays as the fallback. Which path
+// ran is invisible to the reader except in the good case.
+//
+// See docs/api-proposals/18-pwa-integration-surface.md
+
+const BACKGROUND_FETCH_PREFIX = "save-item-";
+
+/** Move a completed background fetch's responses into the saved cache. */
+async function storeFetchedRecords(registration) {
+  const cache = await caches.open(SAVED_CACHE_NAME);
+  const records = await registration.matchAll();
+
+  for (const record of records) {
+    try {
+      const response = await record.responseReady;
+      // An opaque response (the article, fetched no-cors) has status 0 and is
+      // still worth storing - it renders. A 404 is not.
+      if (response.status === 0 || response.ok) {
+        await cache.put(record.request, response);
+      }
+    } catch {
+      // One failed part of a set should not lose the rest of it.
+    }
+  }
+}
+
+self.addEventListener("backgroundfetchsuccess", (event) => {
+  event.waitUntil((async () => {
+    await storeFetchedRecords(event.registration);
+    // The OS notification stops saying "downloading" and becomes something the
+    // reader can tap to get to what they saved.
+    await event.updateUI?.({ title: "Saved for offline" });
+  })());
+});
+
+self.addEventListener("backgroundfetchfail", (event) => {
+  // Partial is better than nothing: whatever did arrive is still readable
+  // offline, and the item page is the first request in the set.
+  event.waitUntil(storeFetchedRecords(event.registration));
+});
+
+self.addEventListener("backgroundfetchclick", (event) => {
+  const target = event.registration.id.startsWith(BACKGROUND_FETCH_PREFIX)
+    ? "/item/" + event.registration.id.slice(BACKGROUND_FETCH_PREFIX.length)
+    : "/saved";
+  event.waitUntil(clients.openWindow(target));
+});
+
+// --- Keeping saved threads current ---
+//
+// Saved stories are the one thing on this site with a reason to be updated
+// while nobody is looking at them: a thread you saved this morning has more
+// comments by the evening, and finding that out currently means opening it.
+//
+// Periodic Background Sync gives an installed app a slot to do that work, and
+// the Badging API is where the answer goes - a count on the app icon, which is
+// the only ambient surface a web app has.
+//
+// The saved list lives in localStorage, which a service worker cannot read, so
+// the page mirrors it into the cache under SAVED_INDEX_URL whenever it changes.
+// A synthetic URL rather than IndexedDB because the cache is already open here
+// and the value is a single small document.
+
+const SAVED_INDEX_URL = "/__nfhn/saved-index";
+const PERIODIC_SYNC_TAG = "refresh-saved";
+
+async function readSavedIndex() {
+  try {
+    const cache = await caches.open(SAVED_CACHE_NAME);
+    const response = await cache.match(SAVED_INDEX_URL);
+    if (!response) return {};
+    const parsed = await response.json();
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function writeSavedIndex(index) {
+  try {
+    const cache = await caches.open(SAVED_CACHE_NAME);
+    await cache.put(
+      SAVED_INDEX_URL,
+      new Response(JSON.stringify(index), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  } catch {
+    // Storage pressure. Next refresh re-reads whatever survived.
+  }
+}
+
+/**
+ * Re-fetch every saved thread, record what it found, and badge the unread ones.
+ *
+ * The count is threads with new comments, not new comments - a badge saying "3"
+ * that means three conversations worth returning to is actionable, and one
+ * saying "147" is wallpaper.
+ *
+ * `seen` is only ever written by the page, when the reader opens the thread.
+ * This writes `latest`. Keeping the two apart is what lets the badge survive a
+ * refresh without ever outliving the reader actually catching up.
+ */
+async function refreshSavedStories() {
+  const index = await readSavedIndex();
+  const ids = Object.keys(index);
+  if (!ids.length) return;
+
+  const cache = await caches.open(SAVED_CACHE_NAME);
+
+  for (const id of ids) {
+    const itemUrl = "/item/" + id;
+    try {
+      const response = await fetch(itemUrl);
+      if (!response.ok) continue;
+
+      const clone = response.clone();
+      await cache.put(itemUrl, response);
+
+      // The page carries its own comment count for the live-updates banner,
+      // which makes it readable here without a second API call.
+      const match = (await clone.text()).match(/data-comments="(\d+)"/);
+      if (!match) continue;
+      index[id] = {
+        seen: index[id]?.seen ?? 0,
+        latest: Math.max(Number(match[1]), index[id]?.latest ?? 0),
+      };
+    } catch {
+      // Offline, or the item is gone. Either way the saved copy stands.
+    }
+  }
+
+  await writeSavedIndex(index);
+
+  try {
+    const unread = Object.values(index)
+      .filter((entry) => (entry?.latest ?? 0) > (entry?.seen ?? 0)).length;
+    if (unread > 0) await self.navigator.setAppBadge(unread);
+    else await self.navigator.clearAppBadge();
+  } catch {
+    // Not installed, or badging unsupported. The cache refresh still happened,
+    // which is the half of this that works everywhere.
+  }
+}
+
+self.addEventListener("periodicsync", (event) => {
+  if (event.tag === PERIODIC_SYNC_TAG) event.waitUntil(refreshSavedStories());
+});
+
 // --- Background Sync Support ---
 // Queue actions for when connectivity is restored
 

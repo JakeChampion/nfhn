@@ -107,6 +107,61 @@ Call it when the user first saves a story, not on page load — browsers grant p
 engagement signals, and asking at the moment the user demonstrates intent is both more likely to
 succeed and more honest. `navigator.storage.estimate()` can then show real usage on `/saved`.
 
+## 7. Saving a story that actually is saved
+
+Bookmarking a story posts a message to the service worker, which fetches the item page, the article
+and the reader version into the saved cache. It works in the sense that it usually works.
+
+The problem is that these are ordinary fetches started from a `message` handler. Nothing holds the
+worker alive, so a slow article on a slow connection can be killed halfway, and the reader is told
+neither way — they find out on the train.
+
+Background Fetch is the API for this exact shape:
+
+```js
+await registration.backgroundFetch.fetch("save-item-" + id, requests, {
+  title, icons, downloadTotal,
+});
+```
+
+The browser owns the download. It survives the page closing and the browser restarting, it shows
+the same OS-level progress UI as any other download, and it delivers `backgroundfetchsuccess` to
+the worker with the whole set of responses to move into the cache — under `waitUntil`, so that half
+cannot be killed either. `backgroundfetchclick` makes the notification a way back to the story.
+
+Chrome-only, so the message handler stays as the fallback. Which path ran is invisible except in
+the good case.
+
+## 8. A badge that means something
+
+Saved stories are the one thing here with a reason to change while nobody is looking: a thread
+saved this morning has more comments by the evening, and finding that out means opening it.
+
+Periodic Background Sync gives an installed app a slot to check, and the Badging API is where the
+answer goes — a count on the app icon, the only ambient surface a web app has.
+
+Two decisions do the work.
+
+**The count is threads, not comments.** A badge saying "3", meaning three conversations worth going
+back to, is actionable. One saying "147" is wallpaper.
+
+**Two numbers per thread, not one.** `seen` is the count the last time the reader opened it;
+`latest` is what the last background refresh found. The badge counts `latest > seen`. A single
+"count when saved" number cannot express this — it would either badge forever, because nothing ever
+marks a thread read, or clear the moment somebody glances at `/saved`, which is not the same thing
+as having read the comments. `seen` is written only by the page, when the thread is actually opened;
+the refresh only ever writes `latest`.
+
+The index lives in the Cache API under a synthetic `/__nfhn/saved-index` URL, because saved stories
+are in `localStorage` and a service worker cannot read that. The refresh reads each item page's
+`data-comments` — the attribute the live-updates banner already carries — so it needs no second API
+call to learn a count.
+
+Neither of these prompts. Periodic sync is granted to installed apps the browser considers engaged
+and refused otherwise, and badging no-ops when the app is not installed. So both are registered at
+the moment somebody first saves a story, alongside the persistence request in section 6, and a
+reader who never saves anything registers nothing.
+
 ## Ordering
 
 `share_target` + `launch_handler` together, as one change, with the No-Vary-Search exclusion and its
@@ -117,3 +172,5 @@ test. Then storage persistence — it is three lines and prevents actual data lo
 - [Web Share Target on MDN](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Manifest/Reference/share_target)
 - [Badging API on MDN](https://developer.mozilla.org/en-US/docs/Web/API/Badging_API)
 - [`StorageManager.persist()` on MDN](https://developer.mozilla.org/en-US/docs/Web/API/StorageManager/persist)
+- [Background Fetch on MDN](https://developer.mozilla.org/en-US/docs/Web/API/Background_Fetch_API)
+- [Periodic Background Sync on MDN](https://developer.mozilla.org/en-US/docs/Web/API/Web_Periodic_Background_Synchronization_API)

@@ -4,7 +4,16 @@
 // copy of its logic.
 
 import { assert, assertEquals, assertStringIncludes } from "std/testing/asserts.ts";
-import { type El, el, FakeEventSource, FakeWindow, moduleSource, runModule } from "./dom-shim.ts";
+import {
+  type El,
+  el,
+  FakeCaches,
+  FakeEventSource,
+  FakeWindow,
+  moduleSource,
+  runModule,
+  runModuleReturning,
+} from "./dom-shim.ts";
 import { home } from "../netlify/edge-functions/lib/render.ts";
 import { liveUpdates, storyPreviewCard } from "../netlify/edge-functions/lib/render/components.ts";
 import { htmlToString } from "../netlify/edge-functions/lib/html.ts";
@@ -605,4 +614,127 @@ Deno.test("the banner the renderer emits is the banner the module drives", async
   for (const hook of ["live-updates-link", "itemId", "comments"]) {
     assertStringIncludes(source, hook);
   }
+});
+
+// =============================================================================
+// The saved index and the app badge
+// =============================================================================
+
+const INDEX_MODULE = "The saved list, where the service worker can read it";
+const SAVED_CACHE = "nfhn-saved-v1";
+const SAVED_INDEX = "/__nfhn/saved-index";
+
+interface IndexEntry {
+  seen: number;
+  latest: number;
+}
+
+async function savedIndexModule(seed: Record<string, IndexEntry> = {}) {
+  const caches = new FakeCaches();
+  if (Object.keys(seed).length) {
+    const cache = await caches.open(SAVED_CACHE);
+    await cache.put(SAVED_INDEX, new Response(JSON.stringify(seed)));
+  }
+
+  const badge: { value: number | null } = { value: null };
+  const api = await runModuleReturning(INDEX_MODULE, "app.js", {
+    caches,
+    Response,
+    JSON,
+    Math,
+    Object,
+    globalThis: { caches },
+    navigator: {
+      setAppBadge: (n: number) => {
+        badge.value = n;
+        return Promise.resolve();
+      },
+      clearAppBadge: () => {
+        badge.value = 0;
+        return Promise.resolve();
+      },
+    },
+  }, ["SavedIndex"]) as unknown as {
+    SavedIndex: {
+      publish(stories: unknown): Promise<void>;
+      markSeen(id: string, count: number): Promise<void>;
+    };
+  };
+
+  return {
+    badge,
+    publish: api.SavedIndex.publish,
+    markSeen: api.SavedIndex.markSeen,
+    // Read the stored bytes rather than asking the module what it thinks it
+    // wrote - the service worker reads these bytes, not the module.
+    read: async (): Promise<Record<string, IndexEntry>> => {
+      const stored = await (await caches.open(SAVED_CACHE)).match(SAVED_INDEX);
+      return stored ? await stored.json() : {};
+    },
+  };
+}
+
+const story = (id: number, comments: number) => ({ id, comments_count: comments });
+
+Deno.test("a newly saved story starts read - the reader is looking at it", async () => {
+  const module = await savedIndexModule();
+  await module.publish({ "5": story(5, 12) });
+
+  assertEquals(await module.read(), { "5": { seen: 12, latest: 12 } });
+  assertEquals(module.badge.value, 0, "nothing unread yet");
+});
+
+Deno.test("republishing preserves read state rather than resetting it", async () => {
+  // Saving a second story must not silently mark the first one read - which is
+  // what rebuilding the index from localStorage alone would do, since
+  // localStorage only knows the count at save time.
+  const module = await savedIndexModule({ "5": { seen: 12, latest: 30 } });
+  await module.publish({ "5": story(5, 12), "6": story(6, 1) });
+
+  assertEquals((await module.read())["5"], { seen: 12, latest: 30 });
+  assertEquals(module.badge.value, 1);
+});
+
+Deno.test("unsaving a story drops it from the badge", async () => {
+  const module = await savedIndexModule({
+    "5": { seen: 1, latest: 9 },
+    "6": { seen: 1, latest: 9 },
+  });
+  await module.publish({ "6": story(6, 1) });
+
+  assertEquals(Object.keys(await module.read()), ["6"]);
+  assertEquals(module.badge.value, 1);
+});
+
+Deno.test("opening a thread marks it read and updates the badge immediately", async () => {
+  // Not on the next background refresh: the badge has to respond to the thing
+  // the reader just did, or it reads as broken.
+  const module = await savedIndexModule({
+    "5": { seen: 1, latest: 9 },
+    "6": { seen: 1, latest: 4 },
+  });
+
+  await module.markSeen("5", 9);
+  assertEquals((await module.read())["5"], { seen: 9, latest: 9 });
+  assertEquals(module.badge.value, 1, "only story 6 is still unread");
+
+  await module.markSeen("6", 4);
+  assertEquals(module.badge.value, 0);
+});
+
+Deno.test("opening a thread that is not saved records nothing", async () => {
+  const module = await savedIndexModule({ "5": { seen: 1, latest: 9 } });
+  await module.markSeen("999", 40);
+
+  assertEquals(Object.keys(await module.read()), ["5"]);
+});
+
+Deno.test("a thread read while it was still growing keeps the higher count", async () => {
+  // The page was rendered from cache at 3 comments; the last refresh saw 9.
+  // Marking it read at 3 must not lose the 9, or the badge reappears saying
+  // there are new comments the reader has in fact already been offered.
+  const module = await savedIndexModule({ "5": { seen: 1, latest: 9 } });
+  await module.markSeen("5", 3);
+
+  assertEquals((await module.read())["5"], { seen: 3, latest: 9 });
 });
