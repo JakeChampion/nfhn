@@ -241,6 +241,54 @@ export interface FakeEvent {
 type Listener = (event: FakeEvent) => void;
 
 /**
+ * A stand-in for `EventSource`.
+ *
+ * Every instance is recorded on the class so a test can find the connection the
+ * module opened, push events into it, and assert on whether it was closed. The
+ * real one reconnects on its own; this one does not, because the behaviour
+ * under test is what the module does around that, not the retry itself.
+ */
+export class FakeEventSource {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 2;
+  /** Every instance constructed, in order. Reset with `FakeEventSource.reset()`. */
+  static instances: FakeEventSource[] = [];
+  static reset() {
+    FakeEventSource.instances = [];
+  }
+
+  readonly url: string;
+  readyState = FakeEventSource.OPEN;
+  readonly listeners = new Map<string, ((event: { data?: string }) => void)[]>();
+
+  constructor(url: string) {
+    this.url = url;
+    FakeEventSource.instances.push(this);
+  }
+
+  addEventListener(type: string, listener: (event: { data?: string }) => void) {
+    const existing = this.listeners.get(type) ?? [];
+    existing.push(listener);
+    this.listeners.set(type, existing);
+  }
+
+  close() {
+    this.readyState = FakeEventSource.CLOSED;
+  }
+
+  /** Deliver a server event to the module. */
+  emit(type: string, data?: unknown) {
+    const payload = data === undefined ? undefined : JSON.stringify(data);
+    for (const listener of this.listeners.get(type) ?? []) listener({ data: payload });
+  }
+
+  get closed() {
+    return this.readyState === FakeEventSource.CLOSED;
+  }
+}
+
+/**
  * A page: a document root, a URL, a sessionStorage, and event dispatch.
  *
  * Capture and bubble listeners both fire here, in registration order. That is
@@ -260,6 +308,10 @@ export class FakeWindow {
   supportsPageReveal = true;
   /** Whether `HTMLAnchorElement.prototype` carries `interestForElement`. */
   supportsInterestInvokers = true;
+  /** Whether `EventSource` exists at all. */
+  supportsEventSource = true;
+  /** Whether `document.visibilityState` reports "visible". */
+  visible = true;
   /** Requests the module made, newest last. */
   readonly requests: string[] = [];
   /** Stand-in for the network. Replace per test. */
@@ -273,6 +325,11 @@ export class FakeWindow {
 
   dispatch(event: FakeEvent): void {
     for (const listener of this.listeners.get(event.type) ?? []) listener(event);
+  }
+
+  /** Dispatch to listeners registered on `document` rather than the window. */
+  dispatchOnDocument(event: FakeEvent): void {
+    for (const listener of this.listeners.get(`document:${event.type}`) ?? []) listener(event);
   }
 
   /** The globals a module extracted from app.js is run against. */
@@ -289,11 +346,26 @@ export class FakeWindow {
         setItem: (key: string, value: string) => void this.storage.set(key, String(value)),
         removeItem: (key: string) => void this.storage.delete(key),
       },
-      document: {
-        querySelector: (selector: string) => this.root.querySelector(selector),
-        querySelectorAll: (selector: string) => this.root.querySelectorAll(selector),
-        getElementById: (id: string) => this.root.querySelector(`[id="${id}"]`),
-      },
+      document: Object.defineProperty(
+        {
+          querySelector: (selector: string) => this.root.querySelector(selector),
+          querySelectorAll: (selector: string) => this.root.querySelectorAll(selector),
+          getElementById: (id: string) => this.root.querySelector(`[id="${id}"]`),
+          addEventListener: (type: string, listener: Listener) => {
+            const existing = this.listeners.get(`document:${type}`) ?? [];
+            existing.push(listener);
+            this.listeners.set(`document:${type}`, existing);
+          },
+          // Modules gated on `whenActivated` run immediately here; the prerender
+          // path is exercised by passing a `whenActivated` that defers instead.
+          prerendering: false,
+          // A getter, so a test can flip `visible` after the module has run and
+          // have the module see the new value.
+        },
+        "visibilityState",
+        { get: () => (this.visible ? "visible" : "hidden") },
+      ),
+      whenActivated: (fn: () => void) => fn(),
       // Feature detections for interest invokers and popover. Set
       // `supportsInterestInvokers` to false to stand in for a browser without.
       HTMLAnchorElement: {
@@ -310,6 +382,12 @@ export class FakeWindow {
         this.requests.push(input);
         return this.fetch(input, init);
       },
+      EventSource: this.supportsEventSource ? FakeEventSource : undefined,
+      encodeURIComponent,
+      Number,
+      Math,
+      setTimeout,
+      clearTimeout,
       AbortController,
       AbortSignal,
       Date,

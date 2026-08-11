@@ -150,6 +150,39 @@ export const readingProgress = (): HTML =>
     <div class="reading-progress" aria-hidden="true"></div>
   `;
 
+// --- Live thread updates (Server-Sent Events) ---
+//
+// An item page is cached for a minute or so, and HN threads move fastest at
+// exactly the times you are most likely to be reading them. This is where
+// app.js says so.
+//
+// Rendered empty and `hidden`, carrying the two things the client needs: which
+// thread this is, and how many comments the page it is looking at was rendered
+// with. Reading the count off the DOM rather than having the client recount
+// means the comparison is against what the reader can actually see.
+//
+// The refresh link is an ordinary link to the same page, deliberately. By the
+// time the stream reports a change, the scheduled purge in hn-invalidate.mts
+// has already dropped this page's `item:<id>` cache tag - the two run off the
+// same signal - so following it gets the new comments rather than the cached
+// copy the reader is already looking at.
+//
+// See netlify/edge-functions/live.ts
+
+export const liveUpdates = (itemId: number, comments: number): HTML =>
+  html`
+    <p
+      class="live-updates"
+      id="live-updates"
+      data-item-id="${itemId}"
+      data-comments="${comments}"
+      role="status"
+      hidden
+    >
+      <a href="/item/${itemId}" class="live-updates-link"></a>
+    </p>
+  `;
+
 // --- Story preview card (interest invokers) ---
 //
 // One card, shared by every row on the page - `interestfor` allows many

@@ -1902,3 +1902,48 @@ Deno.test("an excerpt is never longer than the card is built for", () => {
   const { excerpt } = chooseExcerpt(long, undefined, undefined);
   assertEquals((excerpt ?? "").length <= PREVIEW_LENGTH + 1, true);
 });
+
+// =============================================================================
+// Live thread updates
+// =============================================================================
+
+import { RETRY_MS, sseEvent } from "../netlify/edge-functions/live.ts";
+import { ACTIVITY_WINDOW_MS, mergeActivity } from "../netlify/edge-functions/lib/store.ts";
+
+Deno.test("SSE frames are well formed", () => {
+  assertEquals(
+    sseEvent("comments", { id: 1, count: 4 }),
+    'event: comments\ndata: {"id":1,"count":4}\n\n',
+  );
+  // A frame without the blank-line terminator is a frame the client never
+  // dispatches - it just sits in the parser waiting for more.
+  assertEquals(sseEvent("bye", {}).endsWith("\n\n"), true);
+  assertEquals(RETRY_MS > 0, true);
+});
+
+Deno.test("every line of a multi-line payload gets its own data: prefix", () => {
+  // JSON.stringify does not emit raw newlines today. The framing does not
+  // depend on that staying true, because a bare newline mid-payload silently
+  // truncates the event rather than failing.
+  const framed = sseEvent("x", "a\nb");
+  for (const line of framed.trim().split("\n").slice(1)) {
+    assertStringIncludes(line, "data: ");
+  }
+});
+
+Deno.test("the activity index records changes and forgets old ones", () => {
+  const now = 1_700_000_000_000;
+  const stale = now - ACTIVITY_WINDOW_MS - 1;
+
+  const merged = mergeActivity({ "1": stale, "2": now - 1000 }, [3, 4], now);
+
+  assertEquals(merged, { "2": now - 1000, "3": now, "4": now });
+  // Unbounded growth would matter here: this is one blob, read on every tick
+  // of every open stream.
+  assertEquals("1" in merged, false);
+});
+
+Deno.test("a change re-reported moves forward rather than duplicating", () => {
+  const now = 1_700_000_000_000;
+  assertEquals(mergeActivity({ "9": now - 60_000 }, [9], now), { "9": now });
+});

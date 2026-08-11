@@ -17,6 +17,12 @@
 import { purgeCache } from "@netlify/functions";
 import type { Config } from "@netlify/functions";
 import { getStore } from "@netlify/blobs";
+import {
+  ACTIVITY_KEY,
+  ACTIVITY_STORE,
+  type ActivityIndex,
+  mergeActivity,
+} from "../edge-functions/lib/store.ts";
 
 const HN_API = "https://hacker-news.firebaseio.com/v0";
 const STATE_STORE = "invalidation-state";
@@ -75,9 +81,33 @@ export default async () => {
 
   // 1. Items and profiles HN reports as changed since our last poll.
   const updates = await fetchJson<Updates>(`${HN_API}/updates.json`);
+  const changedItems = updates?.items ?? [];
   if (updates) {
-    for (const id of updates.items ?? []) tags.push(`item:${id}`);
+    for (const id of changedItems) tags.push(`item:${id}`);
     for (const user of updates.profiles ?? []) tags.push(`user:${user}`);
+  }
+
+  // 1b. The same list, kept for a few minutes, so the SSE streams in
+  //     edge-functions/live.ts can find out that a thread moved without any of
+  //     them polling HN themselves. One write a minute here replaces one poll
+  //     per connected reader. Failures are non-fatal: the streams degrade to
+  //     telling nobody anything, which is what happens today.
+  if (updates) {
+    try {
+      const activity = getStore(ACTIVITY_STORE);
+      // Same `{ value, storedAt }` envelope as everything else in the store,
+      // so the edge functions can read it with the shared helper.
+      const stored = await activity.get(ACTIVITY_KEY, { type: "json" }) as
+        | { value?: ActivityIndex }
+        | null;
+      const now = Date.now();
+      await activity.setJSON(ACTIVITY_KEY, {
+        value: mergeActivity(stored?.value ?? {}, changedItems, now),
+        storedAt: now,
+      });
+    } catch (error) {
+      console.log(JSON.stringify({ message: "activity index write failed", error: String(error) }));
+    }
   }
 
   // 2. Feed rankings, which change without any individual item changing.

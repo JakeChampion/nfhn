@@ -318,3 +318,21 @@ Deno.test("sw.js enables navigation preload and declares static routes", async (
   assertEquals(source.includes("event.preloadResponse"), true);
   assertEquals(source.includes("addRoutes"), true);
 });
+
+Deno.test("static routing: the API routes bypass the worker entirely", () => {
+  // /api/preview/:id and /api/live/:id both fall through the fetch handler
+  // already, so waking the worker for them only puts startup in front of the
+  // request. It matters most for the event stream, which is a connection held
+  // open for minutes with nothing for a cache to do.
+  const apiPattern = new URLPattern({ pathname: "/api/*" });
+  assertEquals(apiPattern.test("https://nfhn.test/api/preview/123"), true);
+  assertEquals(apiPattern.test("https://nfhn.test/api/live/123"), true);
+  // Pages must keep going through the offline fallback logic.
+  assertEquals(apiPattern.test("https://nfhn.test/item/123"), false);
+  assertEquals(apiPattern.test("https://nfhn.test/saved"), false);
+});
+
+Deno.test("sw.js declares the same API route the tests above assume", async () => {
+  const source = await Deno.readTextFile(new URL("../static/sw.js", import.meta.url));
+  assertEquals(source.includes('pathname: "/api/*"'), true);
+});
