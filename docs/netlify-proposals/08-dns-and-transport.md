@@ -84,12 +84,33 @@ is visiting. [RFC 9849](https://datatracker.ietf.org/doc/rfc9849/) was finalised
 browser support is deployable, but ECH needs the *server* to hold the matching key. A published
 `ech=` config the edge cannot decrypt breaks connections outright.
 
-There is also a structural reason it is harder for Netlify than for Cloudflare. ECH needs whoever
-controls DNS and whoever terminates TLS to stay in sync, including through key rotation. Cloudflare
-is usually both. Here the domain is at a registrar and TLS terminates at Netlify, so either Netlify
-publishes a documented config for us to copy (and we track their rotations), or the apex CNAMEs to a
-Netlify hostname carrying its own HTTPS record and resolvers follow the chain. The second is the only
-version that scales, and it needs Netlify to publish the record on their side first.
+**Netlify does publish HTTPS records — but this domain does not inherit them.** Netlify puts an
+HTTPS record on its own hostnames, per site:
+
+```
+nfhn.netlify.app   HTTPS  prio=1 alpn="h2"
+netlify.app        HTTPS  prio=1 alpn="h2"
+```
+
+So the delegation mechanism is real: a custom domain CNAME'd to a `netlify.app` hostname inherits
+whatever that hostname advertises, because resolvers follow the CNAME chain when answering an HTTPS
+query. If Netlify ever adds `ech=` there, every CNAME'd custom domain picks it up automatically, with
+no config to copy and no rotation to track.
+
+This domain is not set up that way:
+
+```
+hn.jakechampion.name   A   15.197.167.90, 3.33.186.135
+```
+
+A records, not a CNAME — so there is no chain to follow, and the record on `nfhn.netlify.app` does
+not apply here. **If ECH is something we want later, switching `hn.jakechampion.name` from A records
+to `CNAME nfhn.netlify.app` is the prerequisite**, and it is a change worth making before Netlify
+ships ECH rather than after. It is a subdomain, so a plain CNAME is legal; the A-record form exists
+for apex domains that cannot use one.
+
+That said, it changes nothing today: the record Netlify publishes carries neither `h3` nor `ech=`.
+The chain would currently inherit `alpn="h2"`, which is what TLS negotiates anyway.
 
 For a Hacker News reader, ECH is the item on this page most worth wanting: it is the difference
 between a network observer knowing you read this site and not.

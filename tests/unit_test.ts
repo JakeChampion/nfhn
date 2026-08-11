@@ -1727,3 +1727,13 @@ Deno.test("parseHttpsRecord handles a missing record and numeric key rendering",
   // A hint whose value merely contains "ech" must not read as ECH support.
   assertEquals(parseHttpsRecord("x", '1 . alpn="h2" ipv4hint=1.2.3.4').ech, false);
 });
+
+Deno.test("parseHttpsRecord reads the per-site Netlify record too", () => {
+  // Netlify publishes an HTTPS record on each site's netlify.app hostname, not
+  // only on the apex. A custom domain CNAME'd there inherits it - which is the
+  // path ECH would arrive by, if Netlify ever adds it. Observed 2026-08-11.
+  const support = parseHttpsRecord("nfhn.netlify.app", '1 . alpn="h2"');
+  assertEquals(support.missing, false);
+  assertEquals(support.alpn, ["h2"]);
+  assertEquals(support.ech, false);
+});
