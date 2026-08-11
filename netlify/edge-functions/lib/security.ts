@@ -9,6 +9,7 @@ import {
   TRUSTED_TYPES_DIRECTIVES,
 } from "./config.ts";
 import { applyDictionaryVary, DICTIONARY_TRANSPORT_ENABLED } from "./dictionary.ts";
+import { SPECULATION_RULES_HEADER } from "./speculation.ts";
 
 export const buildContentSecurityPolicy = (): string => {
   return CSP_DIRECTIVES.join("; ");
@@ -32,6 +33,11 @@ export const applySecurityHeaders = (headers: Headers): Headers => {
   // parameters never change the response for these routes, so a prefetched
   // page still counts as a hit when the click adds tracking parameters.
   headers.set("No-Vary-Search", NO_VARY_SEARCH);
+  // Speculation Rules, delivered as a header rather than an inline script -
+  // which this site's own CSP was silently blocking. See lib/speculation.ts.
+  // Browsers only act on this for HTML documents, so the sitemap and error
+  // responses that pass through here carry a header they simply ignore.
+  headers.set("Speculation-Rules", SPECULATION_RULES_HEADER);
   // Names the collector that the CSP's `report-to` directive refers to, and
   // enables deprecation, intervention and crash reports at the same time.
   headers.set("Reporting-Endpoints", `${REPORTING_GROUP}="${REPORTING_ENDPOINT}"`);
