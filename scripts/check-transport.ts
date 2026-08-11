@@ -76,13 +76,19 @@ const describe = (support: TransportSupport): string => {
 };
 
 if (import.meta.main) {
-  // netlify.app is the bellwether: if Netlify turns on HTTP/3 or ECH, it will
-  // show up on their own apex before any documentation mentions it.
-  // cloudflare.com is the positive control - if that stops reporting h3 and ECH,
-  // the *check* is broken rather than the platform.
-  const hosts = Deno.args.length > 0
-    ? Deno.args
-    : ["netlify.app", "hn.jakechampion.name", "cloudflare.com", "crypto.cloudflare.com"];
+  // nfhn.netlify.app is the one that matters: Netlify publishes a per-site
+  // HTTPS record there, and a custom domain CNAME'd to it inherits whatever it
+  // advertises. hn.jakechampion.name currently uses A records instead, so it
+  // inherits nothing - see the doc. cloudflare.com and crypto.cloudflare.com are
+  // the positive controls for h3 and ECH respectively: if those ever stop
+  // reporting them, this check is broken rather than the platform.
+  const hosts = Deno.args.length > 0 ? Deno.args : [
+    "nfhn.netlify.app",
+    "netlify.app",
+    "hn.jakechampion.name",
+    "cloudflare.com",
+    "crypto.cloudflare.com",
+  ];
 
   let netlifyReady = false;
 
@@ -90,7 +96,10 @@ if (import.meta.main) {
     try {
       const support = await checkHost(host);
       console.log(`${host.padEnd(26)} ${describe(support)}`);
-      if (host === "netlify.app" && (support.alpn.includes("h3") || support.ech)) {
+      if (
+        (host === "netlify.app" || host === "nfhn.netlify.app") &&
+        (support.alpn.includes("h3") || support.ech)
+      ) {
         netlifyReady = true;
       }
     } catch (error) {
@@ -100,8 +109,10 @@ if (import.meta.main) {
 
   if (netlifyReady) {
     console.log(
-      "\nNetlify now advertises HTTP/3 and/or ECH. " +
-        "Revisit docs/netlify-proposals/08-dns-and-transport.md - the records there are ready to publish.",
+      "\nNetlify now advertises HTTP/3 and/or ECH.\n" +
+        "Revisit docs/netlify-proposals/08-dns-and-transport.md. Note that\n" +
+        "hn.jakechampion.name uses A records, so it does NOT inherit this - it\n" +
+        "needs to become a CNAME to the netlify.app hostname first.",
     );
   }
 }
