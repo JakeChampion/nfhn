@@ -225,18 +225,44 @@ Deno.test("formatTimeAgo: returns days ago", () => {
   assertEquals(formatTimeAgo(now - 29 * 24 * 60 * 60), "29 days ago");
 });
 
-Deno.test("formatTimeAgo: returns months ago", () => {
-  const now = Math.floor(Date.now() / 1000);
-  assertEquals(formatTimeAgo(now - 30 * 24 * 60 * 60), "1 month ago");
-  assertEquals(formatTimeAgo(now - 60 * 24 * 60 * 60), "2 months ago");
-  assertEquals(formatTimeAgo(now - 364 * 24 * 60 * 60), "12 months ago");
+// Months and years are calendar quantities, so these pass a fixed reference
+// clock rather than Date.now(). Without it the expected answers would depend on
+// which month the suite happens to run in - which is precisely the inaccuracy
+// the calendar path exists to fix.
+const AT = (iso: string) => Date.parse(iso);
+const SECONDS = (iso: string) => Math.floor(Date.parse(iso) / 1000);
+
+Deno.test("formatTimeAgo: counts whole calendar months", () => {
+  const now = AT("2026-03-15T00:00:00Z");
+
+  assertEquals(formatTimeAgo(SECONDS("2026-02-15T00:00:00Z"), now), "1 month ago");
+  assertEquals(formatTimeAgo(SECONDS("2026-01-15T00:00:00Z"), now), "2 months ago");
+  assertEquals(formatTimeAgo(SECONDS("2025-04-15T00:00:00Z"), now), "11 months ago");
 });
 
-Deno.test("formatTimeAgo: returns years ago", () => {
-  const now = Math.floor(Date.now() / 1000);
-  assertEquals(formatTimeAgo(now - 365 * 24 * 60 * 60), "1 year ago");
-  assertEquals(formatTimeAgo(now - 2 * 365 * 24 * 60 * 60), "2 years ago");
-  assertEquals(formatTimeAgo(now - 10 * 365 * 24 * 60 * 60), "10 years ago");
+Deno.test("formatTimeAgo: a short calendar month is still a month", () => {
+  // February is 28 days. The old fixed-size arithmetic needed 30 before it
+  // would say "month", so a full month of February read as "28 days ago".
+  const now = AT("2026-03-01T00:00:00Z");
+  assertEquals(formatTimeAgo(SECONDS("2026-02-01T00:00:00Z"), now), "1 month ago");
+});
+
+Deno.test("formatTimeAgo: days below a month stay in days", () => {
+  const now = AT("2026-03-15T00:00:00Z");
+  assertEquals(formatTimeAgo(SECONDS("2026-03-01T00:00:00Z"), now), "14 days ago");
+  // 20 February to 15 March is under a calendar month, so it must not round up.
+  assertEquals(formatTimeAgo(SECONDS("2026-02-20T00:00:00Z"), now), "23 days ago");
+});
+
+Deno.test("formatTimeAgo: counts whole calendar years", () => {
+  const now = AT("2026-03-15T00:00:00Z");
+
+  assertEquals(formatTimeAgo(SECONDS("2025-03-15T00:00:00Z"), now), "1 year ago");
+  assertEquals(formatTimeAgo(SECONDS("2024-03-15T00:00:00Z"), now), "2 years ago");
+  assertEquals(formatTimeAgo(SECONDS("2016-03-15T00:00:00Z"), now), "10 years ago");
+  // A day short of the anniversary is still eleven months, not a year - the
+  // 365-day approximation got this wrong across every leap year.
+  assertEquals(formatTimeAgo(SECONDS("2025-03-16T00:00:00Z"), now), "11 months ago");
 });
 
 Deno.test("formatTimeAgo: handles future times gracefully", () => {
@@ -1661,4 +1687,43 @@ Deno.test("comment subtrees keep content-visibility and carry no counters", asyn
     true,
     "comment subtrees should still opt into content-visibility",
   );
+});
+
+// =============================================================================
+// Transport readiness check (scripts/check-transport.ts)
+// =============================================================================
+
+import { parseHttpsRecord } from "../scripts/check-transport.ts";
+
+Deno.test("parseHttpsRecord reads Netlify's real record: h2 only, no ECH", () => {
+  // Observed 2026-08-11 via a direct HTTPS-record query for netlify.app.
+  const support = parseHttpsRecord("netlify.app", '1 . alpn="h2"');
+
+  assertEquals(support.alpn, ["h2"]);
+  assertEquals(support.alpn.includes("h3"), false);
+  assertEquals(support.ech, false);
+  assertEquals(support.missing, false);
+});
+
+Deno.test("parseHttpsRecord detects h3 and ECH where they exist", () => {
+  // cloudflare.com and crypto.cloudflare.com, same date - the positive controls.
+  const h3 = parseHttpsRecord("cloudflare.com", '1 . alpn="h3,h2" ipv4hint=104.16.132.229');
+  assertEquals(h3.alpn, ["h3", "h2"]);
+  assertEquals(h3.ech, false);
+
+  const ech = parseHttpsRecord(
+    "crypto.cloudflare.com",
+    '1 . alpn="h2" ipv4hint=162.159.137.85 ech=AEX+DQBBzQAgACC5 ipv6hint=2606:4700:7::a29f:8955',
+  );
+  assertEquals(ech.ech, true);
+  assertEquals(ech.alpn, ["h2"]);
+});
+
+Deno.test("parseHttpsRecord handles a missing record and numeric key rendering", () => {
+  assertEquals(parseHttpsRecord("example.invalid", "").missing, true);
+
+  // Some resolvers render unrecognised SvcParamKeys numerically; key5 is ech.
+  assertEquals(parseHttpsRecord("x", '1 . alpn="h2" key5=AEX+DQBB').ech, true);
+  // A hint whose value merely contains "ech" must not read as ECH support.
+  assertEquals(parseHttpsRecord("x", '1 . alpn="h2" ipv4hint=1.2.3.4').ech, false);
 });
