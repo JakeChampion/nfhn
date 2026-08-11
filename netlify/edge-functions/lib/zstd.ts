@@ -11,7 +11,7 @@
 //
 // See docs/netlify-proposals/01-compression-dictionary-transport.md
 
-import { compressUsingDict, createCCtx, init } from "@bokuweb/zstd-wasm";
+import * as zstdModule from "@bokuweb/zstd-wasm";
 
 /**
  * Compression level. 10 is well past the knee of the curve for HTML against a
@@ -20,14 +20,71 @@ import { compressUsingDict, createCCtx, init } from "@bokuweb/zstd-wasm";
  */
 const COMPRESSION_LEVEL = 10;
 
-let ready: Promise<void> | null = null;
+interface ZstdApi {
+  init(path?: string): Promise<void>;
+  createCCtx(): number;
+  compressUsingDict(
+    cctx: number,
+    body: Uint8Array,
+    dictionary: Uint8Array,
+    level: number,
+  ): Uint8Array;
+}
+
+/**
+ * Find the functions, wherever this runtime put them.
+ *
+ * This was `import { compressUsingDict, createCCtx, init } from ...`, and it
+ * failed on Netlify's edge with:
+ *
+ *   SyntaxError: The requested module '@bokuweb/zstd-wasm' does not provide an
+ *   export named 'compressUsingDict'
+ *
+ * The package's entry point is CommonJS, and everything except `init` reaches
+ * it through `__exportStar(require(...), exports)`. Node's CJS lexer can see a
+ * literal `exports.init = ...` and cannot see through `__exportStar`, so the
+ * named-export list the module appears to have is exactly one entry long. The
+ * functions are all there at runtime - they are just invisible to the
+ * link-time check that a named import performs.
+ *
+ * A namespace import does no such check, so the properties can be read off the
+ * module object once it has actually loaded. `default` is where the CJS interop
+ * puts `module.exports`; the namespace itself is where a real ESM build would
+ * put them. Try both rather than guessing which resolution a given runtime
+ * picked.
+ */
+function resolveApi(): ZstdApi {
+  const namespace = zstdModule as unknown as Record<string, unknown>;
+  const candidates = [namespace, namespace.default as Record<string, unknown> | undefined];
+
+  for (const candidate of candidates) {
+    if (candidate && typeof candidate.compressUsingDict === "function") {
+      return candidate as unknown as ZstdApi;
+    }
+  }
+  throw new Error(
+    "@bokuweb/zstd-wasm exposes no compressUsingDict in this runtime; " +
+      `namespace keys: ${Object.keys(namespace).join(", ")}`,
+  );
+}
+
+let ready: Promise<ZstdApi> | null = null;
 let cctx: number | null = null;
 
 /** Instantiate the WASM module once per isolate. */
-function ensureReady(): Promise<void> {
+function ensureReady(): Promise<ZstdApi> {
   if (!ready) {
-    ready = init().then(() => {
-      cctx = createCCtx();
+    ready = (async () => {
+      const api = resolveApi();
+      await api.init();
+      cctx = api.createCCtx();
+      return api;
+    })().catch((error) => {
+      // Reset so a later request can retry - the caller latches this off
+      // anyway, but a rejected promise cached here would be retried forever
+      // with no chance of ever succeeding.
+      ready = null;
+      throw error;
     });
   }
   return ready;
@@ -43,9 +100,9 @@ export async function compressWithDictionary(
   body: Uint8Array,
   dictionary: Uint8Array,
 ): Promise<Uint8Array> {
-  await ensureReady();
+  const api = await ensureReady();
   if (cctx === null) throw new Error("zstd compression context unavailable");
-  return compressUsingDict(cctx, body, dictionary, COMPRESSION_LEVEL);
+  return api.compressUsingDict(cctx, body, dictionary, COMPRESSION_LEVEL);
 }
 
 /** True once the WASM module has been instantiated in this isolate. */

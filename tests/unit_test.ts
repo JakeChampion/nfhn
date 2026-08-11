@@ -1986,3 +1986,87 @@ Deno.test("a change re-reported moves forward rather than duplicating", () => {
   const now = 1_700_000_000_000;
   assertEquals(mergeActivity({ "9": now - 60_000 }, [9], now), { "9": now });
 });
+
+// =============================================================================
+// A failing compressor must not take the page down with it
+// =============================================================================
+
+import { resetCompressorLatch } from "../netlify/edge-functions/lib/dictionary.ts";
+
+/** A request that negotiates dcz against the real shell dictionary. */
+async function negotiatedRequest(): Promise<Request> {
+  const dictionary = await getShellDictionary();
+  return new Request("https://nfhn.test/top/1", {
+    headers: {
+      "Accept-Encoding": "dcz",
+      "Available-Dictionary": formatAvailableDictionary(dictionary.hash),
+    },
+  });
+}
+
+Deno.test("a compressor that throws still yields a readable response", async () => {
+  // This is the 500 on /top/1. The body had already been read by the time the
+  // compressor threw, and the catch handed the drained response back. Netlify
+  // re-wraps every response on the way out - `new Response(response.body, ...)`
+  // to apply its own header mutations - which throws "ReadableStream is locked
+  // or disturbed" on a consumed stream, so a missed optimisation became an
+  // error page.
+  resetCompressorLatch();
+  const plain = "<!DOCTYPE html><html><body>a feed page</body></html>";
+
+  const result = await encodeWithDictionary(
+    await negotiatedRequest(),
+    new Response(plain, { status: 200, headers: { "content-type": "text/html" } }),
+    () => Promise.reject(new Error("wasm unavailable")),
+  );
+
+  assertEquals(result.status, 200);
+  assertEquals(result.headers.get("Content-Encoding"), null);
+  // The whole point: this read is what the platform does, and it must not throw.
+  assertEquals(await result.text(), plain);
+  assertEquals(result.headers.get("content-type"), "text/html");
+});
+
+Deno.test("a compressor that fails once is not tried again in this isolate", async () => {
+  // Instantiating the WASM module is a property of the runtime, not of a
+  // request: it either works in an isolate or it never will. Retrying per
+  // request would buy nothing and cost a failed init every time.
+  resetCompressorLatch();
+  const request = await negotiatedRequest();
+  let attempts = 0;
+  const failing = () => {
+    attempts++;
+    return Promise.reject(new Error("wasm unavailable"));
+  };
+
+  for (let i = 0; i < 3; i++) {
+    const result = await encodeWithDictionary(
+      request,
+      new Response("<html>x</html>", { status: 200 }),
+      failing,
+    );
+    // Every one of them still has to be readable, latched or not.
+    assertEquals(await result.text(), "<html>x</html>");
+  }
+
+  assertEquals(attempts, 1);
+  resetCompressorLatch();
+});
+
+Deno.test("the response handed back is never the one whose body was read", async () => {
+  resetCompressorLatch();
+  const original = new Response("<html>y</html>", { status: 200 });
+
+  const result = await encodeWithDictionary(
+    await negotiatedRequest(),
+    original,
+    () => Promise.reject(new Error("nope")),
+  );
+
+  // Identity, not just readability: returning the same object is the bug, and
+  // `bodyUsed` on the original is what makes it fatal downstream.
+  assertEquals(result === original, false);
+  assertEquals(original.bodyUsed, true);
+  assertEquals(result.bodyUsed, false);
+  resetCompressorLatch();
+});
