@@ -336,3 +336,168 @@ Deno.test("sw.js declares the same API route the tests above assume", async () =
   const source = await Deno.readTextFile(new URL("../static/sw.js", import.meta.url));
   assertEquals(source.includes('pathname: "/api/*"'), true);
 });
+
+// =============================================================================
+// Keeping saved threads current (periodic sync + badging)
+// =============================================================================
+//
+// These run the real functions out of sw.js rather than a copy of them - see
+// tests/dom-shim.ts.
+
+import { FakeCaches, runModuleReturning } from "./dom-shim.ts";
+
+const SAVED_CACHE = "nfhn-saved-v1";
+const SAVED_INDEX = "/__nfhn/saved-index";
+
+interface Entry {
+  seen: number;
+  latest: number;
+}
+
+/** An item page as the renderer emits it, carrying its comment count. */
+const itemHtml = (id: number, comments: number) =>
+  `<article></article><p id="live-updates" data-item-id="${id}" data-comments="${comments}"></p>`;
+
+async function refreshWith(
+  index: Record<string, Entry>,
+  pages: Record<string, string | number>,
+) {
+  const caches = new FakeCaches();
+  const cache = await caches.open(SAVED_CACHE);
+  await cache.put(SAVED_INDEX, new Response(JSON.stringify(index)));
+
+  const badge: { value: number | null } = { value: null };
+  const fetched: string[] = [];
+
+  const module = await runModuleReturning(
+    "Keeping saved threads current",
+    "sw.js",
+    {
+      caches,
+      SAVED_CACHE_NAME: SAVED_CACHE,
+      Response,
+      JSON,
+      Number,
+      Math,
+      Object,
+      self: {
+        addEventListener: () => {},
+        navigator: {
+          setAppBadge: (n: number) => {
+            badge.value = n;
+            return Promise.resolve();
+          },
+          clearAppBadge: () => {
+            badge.value = 0;
+            return Promise.resolve();
+          },
+        },
+      },
+      fetch: (url: string) => {
+        fetched.push(url);
+        const page = pages[url];
+        if (page === undefined) return Promise.resolve(new Response("", { status: 404 }));
+        if (typeof page === "number") return Promise.reject(new Error("offline"));
+        return Promise.resolve(new Response(page, { status: 200 }));
+      },
+    },
+    ["refreshSavedStories", "readSavedIndex"],
+  );
+
+  await module.refreshSavedStories!();
+  const after = await (await caches.open(SAVED_CACHE)).match(SAVED_INDEX);
+  return {
+    badge: badge.value,
+    fetched,
+    index: (await after!.json()) as Record<string, Entry>,
+    cached: caches.keysIn(SAVED_CACHE),
+  };
+}
+
+Deno.test("a refresh badges threads that grew, not comments that arrived", async () => {
+  const result = await refreshWith(
+    { "1": { seen: 5, latest: 5 }, "2": { seen: 10, latest: 10 }, "3": { seen: 2, latest: 2 } },
+    { "/item/1": itemHtml(1, 9), "/item/2": itemHtml(2, 10), "/item/3": itemHtml(3, 40) },
+  );
+
+  // Two conversations worth going back to. The alternative - 4 + 38 new
+  // comments - is a number nobody can act on.
+  assertEquals(result.badge, 2);
+  assertEquals(result.index["1"], { seen: 5, latest: 9 });
+  assertEquals(result.index["2"], { seen: 10, latest: 10 });
+});
+
+Deno.test("a refresh never marks a thread read on the reader's behalf", async () => {
+  // `seen` is written only by the page, when the reader opens the thread. If a
+  // refresh moved it, the badge would clear itself and the feature would be
+  // silently pointless.
+  const result = await refreshWith(
+    { "7": { seen: 3, latest: 3 } },
+    { "/item/7": itemHtml(7, 30) },
+  );
+
+  assertEquals(result.index["7"]!.seen, 3);
+  assertEquals(result.index["7"]!.latest, 30);
+  assertEquals(result.badge, 1);
+});
+
+Deno.test("nothing unread clears the badge rather than leaving it stale", async () => {
+  const result = await refreshWith(
+    { "1": { seen: 8, latest: 8 } },
+    { "/item/1": itemHtml(1, 8) },
+  );
+  assertEquals(result.badge, 0);
+});
+
+Deno.test("a refresh puts the fresh pages in the saved cache", async () => {
+  // The badge is the visible half; this is the half that makes the thread
+  // readable on a train.
+  const result = await refreshWith(
+    { "1": { seen: 0, latest: 0 }, "2": { seen: 0, latest: 0 } },
+    { "/item/1": itemHtml(1, 1), "/item/2": itemHtml(2, 2) },
+  );
+
+  assertEquals(result.fetched, ["/item/1", "/item/2"]);
+  assertEquals(result.cached.includes("/item/1"), true);
+  assertEquals(result.cached.includes("/item/2"), true);
+});
+
+Deno.test("an unreachable thread leaves its saved copy and its counts alone", async () => {
+  const result = await refreshWith(
+    { "1": { seen: 1, latest: 1 }, "2": { seen: 4, latest: 4 } },
+    { "/item/1": 0, "/item/2": itemHtml(2, 6) },
+  );
+
+  // Offline for one, fine for the other: the failure must not reset the first
+  // one's history or stop the second from being checked.
+  assertEquals(result.index["1"], { seen: 1, latest: 1 });
+  assertEquals(result.index["2"], { seen: 4, latest: 6 });
+  assertEquals(result.badge, 1);
+});
+
+Deno.test("an empty saved list does no work at all", async () => {
+  const result = await refreshWith({}, {});
+  assertEquals(result.fetched, []);
+  // Notably it does not clear the badge either - there is nothing to say.
+  assertEquals(result.badge, null);
+});
+
+Deno.test("sw.js registers the background fetch and periodic sync handlers", async () => {
+  const source = await Deno.readTextFile(new URL("../static/sw.js", import.meta.url));
+
+  // A Background Fetch with no success handler downloads everything and throws
+  // it away, with no error anywhere.
+  for (const handler of ["backgroundfetchsuccess", "backgroundfetchfail", "backgroundfetchclick"]) {
+    assertEquals(source.includes(handler), true, `sw.js should handle ${handler}`);
+  }
+  assertEquals(source.includes("periodicsync"), true);
+  // The tag has to match the one app.js registers.
+  assertEquals(source.includes('"refresh-saved"'), true);
+});
+
+Deno.test("app.js registers the same periodic sync tag sw.js listens for", async () => {
+  const source = await Deno.readTextFile(new URL("../static/app.js", import.meta.url));
+  assertEquals(source.includes('periodicSync.register("refresh-saved"'), true);
+  // And writes the index to the URL the worker reads.
+  assertEquals(source.includes("/__nfhn/saved-index"), true);
+});

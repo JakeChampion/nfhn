@@ -253,6 +253,98 @@ document.querySelectorAll('a[href^="http"]:not(.reader-mode-link)').forEach((lin
   });
 })();
 
+// --- The saved list, where the service worker can read it ---
+//
+// Saved stories live in localStorage, which a service worker cannot reach.
+// The periodic refresh in sw.js needs to know which threads to check, so the
+// list is mirrored into the cache under a synthetic URL every time it
+// changes. Ids and two numbers, nothing else: it is read on a background task
+// with no page open, and none of the rest is any of the worker's business.
+//
+// The two numbers are the whole design. `seen` is the comment count the last
+// time the reader actually opened the thread; `latest` is what the background
+// refresh last found. The badge is how many threads have `latest > seen` -
+// conversations worth going back to.
+//
+// A single "count when saved" number cannot express that. It would either
+// badge forever (nothing ever marks a thread read) or clear on any glance at
+// the saved list, which is not the same thing as having read the comments.
+const SavedIndex = (function () {
+  const SAVED_INDEX_URL = "/__nfhn/saved-index";
+  const SAVED_CACHE = "nfhn-saved-v1";
+
+  async function readSavedIndex() {
+    try {
+      const cache = await caches.open(SAVED_CACHE);
+      const response = await cache.match(SAVED_INDEX_URL);
+      return response ? await response.json() : {};
+    } catch {
+      return {};
+    }
+  }
+
+  async function writeSavedIndex(index) {
+    const cache = await caches.open(SAVED_CACHE);
+    await cache.put(
+      SAVED_INDEX_URL,
+      new Response(JSON.stringify(index), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  }
+
+  /** Threads with comments the reader has not seen. */
+  const unreadCount = (index) =>
+    Object.values(index).filter((entry) => (entry?.latest ?? 0) > (entry?.seen ?? 0)).length;
+
+  async function showBadge(index) {
+    try {
+      const unread = unreadCount(index);
+      if (unread > 0) await navigator.setAppBadge?.(unread);
+      else await navigator.clearAppBadge?.();
+    } catch {
+      // Not installed, or badging unsupported.
+    }
+  }
+
+  /** Bring the index in line with what is saved, preserving read state. */
+  async function publishSavedIndex(stories) {
+    if (!("caches" in globalThis)) return;
+    try {
+      const existing = await readSavedIndex();
+      const index = {};
+      for (const [id, story] of Object.entries(stories)) {
+        const count = story.comments_count || 0;
+        // A newly saved story starts read: the reader is looking at it now.
+        // Unsaving one drops it, so the badge cannot count a thread that is no
+        // longer in the list.
+        index[id] = existing[id] ?? { seen: count, latest: count };
+      }
+      await writeSavedIndex(index);
+      await showBadge(index);
+    } catch {
+      // Storage pressure. The refresh degrades to doing nothing, which is
+      // where it started.
+    }
+  }
+
+  /** Record that the reader has now seen this thread at this comment count. */
+  async function markThreadSeen(id, count) {
+    if (!("caches" in globalThis)) return;
+    try {
+      const index = await readSavedIndex();
+      if (!index[id]) return;
+      index[id] = { seen: count, latest: Math.max(count, index[id].latest ?? 0) };
+      await writeSavedIndex(index);
+      await showBadge(index);
+    } catch {
+      // Nothing to do; the count stays where it was.
+    }
+  }
+
+  return { publish: publishSavedIndex, markSeen: markThreadSeen, unread: unreadCount };
+})();
+
 // --- Favorites/Bookmarks ---
 (function initBookmarks() {
   const STORAGE_KEY = "nfhn-saved-stories";
@@ -302,6 +394,78 @@ document.querySelectorAll('a[href^="http"]:not(.reader-mode-link)').forEach((lin
     }
   }
 
+  // --- Downloading a saved story ---
+  //
+  // The postMessage path above hands three URLs to the worker and hopes: they
+  // are ordinary fetches started from a message handler, so nothing keeps the
+  // worker alive and a slow article on a slow connection can be killed halfway.
+  // The reader is told neither way, and finds out when they are offline.
+  //
+  // Background Fetch is the API for this. The browser owns the download - it
+  // survives this page closing and the browser restarting, and it shows the
+  // same progress UI as any other download. sw.js moves the responses into the
+  // saved cache when it completes.
+  //
+  // Chrome-only, so this returns false and the caller falls back.
+  async function downloadInBackground(id, title, externalUrl) {
+    if (!("serviceWorker" in navigator)) return false;
+    if (!("BackgroundFetchManager" in globalThis)) return false;
+
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      if (!registration.backgroundFetch) return false;
+
+      // Item page first: it is the one that must arrive, and a partial fetch
+      // keeps whatever came before the failure.
+      const requests = ["/item/" + id];
+      if (externalUrl) {
+        requests.push("/reader/" + externalUrl);
+        // The article itself, opaquely - most sites will not send us CORS
+        // headers, and an opaque response still renders.
+        requests.push(new Request(externalUrl, { mode: "no-cors" }));
+      }
+
+      await registration.backgroundFetch.fetch("save-item-" + id, requests, {
+        title: title || "Saving story",
+        icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }],
+        // An honest guess. Getting it wrong only makes the progress bar
+        // inaccurate; omitting it makes the download unbounded, and Chrome
+        // will not show progress at all.
+        downloadTotal: externalUrl ? 2_000_000 : 200_000,
+      });
+      return true;
+    } catch {
+      // Already registered under this id, quota exceeded, or unsupported.
+      return false;
+    }
+  }
+
+  // Periodic Background Sync only runs for an installed app the browser
+  // considers engaged, and there is no prompt to show, so registering it at the
+  // moment somebody first saves something - like the persistence request above
+  // - is the honest place. Nothing is registered for a reader who never saves.
+  let syncRegistered = false;
+  async function registerPeriodicRefresh() {
+    if (syncRegistered) return;
+    syncRegistered = true;
+    try {
+      const registration = await navigator.serviceWorker?.ready;
+      if (!registration?.periodicSync) return;
+
+      const status = await navigator.permissions.query({ name: "periodic-background-sync" });
+      if (status.state !== "granted") return;
+
+      // Twelve hours is a request, not a schedule - the browser decides when,
+      // and on what connection. Asking for less would not get it.
+      await registration.periodicSync.register("refresh-saved", {
+        minInterval: 12 * 60 * 60 * 1000,
+      });
+    } catch {
+      // Unsupported, not installed, or the permission name is unknown to this
+      // browser. Saved stories still work; they just do not refresh themselves.
+    }
+  }
+
   function toggleStory(btn) {
     const id = btn.dataset.storyId;
     const externalUrl = btn.dataset.storyUrl || null;
@@ -330,11 +494,18 @@ document.querySelectorAll('a[href^="http"]:not(.reader-mode-link)').forEach((lin
       btn.setAttribute("aria-pressed", "true");
       btn.title = "Remove from saved";
       btn.setAttribute("aria-label", "Remove from saved");
-      notifyServiceWorker("CACHE_ITEM", id, externalUrl);
+      // Background Fetch where it exists, the message handler where it does
+      // not. Both end up writing to the same cache; only one of them is
+      // guaranteed to finish.
+      downloadInBackground(id, btn.dataset.storyTitle, externalUrl).then((started) => {
+        if (!started) notifyServiceWorker("CACHE_ITEM", id, externalUrl);
+      });
       requestPersistence();
+      registerPeriodicRefresh();
     }
 
     saveStories(stories);
+    SavedIndex.publish(stories);
   }
 
   const saved = getSavedStories();
@@ -347,6 +518,14 @@ document.querySelectorAll('a[href^="http"]:not(.reader-mode-link)').forEach((lin
     }
     btn.addEventListener("click", () => toggleStory(btn));
   });
+
+  // Opening a saved thread is what marks it read. The banner rendered for the
+  // live-updates stream already carries the count this page was built with, so
+  // there is nothing extra to render for this.
+  const liveBanner = document.getElementById("live-updates");
+  if (liveBanner?.dataset.itemId) {
+    SavedIndex.markSeen(liveBanner.dataset.itemId, Number(liveBanner.dataset.comments) || 0);
+  }
 
   // --- Saved stories page rendering ---
   const container = document.getElementById("saved-stories-container");
@@ -423,6 +602,9 @@ document.querySelectorAll('a[href^="http"]:not(.reader-mode-link)').forEach((lin
       const stories = getSavedStories();
       delete stories[id];
       saveStories(stories);
+      // A thread that is no longer saved must not keep counting towards the
+      // badge, and its offline copy is no longer wanted.
+      SavedIndex.publish(stories);
       renderSavedStories();
     }
 
@@ -1628,6 +1810,9 @@ const StoriesExport = (function () {
       });
 
       saveStories(currentStories);
+      // Imported threads join the badge on the same terms as saved ones: read
+      // now, counted when they grow.
+      SavedIndex.publish(currentStories);
 
       return {
         success: true,
