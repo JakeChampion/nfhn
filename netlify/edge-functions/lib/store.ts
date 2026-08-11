@@ -19,6 +19,45 @@ import { log } from "./logger.ts";
 export const HN_MIRROR_STORE = "hn-mirror";
 export const READER_STORE = "reader-extractions";
 
+/**
+ * Which items HN has reported as changed, recently.
+ *
+ * Written once a minute by netlify/functions/hn-invalidate.mts, which is
+ * already polling `updates.json` to drive cache-tag purges - this is the same
+ * information, kept for a few minutes instead of being consumed and discarded.
+ *
+ * The point is what it saves. `live.ts` streams "there are new comments" to
+ * every reader sitting on a thread, and the obvious implementation has each of
+ * those connections polling HN. This way HN sees one poll a minute no matter
+ * how many people are reading, and a connection only fetches an item when the
+ * index says that item actually moved.
+ *
+ * One key, not one per item: a minute's worth of `updates.json` is hundreds of
+ * ids, and this has to be read on a hot path.
+ */
+export const ACTIVITY_STORE = "item-activity";
+export const ACTIVITY_KEY = "recent";
+
+/** How long a change stays in the index. */
+export const ACTIVITY_WINDOW_MS = 20 * 60 * 1000;
+
+/** Item id -> epoch milliseconds when HN last reported it changed. */
+export type ActivityIndex = Record<string, number>;
+
+/** Merge new changes in and drop anything past the window. */
+export function mergeActivity(
+  existing: ActivityIndex,
+  changed: number[],
+  now: number,
+): ActivityIndex {
+  const merged: ActivityIndex = {};
+  for (const [id, at] of Object.entries(existing)) {
+    if (typeof at === "number" && now - at < ACTIVITY_WINDOW_MS) merged[id] = at;
+  }
+  for (const id of changed) merged[String(id)] = now;
+  return merged;
+}
+
 export interface MirroredValue<T> {
   value: T;
   /** When this copy was written, in epoch milliseconds. */

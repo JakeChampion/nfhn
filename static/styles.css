@@ -2176,6 +2176,47 @@ p, .comment-content, .story-meta {
   }
 }
 
+/* --- Live thread updates ---
+   Shown by app.js when the SSE stream reports the thread has moved. Sits
+   between the story and the comments, where the reader's eye is already
+   heading. */
+
+.live-updates {
+  margin: 1em 0;
+  padding: 0;
+}
+
+.live-updates-link {
+  display: inline-block;
+  padding: 0.4em 0.85em;
+  border: 1px solid var(--accent-muted);
+  border-radius: 999px;
+  background: var(--hover-overlay);
+  color: var(--text-strong);
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.live-updates-link:hover,
+.live-updates-link:focus-visible {
+  background: var(--active-overlay);
+}
+
+/* It appears while the reader is mid-page, so it arrives rather than blinking
+   into existence - but only for readers who have not asked otherwise. */
+@media (prefers-reduced-motion: no-preference) {
+  .live-updates-link {
+    animation: live-updates-in 200ms ease-out;
+  }
+
+  @keyframes live-updates-in {
+    from {
+      opacity: 0;
+      transform: translateY(-0.25em);
+    }
+  }
+}
+
 /* --- Story preview hint (interest invokers) ---
    Opened by hovering, long-pressing or focusing a story title. The browser
    owns when it opens and closes; this owns where it sits and what it looks

@@ -40,6 +40,16 @@ function staticRoutes() {
       condition: { urlPattern: new URLPattern({ pathname: "/reader/*" }) },
       source: "network",
     },
+    {
+      // Same for the JSON and event-stream routes. The fetch handler falls
+      // through for both already - neither is a static asset, an /item/ page,
+      // or an Accept: text/html request - so all waking the worker achieves is
+      // putting worker startup in front of them. That matters most for
+      // /api/live/*, where the response is a connection held open for minutes:
+      // there is nothing there for a cache to do.
+      condition: { urlPattern: new URLPattern({ pathname: "/api/*" }) },
+      source: "network",
+    },
   ];
 }
 

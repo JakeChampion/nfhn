@@ -1231,6 +1231,89 @@ const TextSegments = (function () {
   });
 })();
 
+// --- Live thread updates ---
+//
+// Subscribes to /api/live/:id and offers a refresh when the thread has moved.
+// It never rewrites the comments in place: reordering a thread underneath
+// somebody who is reading it is hostile, and the page is a few kilobytes -
+// reloading it is cheap and gives them the whole updated tree at a moment they
+// chose.
+//
+// Three things govern when the connection is open, and all three matter:
+//
+//   - Not during a prerender. Speculation Rules prerenders item pages that may
+//     never be activated, and each one would otherwise hold a stream.
+//   - Not while the tab is hidden. Nobody is reading it, and reconnecting when
+//     they come back costs one request.
+//   - Not across a navigation. An open EventSource makes a page ineligible for
+//     the back/forward cache in some browsers, which would trade a live
+//     comment count for instant Back - a bad trade, and one the bfcache
+//     reporting above would then have to explain.
+//
+// See netlify/edge-functions/live.ts
+whenActivated(function initLiveUpdates() {
+  const banner = document.getElementById("live-updates");
+  if (!banner || typeof EventSource === "undefined") return;
+
+  const link = banner.querySelector(".live-updates-link");
+  const itemId = banner.dataset.itemId;
+  const rendered = Number(banner.dataset.comments) || 0;
+  if (!itemId || !link) return;
+
+  let source = null;
+  let latest = rendered;
+
+  const show = (count) => {
+    const added = count - rendered;
+    if (added <= 0) return;
+    link.textContent = `${added} new comment${added === 1 ? "" : "s"} · refresh`;
+    banner.hidden = false;
+  };
+
+  const open = () => {
+    if (source) return;
+    // `since` is the highest count this page knows about, so a reconnect after
+    // the server rotated the stream does not re-announce what is already on
+    // screen.
+    source = new EventSource(`/api/live/${encodeURIComponent(itemId)}?since=${latest}`);
+
+    source.addEventListener("comments", (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (typeof data.count !== "number") return;
+        latest = Math.max(latest, data.count);
+        show(latest);
+      } catch {
+        // A malformed frame is not worth tearing the connection down for.
+      }
+    });
+
+    // The server rotates streams rather than holding one open forever.
+    // EventSource reconnects on its own after `retry`, so this is only here to
+    // keep our own handle in step.
+    source.addEventListener("bye", () => close());
+    source.addEventListener("error", () => {
+      // EventSource retries by itself; closing here would stop that. Only a
+      // permanently closed connection needs our attention.
+      if (source && source.readyState === EventSource.CLOSED) source = null;
+    });
+  };
+
+  const close = () => {
+    source?.close();
+    source = null;
+  };
+
+  const sync = () => (document.visibilityState === "visible" ? open() : close());
+
+  sync();
+  document.addEventListener("visibilitychange", sync);
+  // pagehide rather than unload: unload is what makes a page bfcache-ineligible
+  // in the first place, and this listener exists precisely to protect that.
+  addEventListener("pagehide", close);
+  addEventListener("pageshow", sync);
+});
+
 // --- Compression Streams API (Phase 3) ---
 // Utilities for compressing/decompressing data to reduce storage usage
 const CompressionUtils = (function () {

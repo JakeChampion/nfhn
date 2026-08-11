@@ -4,9 +4,9 @@
 // copy of its logic.
 
 import { assert, assertEquals, assertStringIncludes } from "std/testing/asserts.ts";
-import { type El, el, FakeWindow, moduleSource, runModule } from "./dom-shim.ts";
+import { type El, el, FakeEventSource, FakeWindow, moduleSource, runModule } from "./dom-shim.ts";
 import { home } from "../netlify/edge-functions/lib/render.ts";
-import { storyPreviewCard } from "../netlify/edge-functions/lib/render/components.ts";
+import { liveUpdates, storyPreviewCard } from "../netlify/edge-functions/lib/render/components.ts";
 import { htmlToString } from "../netlify/edge-functions/lib/html.ts";
 
 const FOCUS_MODULE = "Returning to where you were";
@@ -455,5 +455,154 @@ Deno.test("the card the renderer emits is the card the module expects", async ()
   for (const part of ["story-preview-title", "story-preview-excerpt", "story-preview-meta"]) {
     assertStringIncludes(markup, part);
     assertStringIncludes(source, part);
+  }
+});
+
+// =============================================================================
+// Live thread updates
+// =============================================================================
+
+const LIVE_MODULE = "Live thread updates";
+
+/** An item page carrying the banner the renderer emits. */
+const itemPage = (id = 4242, comments = 10) =>
+  el(
+    "body",
+    {},
+    el("article", {}),
+    el(
+      "p",
+      {
+        class: "live-updates",
+        id: "live-updates",
+        "data-item-id": String(id),
+        "data-comments": String(comments),
+        role: "status",
+        hidden: "",
+      },
+      el("a", { href: `/item/${id}`, class: "live-updates-link" }),
+    ),
+  );
+
+const bannerIn = (page: El) => ({
+  root: page.querySelector("#live-updates")!,
+  link: page.querySelector(".live-updates-link")!,
+});
+
+async function liveWindow(options: Partial<FakeWindow> = {}): Promise<FakeWindow> {
+  FakeEventSource.reset();
+  const window = new FakeWindow("/item/4242", itemPage());
+  Object.assign(window, options);
+  await runModule(LIVE_MODULE, window);
+  return window;
+}
+
+Deno.test("an item page subscribes, carrying the count it was rendered with", async () => {
+  const window = await liveWindow();
+
+  assertEquals(FakeEventSource.instances.length, 1);
+  // `since` is what stops a reconnect re-announcing comments already on screen.
+  assertEquals(FakeEventSource.instances[0]!.url, "/api/live/4242?since=10");
+  assertEquals(bannerIn(window.root).root.hidden, true, "nothing to say yet");
+});
+
+Deno.test("new comments offer a refresh, counted against what is on screen", async () => {
+  const window = await liveWindow();
+  const banner = bannerIn(window.root);
+
+  FakeEventSource.instances[0]!.emit("comments", { id: 4242, count: 13 });
+
+  assertEquals(banner.root.hidden, false);
+  // Three new, not thirteen: the page already shows ten.
+  assertEquals(banner.link.textContent, "3 new comments · refresh");
+});
+
+Deno.test("the count the page already shows is not announced as new", async () => {
+  const window = await liveWindow();
+  const banner = bannerIn(window.root);
+
+  // The first frame a stream sends is the current count, which for a page
+  // served from a warm cache is usually the count it was rendered with.
+  FakeEventSource.instances[0]!.emit("comments", { id: 4242, count: 10 });
+  assertEquals(banner.root.hidden, true);
+
+  FakeEventSource.instances[0]!.emit("comments", { id: 4242, count: 11 });
+  assertEquals(banner.link.textContent, "1 new comment · refresh");
+});
+
+Deno.test("a malformed frame does not take the connection down", async () => {
+  const window = await liveWindow();
+  const source = FakeEventSource.instances[0]!;
+
+  for (const listener of source.listeners.get("comments") ?? []) listener({ data: "not json" });
+  source.emit("comments", { id: 4242, count: 12 });
+
+  assertEquals(source.closed, false);
+  assertEquals(bannerIn(window.root).link.textContent, "2 new comments · refresh");
+});
+
+Deno.test("hiding the tab closes the stream, and coming back opens a new one", async () => {
+  const window = await liveWindow();
+  const first = FakeEventSource.instances[0]!;
+
+  window.visible = false;
+  window.dispatchOnDocument({ type: "visibilitychange" });
+  assertEquals(first.closed, true);
+  assertEquals(FakeEventSource.instances.length, 1, "nothing reopened while hidden");
+
+  window.visible = true;
+  window.dispatchOnDocument({ type: "visibilitychange" });
+  assertEquals(FakeEventSource.instances.length, 2);
+});
+
+Deno.test("navigating away closes the stream, so the page stays bfcache-eligible", async () => {
+  // An open EventSource makes a page ineligible for the back/forward cache in
+  // some browsers. Trading instant Back for a live comment count is a bad
+  // trade, and one the bfcache reporting elsewhere in app.js would then have
+  // to explain.
+  const window = await liveWindow();
+  const source = FakeEventSource.instances[0]!;
+
+  window.dispatch({ type: "pagehide" });
+  assertEquals(source.closed, true);
+
+  // Restored from bfcache: the DOM is intact but the stream is not.
+  window.dispatch({ type: "pageshow", persisted: true });
+  assertEquals(FakeEventSource.instances.length, 2);
+});
+
+Deno.test("a rotated stream is not left as a dangling handle", async () => {
+  // The server closes streams after a few minutes and EventSource reconnects
+  // on its own; the module only has to keep its own handle in step.
+  const window = await liveWindow();
+  FakeEventSource.instances[0]!.emit("bye", { reason: "rotate" });
+
+  window.dispatch({ type: "pageshow", persisted: false });
+  assertEquals(FakeEventSource.instances.length, 2, "a new stream after a rotate");
+});
+
+Deno.test("a page with no banner subscribes to nothing", async () => {
+  // Feed pages, the saved list, user profiles: there is no thread to watch.
+  FakeEventSource.reset();
+  const window = new FakeWindow("/top/1", feedPage());
+  await runModule(LIVE_MODULE, window);
+
+  assertEquals(FakeEventSource.instances.length, 0);
+});
+
+Deno.test("the banner the renderer emits is the banner the module drives", async () => {
+  const markup = await htmlToString(liveUpdates(4242, 10));
+  const source = await moduleSource(LIVE_MODULE);
+
+  assertStringIncludes(markup, 'id="live-updates"');
+  assertStringIncludes(markup, 'data-item-id="4242"');
+  assertStringIncludes(markup, 'data-comments="10"');
+  // Rendered hidden and announced politely - it appears while the reader is
+  // mid-page, so it must not steal focus or interrupt.
+  assertStringIncludes(markup, "hidden");
+  assertStringIncludes(markup, 'role="status"');
+
+  for (const hook of ["live-updates-link", "itemId", "comments"]) {
+    assertStringIncludes(source, hook);
   }
 });

@@ -22,6 +22,7 @@ import {
   itemTransitionName,
   justifyScript,
   keyboardNavScript,
+  liveUpdates,
   pipReaderButton,
   pwaHeadTags,
   readerModeLink,
@@ -249,7 +250,9 @@ export const article = (item: Item, canonicalUrl?: string, staleSince?: number):
             ${bookmarkButton(item)}
           </div>
           <hr />
-          ${unsafeHTML(item.content || "")} ${commentsSection(item.comments, opUser)}
+          ${unsafeHTML(item.content || "")} ${liveUpdates(item.id, totalComments)} ${
+      commentsSection(item.comments, opUser)
+    }
         </article>
       </main>
       ${keyboardNavScript()}
