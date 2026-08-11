@@ -13,38 +13,71 @@
 // module needs that is not here should be added here, with the same bias
 // towards mechanical correctness over coverage.
 
-/** A parsed compound selector, e.g. `li[data-story-id="7"]` or `a.title`. */
+/** A parsed compound selector, e.g. `li[data-story-id="7"]` or `a.title:not([x])`. */
 interface Compound {
   tag?: string;
   classes: string[];
   attrs: { name: string; value?: string }[];
+  not: Compound[];
 }
 
 const parseCompound = (selector: string): Compound => {
-  const compound: Compound = { classes: [], attrs: [] };
-  const pattern = /^(?:([a-zA-Z][\w-]*)|\.([\w-]+)|\[([\w-]+)(?:="([^"]*)")?\])/;
+  const compound: Compound = { classes: [], attrs: [], not: [] };
+  const pattern =
+    /^(?::not\(([^)]*)\)|([a-zA-Z][\w-]*)|\.([\w-]+)|#([\w-]+)|\[([\w-]+)(?:="([^"]*)")?\])/;
 
   let rest = selector.trim();
   while (rest) {
     const match = pattern.exec(rest);
     if (!match) throw new Error(`dom-shim cannot parse selector: ${selector}`);
-    if (match[1]) compound.tag = match[1];
-    else if (match[2]) compound.classes.push(match[2]);
-    else compound.attrs.push({ name: match[3]!, value: match[4] });
+    if (match[1] !== undefined) compound.not.push(parseCompound(match[1]));
+    else if (match[2]) compound.tag = match[2];
+    else if (match[3]) compound.classes.push(match[3]);
+    else if (match[4]) compound.attrs.push({ name: "id", value: match[4] });
+    else compound.attrs.push({ name: match[5]!, value: match[6] });
     rest = rest.slice(match[0].length);
   }
   return compound;
+};
+
+/**
+ * Split a selector into descendant parts, ignoring spaces inside `:not(...)`.
+ *
+ * Only the descendant combinator is supported - it is the only one these
+ * modules use, and `>` / `+` / `~` would each need their own traversal.
+ */
+const parseDescendants = (selector: string): Compound[] => {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const character of selector.trim()) {
+    if (character === "(") depth++;
+    if (character === ")") depth--;
+    if (character === " " && depth === 0) {
+      if (current) parts.push(current);
+      current = "";
+      continue;
+    }
+    current += character;
+  }
+  if (current) parts.push(current);
+  return parts.map(parseCompound);
 };
 
 /** `data-story-id` <-> `storyId`, the same mapping `dataset` uses. */
 const camel = (attribute: string): string =>
   attribute.replace(/^data-/, "").replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 
+const kebab = (key: string): string =>
+  `data-${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;
+
 export class El {
   readonly tag: string;
   readonly attributes: Record<string, string>;
   readonly children: El[] = [];
   parent: El | null = null;
+  /** Text set through `textContent`, when this element has no children. */
+  text = "";
   /** Set by `focus()`, so tests can assert where focus landed. */
   focused = false;
   /** Arguments the module passed to `focus()`. */
@@ -64,23 +97,76 @@ export class El {
     return { contains: (name: string) => classes.includes(name) };
   }
 
-  get dataset(): Record<string, string> {
-    const data: Record<string, string> = {};
-    for (const [name, value] of Object.entries(this.attributes)) {
-      if (name.startsWith("data-")) data[camel(name)] = value;
-    }
-    return data;
+  /** Live, and writable both ways - modules set and delete `dataset` keys. */
+  get dataset(): Record<string, string | undefined> {
+    return new Proxy({}, {
+      get: (_target, key: string) => this.attributes[kebab(key)],
+      set: (_target, key: string, value) => {
+        this.attributes[kebab(String(key))] = String(value);
+        return true;
+      },
+      deleteProperty: (_target, key: string) => {
+        delete this.attributes[kebab(key)];
+        return true;
+      },
+      has: (_target, key: string) => kebab(key) in this.attributes,
+      ownKeys: () => Object.keys(this.attributes).filter((n) => n.startsWith("data-")).map(camel),
+      getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }),
+    }) as Record<string, string | undefined>;
+  }
+
+  get hidden(): boolean {
+    return "hidden" in this.attributes;
+  }
+
+  set hidden(value: boolean) {
+    if (value) this.attributes.hidden = "";
+    else delete this.attributes.hidden;
+  }
+
+  /** Own text, or all descendant text when there are children. */
+  get textContent(): string {
+    if (!this.children.length) return this.text;
+    return this.children.map((child) => child.textContent).join("");
+  }
+
+  set textContent(value: string) {
+    this.children.length = 0;
+    this.text = value;
+  }
+
+  getAttribute(name: string): string | null {
+    return this.attributes[name] ?? null;
+  }
+
+  setAttribute(name: string, value: string): void {
+    this.attributes[name] = value;
   }
 
   matches(selector: string): boolean {
     return selector.split(",").some((part) => {
-      const compound = parseCompound(part);
-      if (compound.tag && compound.tag !== this.tag) return false;
-      if (!compound.classes.every((c) => this.classList.contains(c))) return false;
-      return compound.attrs.every(({ name, value }) =>
-        name in this.attributes && (value === undefined || this.attributes[name] === value)
-      );
+      const compounds = parseDescendants(part);
+      if (!this.matchesCompound(compounds.pop()!)) return false;
+
+      // Ancestors, innermost first. Each has to be found somewhere above the
+      // last one matched, not necessarily as its direct parent.
+      let node = this.parent;
+      for (const ancestor of compounds.reverse()) {
+        while (node && !node.matchesCompound(ancestor)) node = node.parent;
+        if (!node) return false;
+        node = node.parent;
+      }
+      return true;
     });
+  }
+
+  matchesCompound(compound: Compound): boolean {
+    if (compound.tag && compound.tag !== this.tag) return false;
+    if (!compound.classes.every((c) => this.classList.contains(c))) return false;
+    if (compound.not.some((negated) => this.matchesCompound(negated))) return false;
+    return compound.attrs.every(({ name, value }) =>
+      name in this.attributes && (value === undefined || this.attributes[name] === value)
+    );
   }
 
   closest(selector: string): El | null {
@@ -102,9 +188,40 @@ export class El {
     return null;
   }
 
+  querySelectorAll(selector: string): El[] {
+    const found: El[] = [];
+    for (const child of this.children) {
+      if (child.matches(selector)) found.push(child);
+      found.push(...child.querySelectorAll(selector));
+    }
+    return found;
+  }
+
   focus(options?: unknown): void {
     this.focused = true;
     this.focusOptions = options;
+  }
+
+  /** Listeners this element carries, for elements modules subscribe to directly. */
+  readonly listeners = new Map<string, Listener[]>();
+
+  addEventListener(type: string, listener: Listener): void {
+    const existing = this.listeners.get(type) ?? [];
+    existing.push(listener);
+    this.listeners.set(type, existing);
+  }
+
+  dispatch(event: FakeEvent): void {
+    for (const listener of this.listeners.get(event.type) ?? []) listener(event);
+  }
+
+  /** Popovers. Presence of the method is itself a feature detection. */
+  popoverOpen = false;
+  showPopover(): void {
+    this.popoverOpen = true;
+  }
+  hidePopover(): void {
+    this.popoverOpen = false;
   }
 }
 
@@ -141,6 +258,13 @@ export class FakeWindow {
   performanceNavigationType = "navigate";
   /** Whether `"onpagereveal" in globalThis` is true. */
   supportsPageReveal = true;
+  /** Whether `HTMLAnchorElement.prototype` carries `interestForElement`. */
+  supportsInterestInvokers = true;
+  /** Requests the module made, newest last. */
+  readonly requests: string[] = [];
+  /** Stand-in for the network. Replace per test. */
+  fetch: (url: string, init?: { signal?: AbortSignal }) => Promise<unknown> = () =>
+    Promise.reject(new Error("no fetch handler installed"));
 
   constructor(pathname: string, root: El) {
     this.pathname = pathname;
@@ -167,7 +291,32 @@ export class FakeWindow {
       },
       document: {
         querySelector: (selector: string) => this.root.querySelector(selector),
+        querySelectorAll: (selector: string) => this.root.querySelectorAll(selector),
+        getElementById: (id: string) => this.root.querySelector(`[id="${id}"]`),
       },
+      // Feature detections for interest invokers and popover. Set
+      // `supportsInterestInvokers` to false to stand in for a browser without.
+      HTMLAnchorElement: {
+        prototype: this.supportsInterestInvokers ? { interestForElement: null } : {},
+      },
+      MutationObserver: class {
+        constructor(private readonly callback: () => void) {}
+        observe(target: El) {
+          target.addEventListener("nfhn:mutate", () => this.callback());
+        }
+        disconnect() {}
+      },
+      fetch: (input: string, init?: { signal?: AbortSignal }) => {
+        this.requests.push(input);
+        return this.fetch(input, init);
+      },
+      AbortController,
+      AbortSignal,
+      Date,
+      Error,
+      JSON,
+      // Modules that render timestamps borrow the one already in app.js.
+      RelativeTime: { format: (date: Date) => `at ${date.toISOString()}` },
       performance: {
         getEntriesByType: (type: string) =>
           type === "navigation" ? [{ type: this.performanceNavigationType }] : [],

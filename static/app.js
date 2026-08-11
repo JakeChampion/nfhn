@@ -1098,6 +1098,139 @@ const TextSegments = (function () {
   });
 })();
 
+// --- Story previews on hover ---
+//
+// A feed row tells you a story's title, domain and comment count. What it does
+// not tell you is whether the thing is worth opening, which is the question you
+// are actually asking when you hover it. This shows one paragraph: the
+// submitter's own text, or the article's excerpt if reader mode has ever seen
+// this URL, or the first substantial comment. /api/preview/:id decides which.
+//
+// Interest invokers do the hard part. `interestfor` on a link means the browser
+// owns "has the reader shown interest in this?" - a hover held long enough, a
+// long-press on touch, a keyboard hotkey, focus - and it owns dismissal, focus
+// containment and the accessible relationship between link and card. All of
+// which is what previously made hover cards a bad idea to build: they were
+// mouse-only, they fought with focus, and they ate the click.
+//
+// The attribute is attached here rather than rendered, so a reader without
+// JavaScript never gets a hover that opens an empty box.
+//
+// See docs/api-proposals/14-invoker-commands.md
+(function initStoryPreviews() {
+  const card = document.getElementById("story-preview");
+  if (!card) return;
+  // Both halves are needed: the invoker fires the interaction, and `hint` is
+  // the only popover type interest invokers drive. A browser with one and not
+  // the other gets today's behaviour, which is a plain link.
+  if (!("interestForElement" in HTMLAnchorElement.prototype)) return;
+  if (typeof card.showPopover !== "function") return;
+
+  // The card is rendered `hidden` so that a browser without popover support
+  // does not paint a stray box. This is the point at which we know it will not.
+  card.hidden = false;
+
+  const titleLine = card.querySelector(".story-preview-title");
+  const excerptLine = card.querySelector(".story-preview-excerpt");
+  const metaLine = card.querySelector(".story-preview-meta");
+
+  const attach = (root) => {
+    for (const link of root.querySelectorAll("li[data-story-id] a.title:not([interestfor])")) {
+      link.setAttribute("interestfor", "story-preview");
+    }
+  };
+  attach(document);
+
+  // Saved stories are rendered client-side after this runs, and re-rendered
+  // whenever one is removed.
+  const saved = document.getElementById("saved-stories-container");
+  if (saved) new MutationObserver(() => attach(saved)).observe(saved, { childList: true });
+
+  // Previews are immutable for the life of the page - a story's text does not
+  // change while you scan a feed - so a hover costs at most one request.
+  const cache = new Map();
+  let pending = null;
+
+  const describe = (preview) => {
+    const parts = [];
+    if (preview.points !== null && preview.points !== undefined) {
+      parts.push(`${preview.points} point${preview.points === 1 ? "" : "s"}`);
+    }
+    if (preview.user) parts.push(`by ${preview.user}`);
+    if (preview.time) parts.push(RelativeTime.format(new Date(preview.time * 1000), Date.now()));
+    if (preview.source === "article") parts.push("excerpt from the article");
+    if (preview.source === "comment") parts.push("from the first comment");
+    return parts.join(" · ");
+  };
+
+  // textContent throughout. The server sends plain text precisely so that this
+  // can be true: no innerHTML means no new sink for the Trusted Types policy in
+  // config.ts to have to keep exempting.
+  const fill = (preview) => {
+    titleLine.textContent = preview.title || "";
+    excerptLine.textContent = preview.excerpt || "";
+    excerptLine.hidden = !preview.excerpt;
+    metaLine.textContent = describe(preview);
+  };
+
+  const load = async (id) => {
+    pending?.abort();
+    const controller = new AbortController();
+    pending = controller;
+
+    try {
+      const response = await fetch(`/api/preview/${id}`, {
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(4000)]),
+        headers: { accept: "application/json" },
+      });
+      if (!response.ok) throw new Error(String(response.status));
+
+      const preview = await response.json();
+      cache.set(id, preview);
+      // The reader may have moved on while this was in flight; filling the card
+      // then would rewrite whatever they are looking at now.
+      if (card.dataset.storyId === String(id)) fill(preview);
+    } catch {
+      // Including AbortError, which is the normal case rather than a failure.
+      if (card.dataset.storyId === String(id)) {
+        excerptLine.hidden = true;
+        metaLine.textContent = "";
+      }
+    } finally {
+      if (pending === controller) pending = null;
+    }
+  };
+
+  card.addEventListener("interest", (event) => {
+    const link = event.source;
+    const id = link?.closest("li[data-story-id]")?.dataset.storyId;
+    if (!id) return;
+
+    card.dataset.storyId = id;
+    const known = cache.get(id);
+    if (known) {
+      fill(known);
+      return;
+    }
+
+    // Something in the card before the request lands, so it does not open
+    // empty and then jump to full height a moment later.
+    titleLine.textContent = link.querySelector(".story-title-text")?.textContent?.trim() ?? "";
+    excerptLine.textContent = "";
+    excerptLine.hidden = true;
+    metaLine.textContent = "Loading…";
+    load(id);
+  });
+
+  card.addEventListener("loseinterest", () => {
+    // Nobody is waiting on it any more, and a feed scanned quickly would
+    // otherwise leave a trail of requests behind the pointer.
+    pending?.abort();
+    pending = null;
+    delete card.dataset.storyId;
+  });
+})();
+
 // --- Compression Streams API (Phase 3) ---
 // Utilities for compressing/decompressing data to reduce storage usage
 const CompressionUtils = (function () {

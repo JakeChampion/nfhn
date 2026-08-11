@@ -32,6 +32,7 @@ import {
   sharedStyles,
   skipLink,
   staleBanner,
+  storyPreviewCard,
   themeScript,
   userLink,
   websiteJsonLd,
@@ -108,6 +109,7 @@ export const home = (
       <a href="/${feed}/${pageNumber + 1}" class="more-link">More</a>
     </main>
     ${backToTop()}
+    ${storyPreviewCard()}
     ${keyboardNavScript()}
     ${themeScript()}
   </body>
@@ -396,6 +398,7 @@ export const savedPage = (canonicalUrl?: string): HTML =>
       </div>
     </main>
     ${backToTop()}
+    ${storyPreviewCard()}
     ${keyboardNavScript()}
     ${themeScript()}
   </body>
