@@ -34,37 +34,79 @@ interface ZstdApi {
 /**
  * Find the functions, wherever this runtime put them.
  *
- * This was `import { compressUsingDict, createCCtx, init } from ...`, and it
- * failed on Netlify's edge with:
+ * Getting at this package from Netlify's edge has taken three goes, so the
+ * history is worth keeping:
  *
- *   SyntaxError: The requested module '@bokuweb/zstd-wasm' does not provide an
- *   export named 'compressUsingDict'
+ *   1. `import { compressUsingDict } from "@bokuweb/zstd-wasm"` threw
+ *      `SyntaxError: ... does not provide an export named 'compressUsingDict'`.
+ *      The entry point is CommonJS and everything except `init` reaches it
+ *      through `__exportStar(require(...), exports)`, which Node's CJS lexer
+ *      cannot see through - so the module's apparent named-export list is one
+ *      entry long while every function is present at runtime.
+ *   2. A namespace import got past the link check but arrived with
+ *      `namespace keys: default`, and `default` had no `compressUsingDict`
+ *      either.
  *
- * The package's entry point is CommonJS, and everything except `init` reaches
- * it through `__exportStar(require(...), exports)`. Node's CJS lexer can see a
- * literal `exports.init = ...` and cannot see through `__exportStar`, so the
- * named-export list the module appears to have is exactly one entry long. The
- * functions are all there at runtime - they are just invisible to the
- * link-time check that a named import performs.
+ * So this stops guessing at one shape. Every plausible place is tried, and if
+ * none of them has the function the error reports what was actually found at
+ * each level - which is the thing that has been missing each time round.
  *
- * A namespace import does no such check, so the properties can be read off the
- * module object once it has actually loaded. `default` is where the CJS interop
- * puts `module.exports`; the namespace itself is where a real ESM build would
- * put them. Try both rather than guessing which resolution a given runtime
- * picked.
+ * `createRequire` is the interesting one: it loads the module through the real
+ * CommonJS loader, which gives back the genuine `module.exports` object with
+ * `__exportStar`'s properties already copied onto it. That sidesteps both the
+ * ESM link check and any bundler that pruned the namespace down to the
+ * properties it could see being accessed statically.
  */
-function resolveApi(): ZstdApi {
-  const namespace = zstdModule as unknown as Record<string, unknown>;
-  const candidates = [namespace, namespace.default as Record<string, unknown> | undefined];
+function describe(value: unknown): string {
+  if (value === null || value === undefined) return String(value);
+  if (typeof value !== "object" && typeof value !== "function") return typeof value;
+  const keys = Object.keys(value as object);
+  return `${typeof value}{${keys.length ? keys.join(",") : "no keys"}}`;
+}
 
-  for (const candidate of candidates) {
-    if (candidate && typeof candidate.compressUsingDict === "function") {
-      return candidate as unknown as ZstdApi;
-    }
+const hasApi = (value: unknown): value is ZstdApi =>
+  !!value && typeof (value as ZstdApi).compressUsingDict === "function";
+
+async function resolveApi(): Promise<ZstdApi> {
+  const namespace = zstdModule as unknown as Record<string, unknown>;
+  const attempts: [string, unknown][] = [];
+
+  const record = (label: string, value: unknown) => {
+    attempts.push([label, value]);
+    return value;
+  };
+
+  // Static property reads, so a bundler that prunes namespaces by visible
+  // access keeps these rather than shaking them out.
+  record("namespace", namespace);
+  record("namespace.default", namespace.default);
+  record(
+    "namespace.default.default",
+    (namespace.default as Record<string, unknown> | undefined)?.default,
+  );
+
+  try {
+    // Deno provides node:module, and this is the CommonJS loader proper. The
+    // specifier is a variable so that type-checking does not require
+    // @types/node to be installed for what is a runtime fallback.
+    const nodeModule = "node:module";
+    const { createRequire } = await import(nodeModule) as {
+      createRequire: (base: string) => (id: string) => unknown;
+    };
+    const required = createRequire(import.meta.url)("@bokuweb/zstd-wasm");
+    record("require()", required);
+    record("require().default", (required as Record<string, unknown> | undefined)?.default);
+  } catch (error) {
+    attempts.push([`require() threw: ${String(error)}`, undefined]);
   }
+
+  for (const [, candidate] of attempts) {
+    if (hasApi(candidate)) return candidate;
+  }
+
   throw new Error(
-    "@bokuweb/zstd-wasm exposes no compressUsingDict in this runtime; " +
-      `namespace keys: ${Object.keys(namespace).join(", ")}`,
+    "@bokuweb/zstd-wasm exposes no compressUsingDict in this runtime. Tried " +
+      attempts.map(([label, value]) => `${label}=${describe(value)}`).join("; "),
   );
 }
 
@@ -75,7 +117,7 @@ let cctx: number | null = null;
 function ensureReady(): Promise<ZstdApi> {
   if (!ready) {
     ready = (async () => {
-      const api = resolveApi();
+      const api = await resolveApi();
       await api.init();
       cctx = api.createCCtx();
       return api;
