@@ -26,6 +26,7 @@ This directory contains detailed proposals for incorporating modern web APIs and
 | [PWA integration surface](./18-pwa-integration-surface.md) | mixed | Medium | Low | ✅ **Implemented** |
 | [View Transition types](./19-view-transition-types-and-speculation.md) | Chromium 125+ | Medium | Low | ✅ **Implemented** |
 | [Hardening, INP & modern syntax](./20-hardening-inp-and-modern-syntax.md) | mixed | 🔥 High | Low | ✅ **Implemented** |
+| [Reader mode & justification](./21-reader-and-justification.md) | Baseline | 🔥 High | Low | ✅ **Implemented** |
 
 Platform-side proposals — Netlify Blobs, cache tags, rate limiting, compression dictionaries — live in
 [`../netlify-proposals/`](../netlify-proposals/README.md).
