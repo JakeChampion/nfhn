@@ -22,6 +22,7 @@
     "@netlify/functions": "^5.3.0"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "husky": "^9.0.0"
   },
   "lint-staged": {
@@ -30,6 +31,7 @@
   "scripts": {
     "dev": "netlify dev",
     "build": "deno run --allow-read --allow-write --allow-env scripts/build.ts",
+    "vendor:zstd": "node scripts/vendor-zstd.mjs",
     "test": "deno test --allow-net --allow-env --allow-read tests/",
     "test:watch": "deno test --allow-net --allow-env --allow-read --watch tests/",
     "test:coverage": "deno test --allow-net --allow-env --allow-read --coverage=coverage tests/ && deno coverage coverage",

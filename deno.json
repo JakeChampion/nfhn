@@ -17,14 +17,20 @@
   "lint": {
     "exclude": [
       "netlify/edge-functions/lib/readability.js",
+      "netlify/edge-functions/lib/vendor/",
       "static/"
     ],
     "rules": {
-      "include": ["recommended"]
+      "include": [
+        "recommended"
+      ]
     }
   },
   "fmt": {
     "useTabs": false,
-    "lineWidth": 100
+    "lineWidth": 100,
+    "exclude": [
+      "netlify/edge-functions/lib/vendor/"
+    ]
   }
 }

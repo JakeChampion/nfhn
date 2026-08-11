@@ -2,16 +2,30 @@
 //
 // The edge runtime has no native zstd, and `CompressionStream` does not take a
 // dictionary - which is what the 2026-08 spec review recorded as making RFC 9842
-// unimplementable here. It runs WebAssembly, though, and `@bokuweb/zstd-wasm`
-// exposes `ZSTD_compress_usingDict` through it.
+// unimplementable here. It runs WebAssembly, though, and zstd exposes
+// `ZSTD_compress_usingDict` through it.
 //
-// The module is instantiated lazily and once per isolate: instantiation is the
-// expensive part, compression itself is not, so an isolate that never serves a
-// dictionary-capable client never pays for it.
+// The import is the vendored bundle rather than the npm package, and that is
+// not incidental. `import ... from "@bokuweb/zstd-wasm"` in an edge function
+// resolves through the **node** export condition, which selects a build whose
+// init is `readFile(resolve(__dirname, './zstd.wasm'))`. Deno Deploy has no
+// filesystem, so that could never work - and it failed in three different
+// disguises before that was clear. scripts/vendor-zstd.mjs has the full story;
+// the short version is that the browser build does the right thing, the
+// package's `exports` map makes it unreachable, and bundling it by file path is
+// the way in.
+//
+// The wasm arrives inline as base64, so instantiation is CPU and no network.
 //
 // See docs/netlify-proposals/01-compression-dictionary-transport.md
 
-import * as zstdModule from "@bokuweb/zstd-wasm";
+import {
+  compressUsingDict,
+  createCCtx,
+  Module,
+  waitInitialized,
+  wasmBinaryBase64,
+} from "./vendor/zstd-wasm.js";
 
 /**
  * Compression level. 10 is well past the knee of the curve for HTML against a
@@ -20,111 +34,27 @@ import * as zstdModule from "@bokuweb/zstd-wasm";
  */
 const COMPRESSION_LEVEL = 10;
 
-interface ZstdApi {
-  init(path?: string): Promise<void>;
-  createCCtx(): number;
-  compressUsingDict(
-    cctx: number,
-    body: Uint8Array,
-    dictionary: Uint8Array,
-    level: number,
-  ): Uint8Array;
-}
-
-/**
- * Find the functions, wherever this runtime put them.
- *
- * Getting at this package from Netlify's edge has taken three goes, so the
- * history is worth keeping:
- *
- *   1. `import { compressUsingDict } from "@bokuweb/zstd-wasm"` threw
- *      `SyntaxError: ... does not provide an export named 'compressUsingDict'`.
- *      The entry point is CommonJS and everything except `init` reaches it
- *      through `__exportStar(require(...), exports)`, which Node's CJS lexer
- *      cannot see through - so the module's apparent named-export list is one
- *      entry long while every function is present at runtime.
- *   2. A namespace import got past the link check but arrived with
- *      `namespace keys: default`, and `default` had no `compressUsingDict`
- *      either.
- *
- * So this stops guessing at one shape. Every plausible place is tried, and if
- * none of them has the function the error reports what was actually found at
- * each level - which is the thing that has been missing each time round.
- *
- * `createRequire` is the interesting one: it loads the module through the real
- * CommonJS loader, which gives back the genuine `module.exports` object with
- * `__exportStar`'s properties already copied onto it. That sidesteps both the
- * ESM link check and any bundler that pruned the namespace down to the
- * properties it could see being accessed statically.
- */
-function describe(value: unknown): string {
-  if (value === null || value === undefined) return String(value);
-  if (typeof value !== "object" && typeof value !== "function") return typeof value;
-  const keys = Object.keys(value as object);
-  return `${typeof value}{${keys.length ? keys.join(",") : "no keys"}}`;
-}
-
-const hasApi = (value: unknown): value is ZstdApi =>
-  !!value && typeof (value as ZstdApi).compressUsingDict === "function";
-
-async function resolveApi(): Promise<ZstdApi> {
-  const namespace = zstdModule as unknown as Record<string, unknown>;
-  const attempts: [string, unknown][] = [];
-
-  const record = (label: string, value: unknown) => {
-    attempts.push([label, value]);
-    return value;
-  };
-
-  // Static property reads, so a bundler that prunes namespaces by visible
-  // access keeps these rather than shaking them out.
-  record("namespace", namespace);
-  record("namespace.default", namespace.default);
-  record(
-    "namespace.default.default",
-    (namespace.default as Record<string, unknown> | undefined)?.default,
-  );
-
-  try {
-    // Deno provides node:module, and this is the CommonJS loader proper. The
-    // specifier is a variable so that type-checking does not require
-    // @types/node to be installed for what is a runtime fallback.
-    const nodeModule = "node:module";
-    const { createRequire } = await import(nodeModule) as {
-      createRequire: (base: string) => (id: string) => unknown;
-    };
-    const required = createRequire(import.meta.url)("@bokuweb/zstd-wasm");
-    record("require()", required);
-    record("require().default", (required as Record<string, unknown> | undefined)?.default);
-  } catch (error) {
-    attempts.push([`require() threw: ${String(error)}`, undefined]);
-  }
-
-  for (const [, candidate] of attempts) {
-    if (hasApi(candidate)) return candidate;
-  }
-
-  throw new Error(
-    "@bokuweb/zstd-wasm exposes no compressUsingDict in this runtime. Tried " +
-      attempts.map(([label, value]) => `${label}=${describe(value)}`).join("; "),
-  );
-}
-
-let ready: Promise<ZstdApi> | null = null;
+let ready: Promise<void> | null = null;
 let cctx: number | null = null;
 
-/** Instantiate the WASM module once per isolate. */
-function ensureReady(): Promise<ZstdApi> {
+/**
+ * Instantiate the WASM module once per isolate.
+ *
+ * Roughly 250KB of wasm to compile, so this is the expensive part and it is
+ * deliberately lazy: an isolate that never serves a dictionary-capable client
+ * never pays for it.
+ */
+function ensureReady(): Promise<void> {
   if (!ready) {
     ready = (async () => {
-      const api = await resolveApi();
-      await api.init();
-      cctx = api.createCCtx();
-      return api;
+      const binary = Uint8Array.from(atob(wasmBinaryBase64), (c) => c.charCodeAt(0));
+      Module.init(binary);
+      await waitInitialized();
+      cctx = createCCtx();
     })().catch((error) => {
-      // Reset so a later request can retry - the caller latches this off
-      // anyway, but a rejected promise cached here would be retried forever
-      // with no chance of ever succeeding.
+      // Reset so a later request can retry. The caller latches compression off
+      // after one failure anyway, but caching a rejected promise here would
+      // make even that retry impossible.
       ready = null;
       throw error;
     });
@@ -142,9 +72,9 @@ export async function compressWithDictionary(
   body: Uint8Array,
   dictionary: Uint8Array,
 ): Promise<Uint8Array> {
-  const api = await ensureReady();
+  await ensureReady();
   if (cctx === null) throw new Error("zstd compression context unavailable");
-  return api.compressUsingDict(cctx, body, dictionary, COMPRESSION_LEVEL);
+  return compressUsingDict(cctx, body, dictionary, COMPRESSION_LEVEL);
 }
 
 /** True once the WASM module has been instantiated in this isolate. */
