@@ -143,18 +143,43 @@ export interface DictionaryOffer {
 }
 
 /**
+ * Escape a value for a Structured Field String (RFC 8941 section 3.3.3).
+ *
+ * Only backslash and double quote may be escaped, and both *must* be. This was
+ * missing, and it cost the whole feature: `DICTIONARY_MATCH` contained a `\d`,
+ * which is not a legal escape, so Chrome rejected the entire `Use-As-Dictionary`
+ * field as malformed and never stored the dictionary. Nothing failed visibly -
+ * pages just kept being served whole.
+ */
+const sfString = (value: string): string => `"${value.replace(/["\\]/g, "\\$&")}"`;
+
+/**
  * Build the `Use-As-Dictionary` response header.
  *
  * Only `type=raw` exists today, and it is the default, so it is left implicit.
  */
 export function useAsDictionaryHeader(offer: DictionaryOffer): string {
-  const parts = [`match="${offer.match}"`];
+  const parts = [`match=${sfString(offer.match)}`];
   if (offer.matchDest?.length) {
-    parts.push(`match-dest=(${offer.matchDest.map((d) => `"${d}"`).join(" ")})`);
+    parts.push(`match-dest=(${offer.matchDest.map(sfString).join(" ")})`);
   }
-  if (offer.id) parts.push(`id="${offer.id}"`);
+  if (offer.id) parts.push(`id=${sfString(offer.id)}`);
   return parts.join(", ");
 }
+
+/**
+ * True when a URL pattern is one RFC 9842 will accept as a `match`.
+ *
+ * The spec runs URLPattern's "has regexp groups" steps and rejects the offer if
+ * they return true - so `(top|newest)` and `:page(\d+)` are both out, however
+ * well they describe the routes. Named groups without a regexp, and wildcards,
+ * are fine.
+ *
+ * Checked here rather than trusted, because the failure is silent at every
+ * layer: no error, no warning in the response, just a dictionary that is never
+ * used.
+ */
+export const isValidDictionaryMatch = (pattern: string): boolean => !/[()]/.test(pattern);
 
 /**
  * Headers a dictionary-compressed response must carry.

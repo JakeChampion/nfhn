@@ -12,12 +12,25 @@ import { DICTIONARY_TRANSPORT_ENABLED, toHex, useAsDictionaryHeader } from "./li
 import { tryGetShellDictionary } from "./lib/shell-dictionary.ts";
 
 /**
- * Routes the dictionary applies to. Feed and item pages share the shell; the
- * exclusions mirror the ones the Speculation Rules and No-Vary-Search work
- * already use, and for the same reason - `/reader/*` is arbitrary third-party
- * content that shares no structure with the shell.
+ * Routes the dictionary applies to.
+ *
+ * This was `/(top|newest|ask|show|jobs)/:page(\d+)`, which was wrong twice over
+ * and meant the dictionary was never stored by any browser:
+ *
+ *   1. RFC 9842 runs URLPattern's "has regexp groups" steps on `match` and
+ *      rejects the offer if they return true. Both the alternation and the
+ *      `\d+` are regexp groups.
+ *   2. The `\d` also made the header an invalid Structured Field String, so
+ *      Chrome could not even parse the field. That is what DevTools reported.
+ *
+ * Two path segments with named groups and no regexp is what is left, and it is
+ * a better fit anyway: item and user pages are built from the same shell as the
+ * feeds and were being excluded for no reason. `/reader/*` still falls outside
+ * it - a wrapped article URL has more segments than this - which matters,
+ * because reader pages are arbitrary third-party content that shares no
+ * structure with the shell.
  */
-export const DICTIONARY_MATCH = "/(top|newest|ask|show|jobs)/:page(\\d+)";
+export const DICTIONARY_MATCH = "/:section/:page";
 
 export default async (): Promise<Response> => {
   if (!DICTIONARY_TRANSPORT_ENABLED) {

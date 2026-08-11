@@ -27,13 +27,15 @@ const STATIC_ASSETS = [
 function staticRoutes() {
   const assets = STATIC_ASSETS.filter((path) => path !== "/saved");
   return [
-    {
-      condition: {
-        urlPattern: new URLPattern({ pathname: `(${assets.join("|")})` }),
-        requestMethod: "GET",
-      },
+    // One route per asset, not one alternation over all of them. `addRoutes`
+    // rejects any pattern containing a regexp group, and `(a|b|c)` is one - so
+    // the single combined route threw, and because addRoutes takes the whole
+    // array at once it took the network-only routes below down with it. Every
+    // request had been booting the worker regardless.
+    ...assets.map((asset) => ({
+      condition: { urlPattern: new URLPattern({ pathname: asset }), requestMethod: "GET" },
       source: { cacheName: CACHE_NAME },
-    },
+    })),
     {
       // Reader mode is always network. The fetch handler already knows this;
       // declaring it here means the worker is not woken to find out.
@@ -57,10 +59,13 @@ function staticRoutes() {
 self.addEventListener("install", (event) => {
   if ("addRoutes" in event && typeof URLPattern !== "undefined") {
     try {
-      event.addRoutes(staticRoutes());
+      // addRoutes rejects a promise rather than throwing, so the try/catch on
+      // its own caught nothing - the failure surfaced only as an unhandled
+      // rejection in the console. A browser that refuses these conditions
+      // should fall through to the fetch handler, not fail the install.
+      event.addRoutes(staticRoutes())?.catch?.(() => {});
     } catch (_err) {
-      // A browser that has addRoutes but rejects these conditions should fall
-      // through to the fetch handler, not fail the install.
+      // Synchronous rejection, same handling.
     }
   }
 

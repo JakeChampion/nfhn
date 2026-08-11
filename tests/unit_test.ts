@@ -1251,11 +1251,13 @@ import {
   digestsMatch,
   formatAvailableDictionary,
   frameDcz,
+  isValidDictionaryMatch,
   parseAvailableDictionary,
   parseDczHeader,
   sha256,
   useAsDictionaryHeader,
 } from "../netlify/edge-functions/lib/dictionary.ts";
+import { DICTIONARY_MATCH } from "../netlify/edge-functions/dictionary.ts";
 
 Deno.test("dcz framing matches the wire format in RFC 9842 4.2", async () => {
   const dictionary = new TextEncoder().encode("a shared HTML shell");
@@ -1328,12 +1330,49 @@ Deno.test("Use-As-Dictionary is built to the header grammar", () => {
   );
   assertEquals(
     useAsDictionaryHeader({
-      match: "/(top|newest)/*",
+      match: "/:section/:page",
       matchDest: ["document"],
       id: "shell-v1",
     }),
-    'match="/(top|newest)/*", match-dest=("document"), id="shell-v1"',
+    'match="/:section/:page", match-dest=("document"), id="shell-v1"',
   );
+});
+
+Deno.test("a backslash in a match pattern is escaped, not emitted raw", () => {
+  // This is what took the whole feature out. The match pattern contained `\d`,
+  // which is not a legal Structured Field String escape, so Chrome rejected the
+  // entire field as malformed and never stored the dictionary. No error, no
+  // warning in the response - pages just kept being served whole.
+  assertEquals(
+    useAsDictionaryHeader({ match: "/:page(\\d+)" }),
+    'match="/:page(\\\\d+)"',
+  );
+  assertEquals(useAsDictionaryHeader({ match: '/a"b' }), 'match="/a\\"b"');
+  assertEquals(useAsDictionaryHeader({ id: 'x"y', match: "/" }), 'match="/", id="x\\"y"');
+});
+
+Deno.test("the dictionary match pattern is one RFC 9842 will accept", () => {
+  // The spec runs URLPattern's "has regexp groups" steps and rejects the offer
+  // if they return true, so an alternation or a `\d+` constraint silently
+  // disables the dictionary however well it describes the routes.
+  assertEquals(isValidDictionaryMatch(DICTIONARY_MATCH), true);
+  assertEquals(isValidDictionaryMatch("/(top|newest)/:page"), false);
+  assertEquals(isValidDictionaryMatch("/:section/:page(\\d+)"), false);
+  assertEquals(isValidDictionaryMatch("/:section/:page"), true);
+  assertEquals(isValidDictionaryMatch("/top/*"), true);
+});
+
+Deno.test("the dictionary covers the pages built from the shell, and not reader", () => {
+  const matches = (pathname: string) =>
+    new URLPattern({ pathname: DICTIONARY_MATCH }).test({ pathname });
+
+  for (const path of ["/top/1", "/newest/2", "/item/123", "/user/alice"]) {
+    assertEquals(matches(path), true, `${path} is built from the shell`);
+  }
+  // Reader pages are arbitrary third-party content with no shell in common, and
+  // a wrapped URL has more segments than this pattern allows.
+  assertEquals(matches("/reader/https://example.com/a"), false);
+  assertEquals(matches("/saved"), false);
 });
 
 Deno.test("dictionary responses vary on both the CDN and downstream caches", () => {
