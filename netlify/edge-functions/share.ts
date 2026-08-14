@@ -82,7 +82,7 @@ export default (request: Request): Response => {
     status: 302,
     headers: {
       "Location": location,
-      "Redirect-By": "NFHN",
+      "Redirect-By": "HN",
       // Never cached, and never advertised as query-independent: the query
       // string *is* the request here.
       "Cache-Control": "no-store",
