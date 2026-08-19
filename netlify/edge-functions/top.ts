@@ -8,7 +8,6 @@ import {
 } from "./lib/handlers.ts";
 
 export default (request: Request, context: Context) => {
-return new Response(crypto.randomUUID());
   const pageNumber = parsePositiveInt(context.params.page);
   if (pageNumber === null) {
     return handleNotFound(request);
