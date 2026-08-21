@@ -151,5 +151,5 @@ export default async () => {
 export const config: Config = {
   // HN's updates.json reports changes since the last read, so polling more often
   // than the data moves costs nothing but an API call.
-  schedule: "* * * * *",
+  schedule: "0 * * * *",
 };
