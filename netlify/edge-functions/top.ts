@@ -27,15 +27,15 @@ export default (request: Request, context: Context) => {
 };
 
 export const config: Config = {
-  rateLimit: {
-    // Generous: Speculation Rules (prerender: moderate) mean one engaged reader
-    // can legitimately burst a dozen requests without clicking anything, and
-    // shared egress (carriers, VPNs, universities) puts many readers on one IP.
-    // This is a scraper backstop, not a per-user quota.
-    windowLimit: 120,
-    windowSize: 60,
-    aggregateBy: "ip",
-  },
+  // rateLimit: {
+  //   // Generous: Speculation Rules (prerender: moderate) mean one engaged reader
+  //   // can legitimately burst a dozen requests without clicking anything, and
+  //   // shared egress (carriers, VPNs, universities) puts many readers on one IP.
+  //   // This is a scraper backstop, not a per-user quota.
+  //   windowLimit: 120,
+  //   windowSize: 60,
+  //   aggregateBy: "ip",
+  // },
   method: ["GET"],
   path: "/top/:page",
 };
