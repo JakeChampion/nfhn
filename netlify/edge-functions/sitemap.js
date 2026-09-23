@@ -1,5 +1,5 @@
 export default () => {
-  return new Response('hi');
+  return new Response('si');
 };
 
 export const config = {
