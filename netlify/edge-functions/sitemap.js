@@ -1,4 +1,5 @@
 export default () => {
+  console.log('boo')
   return new Response('si');
 };
 
