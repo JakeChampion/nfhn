@@ -1,5 +1,5 @@
 export default () => {
-  console.log('boo')
+  console.log('boop')
   return new Response('si');
 };
 
