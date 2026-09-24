@@ -1,5 +1,0 @@
-Contact: https://github.com/JakeChampion/nfhn/security/advisories/new
-Expires: 2027-08-09T00:00:00Z
-Preferred-Languages: en
-Canonical: https://hn.jakechampion.name/.well-known/security.txt
-Policy: https://github.com/JakeChampion/nfhn/security/policy
