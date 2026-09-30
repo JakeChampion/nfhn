@@ -3,6 +3,9 @@ import { log } from "./logger.ts";
 import { CIRCUIT_BREAKER_RESET_MS, CIRCUIT_BREAKER_THRESHOLD } from "./config.ts";
 
 const HN_API_BASE = "https://api.hnpwa.com/v0";
+// Official HN API. Feeds come from here: HNPWA's feed lists are generated in a
+// batch job that can stall for days while its item endpoint keeps working.
+const HN_FIREBASE_API = "https://hacker-news.firebaseio.com/v0";
 const DEFAULT_TIMEOUT_MS = 4500;
 const MAX_RETRIES = 2;
 
@@ -67,12 +70,12 @@ export function getCircuitBreakerState(): { failures: number; isOpen: boolean } 
 }
 
 export type FeedSlug = "top" | "newest" | "ask" | "show" | "jobs";
-const FEED_ENDPOINTS: Record<FeedSlug, "news" | "newest" | "ask" | "show" | "jobs"> = {
-  top: "news",
-  newest: "newest",
-  ask: "ask",
-  show: "show",
-  jobs: "jobs",
+const FEED_ENDPOINTS: Record<FeedSlug, string> = {
+  top: "topstories",
+  newest: "newstories",
+  ask: "askstories",
+  show: "showstories",
+  jobs: "jobstories",
 };
 
 export type ItemType = "ask" | "show" | "tell" | "job" | "link" | "comment";
@@ -320,22 +323,59 @@ export async function fetchItem(id: number): Promise<HNAPIItem | null> {
   );
 }
 
+/**
+ * Firebase has no `type` beyond story/job/poll; derive the finer HNPWA-style
+ * type the renderer badges on from the title and whether there is a link.
+ */
+function storyTypeFor(item: FirebaseItem): ItemType {
+  if (item.type === "job") return "job";
+  const title = item.title ?? "";
+  if (/^show hn\b/i.test(title)) return "show";
+  if (/^tell hn\b/i.test(title)) return "tell";
+  if (!item.url) return "ask";
+  return "link";
+}
+
+export function mapFirebaseStory(item: FirebaseItem | null): StoryItem | null {
+  if (!item || typeof item.id !== "number") return null;
+  if (item.deleted || item.dead) return null;
+  if (item.type !== "story" && item.type !== "job" && item.type !== "poll") return null;
+
+  return mapStoryToItem({
+    id: item.id,
+    title: item.title,
+    points: item.score,
+    user: item.by,
+    time: item.time,
+    comments_count: item.descendants,
+    type: storyTypeFor(item),
+    url: item.url,
+    content: item.text,
+  });
+}
+
 async function fetchStoriesPageForFeed(
   feed: FeedSlug,
   pageNumber: number,
   pageSize = 30,
 ): Promise<StoryItem[] | null> {
-  const stories = await fetchJsonWithRetry<HNAPIItem[]>(
-    `${HN_API_BASE}/${FEED_ENDPOINTS[feed]}/${pageNumber}.json`,
+  const ids = await fetchJsonWithRetry<number[]>(
+    `${HN_FIREBASE_API}/${FEED_ENDPOINTS[feed]}.json`,
     feed,
   );
-  if (stories === null || !Array.isArray(stories)) return null;
-  if (!stories.length) return [];
+  if (ids === null || !Array.isArray(ids)) return null;
 
-  const slice = stories.slice(0, pageSize);
-  return slice
-    .filter((s) => !!s && !s.deleted && !s.dead)
-    .map((s) => mapStoryToItem(s, 0))
+  const start = (pageNumber - 1) * pageSize;
+  const pageIds = ids.slice(start, start + pageSize);
+  if (!pageIds.length) return [];
+
+  const items = await Promise.all(pageIds.map((id) => fetchFirebaseItem(id)));
+  // Every item failing means HN is unreachable, not that the page is empty -
+  // null lets the caller fall back to the mirror instead of a 404.
+  if (items.every((item) => item === null)) return null;
+
+  return items
+    .map(mapFirebaseStory)
     .filter((s): s is StoryItem => !!s);
 }
 
@@ -348,9 +388,6 @@ export function fetchStoriesPage(
 }
 
 // --- User API ---
-
-// Firebase API for user details (includes submitted array)
-const HN_FIREBASE_API = "https://hacker-news.firebaseio.com/v0";
 
 export interface HNAPIUser {
   id: string;
@@ -391,7 +428,7 @@ export function mapApiUser(raw: HNAPIUser | null): User | null {
 }
 
 // Fetch a single item from Firebase API (for submissions)
-interface FirebaseItem {
+export interface FirebaseItem {
   id: number;
   type: "story" | "comment" | "job" | "poll" | "pollopt";
   by?: string;

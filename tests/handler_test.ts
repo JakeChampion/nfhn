@@ -168,8 +168,50 @@ class MemoryCacheStorage {
   }
 }
 
+const FIREBASE_BASE = "https://hacker-news.firebaseio.com/v0";
+const FIREBASE_FEED_LIST = /^https:\/\/hacker-news\.firebaseio\.com\/v0\/\w+stories\.json$/;
+
+/**
+ * Feed fixtures are written as the stories a page should show. Firebase serves
+ * a feed as a list of ids plus one request per item, so a feed route's stories
+ * are turned into that id list and each story is served at its item URL.
+ */
+function toFirebaseItem(story: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id: story.id,
+    type: story.type === "job" ? "job" : "story",
+    by: story.user,
+    time: story.time,
+    title: story.title,
+    url: story.url,
+    text: story.content,
+    score: story.points,
+    descendants: story.comments_count,
+    dead: story.dead,
+    deleted: story.deleted,
+  };
+}
+
 function createMockFetch(routes: RouteMap) {
   const counts = new Map<string, number>();
+  const feedItems = new Map<string, Record<string, unknown>>();
+
+  const json = (value: unknown): Response =>
+    new Response(JSON.stringify(value), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+
+  const serveValue = (url: string, value: unknown): Response => {
+    if (FIREBASE_FEED_LIST.test(url) && Array.isArray(value)) {
+      const ids = value.map((story: Record<string, unknown>) => {
+        feedItems.set(`${FIREBASE_BASE}/item/${story.id}.json`, toFirebaseItem(story));
+        return story.id;
+      });
+      return json(ids);
+    }
+    return json(value);
+  };
 
   const mockFetch = async (
     input: Request | string,
@@ -178,7 +220,7 @@ function createMockFetch(routes: RouteMap) {
     const url = typeof input === "string" ? input : input.url;
     counts.set(url, (counts.get(url) ?? 0) + 1);
 
-    const entry = routes[url];
+    const entry = routes[url] ?? feedItems.get(url);
     if (!entry) {
       return Promise.resolve(new Response("not found", { status: 404 }));
     }
@@ -195,22 +237,14 @@ function createMockFetch(routes: RouteMap) {
       const result = await (entry as () => Promise<unknown> | unknown)();
       if (result instanceof Response) return result.clone();
       if (result instanceof Error) throw result;
-      return new Response(JSON.stringify(result), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
+      return serveValue(url, result);
     }
 
     if (typeof entry === "string") {
       return Promise.resolve(new Response(entry));
     }
 
-    return Promise.resolve(
-      new Response(JSON.stringify(entry), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
-    );
+    return Promise.resolve(serveValue(url, entry));
   };
 
   return { mockFetch, counts };
@@ -278,10 +312,10 @@ async function withMockedEnv(
   }
 }
 
-const topStoriesUrl = "https://api.hnpwa.com/v0/news/1.json";
-const askStoriesUrl = "https://api.hnpwa.com/v0/ask/1.json";
-const showStoriesUrl = "https://api.hnpwa.com/v0/show/1.json";
-const jobsStoriesUrl = "https://api.hnpwa.com/v0/jobs/1.json";
+const topStoriesUrl = `${FIREBASE_BASE}/topstories.json`;
+const askStoriesUrl = `${FIREBASE_BASE}/askstories.json`;
+const showStoriesUrl = `${FIREBASE_BASE}/showstories.json`;
+const jobsStoriesUrl = `${FIREBASE_BASE}/jobstories.json`;
 const itemUrl = "https://api.hnpwa.com/v0/item/123.json";
 
 Deno.test("serves top stories from the mocked API", async () => {
@@ -527,6 +561,48 @@ Deno.test("serves jobs from the mocked API", async () => {
 
     assertEquals(res.status, 200);
     assertStringIncludes(body, "Job Posting");
+  });
+});
+
+Deno.test("pages through the Firebase id list 30 at a time", async () => {
+  const ids = Array.from({ length: 45 }, (_, i) => i + 1);
+  const routes: RouteMap = { [topStoriesUrl]: new Response(JSON.stringify(ids)) };
+  for (const id of ids) {
+    routes[`${FIREBASE_BASE}/item/${id}.json`] = {
+      id,
+      type: "story",
+      by: "alice",
+      time: Math.floor(Date.now() / 1000) - 60,
+      title: `Story number ${id}.`,
+      url: `https://example.com/${id}`,
+      score: 1,
+      descendants: 0,
+    };
+  }
+
+  await withMockedEnv(routes, async ({ counts }) => {
+    const res = await handler(new Request("https://nfhn.test/top/2"));
+    const body = await res.text();
+
+    assertEquals(res.status, 200);
+    assertStringIncludes(body, "Story number 31.");
+    assertStringIncludes(body, "Story number 45.");
+    assert(!body.includes("Story number 30."), "page 2 should not repeat page 1");
+    assertEquals(counts.get(`${FIREBASE_BASE}/item/1.json`) ?? 0, 0);
+  });
+});
+
+Deno.test("treats a feed whose items all fail to load as HN being unreachable", async () => {
+  const routes: RouteMap = {
+    [topStoriesUrl]: new Response(JSON.stringify([1, 2])),
+    [`${FIREBASE_BASE}/item/1.json`]: new Error("timeout"),
+    [`${FIREBASE_BASE}/item/2.json`]: new Error("timeout"),
+  };
+
+  await withMockedEnv(routes, async () => {
+    const res = await handler(new Request("https://nfhn.test/top/1"));
+    await res.text();
+    assertEquals(res.status, 503);
   });
 });
 
@@ -805,7 +881,7 @@ Deno.test("refreshes feed etag when visible metadata changes", async () => {
       user: "cacher",
       time: Math.floor(Date.now() / 1000) - 60,
       type: "link",
-      url: "https://example.com/cached",
+      url: "https://changed.example.com/cached",
       domain: "changed.example.com",
       comments_count: 12,
     },

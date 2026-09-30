@@ -9,7 +9,12 @@ import {
 } from "std/testing/asserts.ts";
 
 import { escape, html, htmlToString, raw, unsafeHTML } from "../netlify/edge-functions/lib/html.ts";
-import { formatTimeAgo, type HNAPIItem, mapStoryToItem } from "../netlify/edge-functions/lib/hn.ts";
+import {
+  formatTimeAgo,
+  type HNAPIItem,
+  mapFirebaseStory,
+  mapStoryToItem,
+} from "../netlify/edge-functions/lib/hn.ts";
 import { buildContentSecurityPolicy } from "../netlify/edge-functions/lib/security.ts";
 import { parsePositiveInt, redirect } from "../netlify/edge-functions/lib/handlers.ts";
 import { pwaHeadTags } from "../netlify/edge-functions/lib/render/components.ts";
@@ -2246,4 +2251,49 @@ Deno.test("the shell dictionary refuses to build before the deploy is known", as
 
   // And it builds again once a request has supplied one.
   assertEquals((await getShellDictionary()).hash.length, 32);
+});
+
+// =============================================================================
+// mapFirebaseStory Tests
+// =============================================================================
+
+Deno.test("mapFirebaseStory derives the feed type from the title and link", () => {
+  const base = { id: 1, time: 1_700_000_000, by: "pg", score: 5, descendants: 2 };
+  const typeOf = (extra: Record<string, unknown>) =>
+    mapFirebaseStory({ ...base, type: "story", ...extra } as never)?.type;
+
+  assertEquals(typeOf({ title: "A link", url: "https://example.com/" }), "link");
+  assertEquals(typeOf({ title: "Ask HN: Why?" }), "ask");
+  assertEquals(typeOf({ title: "Show HN: A thing", url: "https://example.com/" }), "show");
+  assertEquals(typeOf({ title: "Tell HN: A story" }), "tell");
+  assertEquals(
+    mapFirebaseStory({ ...base, type: "job", title: "Hiring", url: "https://example.com/" })
+      ?.type,
+    "job",
+  );
+});
+
+Deno.test("mapFirebaseStory maps Firebase fields onto a story", () => {
+  const story = mapFirebaseStory({
+    id: 42,
+    type: "story",
+    by: "alice",
+    time: 1_700_000_000,
+    title: "Title",
+    url: "https://www.example.com/post",
+    score: 99,
+    descendants: 7,
+  });
+
+  assertEquals(story?.user, "alice");
+  assertEquals(story?.points, 99);
+  assertEquals(story?.comments_count, 7);
+  assertEquals(story?.domain, "example.com");
+});
+
+Deno.test("mapFirebaseStory drops dead, deleted, missing and non-story items", () => {
+  assertEquals(mapFirebaseStory(null), null);
+  assertEquals(mapFirebaseStory({ id: 1, type: "story", dead: true }), null);
+  assertEquals(mapFirebaseStory({ id: 1, type: "story", deleted: true }), null);
+  assertEquals(mapFirebaseStory({ id: 1, type: "comment", text: "hi" }), null);
 });
