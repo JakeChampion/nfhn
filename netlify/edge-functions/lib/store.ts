@@ -11,7 +11,7 @@
 //
 // See docs/netlify-proposals/03-netlify-blobs.md
 
-import { getStore } from "@netlify/blobs";
+import { getStore } from "./blobs.ts";
 import type { Waiter } from "./background.ts";
 import { log } from "./logger.ts";
 

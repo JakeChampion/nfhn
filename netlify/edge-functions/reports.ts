@@ -14,7 +14,7 @@
 // See docs/netlify-proposals/06-reporting-endpoint.md
 
 import type { Config } from "@netlify/edge-functions";
-import { getStore } from "@netlify/blobs";
+import { getStore } from "./lib/blobs.ts";
 import { log } from "./lib/logger.ts";
 
 /** Anyone can POST here, so the batch size is capped rather than trusted. */

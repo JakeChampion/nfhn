@@ -6,7 +6,7 @@ import {
   assertStrictEquals,
   assertStringIncludes,
   assertThrows,
-} from "std/testing/asserts.ts";
+} from "https://deno.land/std@0.224.0/testing/asserts.ts";
 
 import { escape, html, htmlToString, raw, unsafeHTML } from "../netlify/edge-functions/lib/html.ts";
 import {
@@ -2096,7 +2096,7 @@ Deno.test("the response handed back is never the one whose body was read", async
 // The vendored zstd bundle
 // =============================================================================
 
-import { assert as assertTruthy } from "std/testing/asserts.ts";
+import { assert as assertTruthy } from "https://deno.land/std@0.224.0/testing/asserts.ts";
 import { home as renderHome } from "../netlify/edge-functions/lib/render.ts";
 import { SITE_ORIGIN as ORIGIN } from "../netlify/edge-functions/lib/config.ts";
 

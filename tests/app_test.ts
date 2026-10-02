@@ -3,7 +3,11 @@
 // See tests/dom-shim.ts for why these execute the shipped source rather than a
 // copy of its logic.
 
-import { assert, assertEquals, assertStringIncludes } from "std/testing/asserts.ts";
+import {
+  assert,
+  assertEquals,
+  assertStringIncludes,
+} from "https://deno.land/std@0.224.0/testing/asserts.ts";
 import {
   El,
   el,
