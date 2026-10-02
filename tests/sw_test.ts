@@ -3,7 +3,7 @@
 // Service workers run in a browser context, so we can't fully test them with Deno.
 // This file tests the logic extracted from sw.js that can be tested in isolation.
 
-import { assertEquals } from "std/testing/asserts.ts";
+import { assertEquals } from "https://deno.land/std@0.224.0/testing/asserts.ts";
 
 // =============================================================================
 // SW Cache Logic Tests

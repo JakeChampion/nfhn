@@ -1,8 +1,4 @@
 {
-  "imports": {
-    "std/": "https://deno.land/std@0.224.0/",
-    "deno-dom": "jsr:@nicolo-ribaudo/deno-dom@^0.1.45"
-  },
   "compilerOptions": {
     "strict": true,
     "noUncheckedIndexedAccess": true,
