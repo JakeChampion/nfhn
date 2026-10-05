@@ -42,7 +42,7 @@ import {
   assertEquals,
   assertNotEquals,
   assertStringIncludes,
-} from "std/testing/asserts.ts";
+} from "https://deno.land/std@0.224.0/testing/asserts.ts";
 
 // Background work handed to `context.waitUntil` by the edge functions. The
 // production runtime keeps the isolate alive until these settle; here we

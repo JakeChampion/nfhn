@@ -27,7 +27,7 @@ ${urls}
 
   const headers = new Headers({
     "content-type": "application/xml; charset=utf-8",
-    "cache-control": "public, max-age=3600, stale-while-revalidate=86400",
+    "cache-control": "no-store",
   });
   applySecurityHeaders(headers);
   // The CSS preload hint applies to HTML pages, not to XML.
@@ -44,5 +44,4 @@ export const config: Config = {
   },
   method: ["GET"],
   path: "/sitemap.xml",
-  cache: "manual",
 };

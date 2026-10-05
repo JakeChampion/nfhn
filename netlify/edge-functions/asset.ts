@@ -22,7 +22,7 @@
 // See docs/netlify-proposals/01-compression-dictionary-transport.md
 
 import type { Config, Context } from "@netlify/edge-functions";
-import { getStore } from "@netlify/blobs";
+import { getStore } from "./lib/blobs.ts";
 import {
   applyDictionaryVary,
   canServeDictionaryDelta,
