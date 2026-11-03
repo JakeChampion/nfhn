@@ -36,6 +36,7 @@ import shareHandler, {
   shareDestination,
 } from "../netlify/edge-functions/share.ts";
 import { resetCircuitBreaker } from "../netlify/edge-functions/lib/hn.ts";
+import { fetchDocument, MAX_DOCUMENT_BYTES } from "../netlify/edge-functions/reader.ts";
 import type { Context } from "@netlify/edge-functions";
 import {
   assert,
@@ -2445,6 +2446,116 @@ Deno.test("reader pages carry the article's own language and direction", async (
   assertStringIncludes(source, 'lang="${lang}" dir="${dir}"');
   assertStringIncludes(source, "safeLangAttr");
   assertStringIncludes(source, "safeDirAttr");
+});
+
+/** Runs `fn` with `fetch` answering every request with `respond()`. */
+async function withReaderFetch(
+  respond: (init?: RequestInit) => Response,
+  fn: () => Promise<void>,
+) {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (_input: RequestInfo | URL, init?: RequestInit) =>
+    Promise.resolve(respond(init));
+  try {
+    await fn();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+/** A body of `size` bytes, sent in small chunks with no Content-Length. */
+function streamedBody(size: number, onCancel: () => void): ReadableStream<Uint8Array> {
+  const chunk = new Uint8Array(64 * 1024).fill(0x61);
+  let sent = 0;
+  return new ReadableStream({
+    pull(controller) {
+      if (sent >= size) return controller.close();
+      sent += chunk.byteLength;
+      controller.enqueue(chunk);
+    },
+    cancel: onCancel,
+  });
+}
+
+Deno.test("reader fetches HTML pages with a timeout", async () => {
+  let signal: AbortSignal | null | undefined;
+  await withReaderFetch((init) => {
+    signal = init?.signal;
+    return new Response("<p>hello</p>", {
+      headers: { "content-type": "text/html; charset=utf-8" },
+    });
+  }, async () => {
+    const { data, error } = await fetchDocument("https://example.com/a");
+    assertEquals(error, undefined);
+    assertEquals(data, "<p>hello</p>");
+  });
+  assertEquals(signal instanceof AbortSignal, true);
+});
+
+Deno.test("reader refuses PDFs, videos and archives before reading them", async () => {
+  // Parsing a PDF as HTML ran the edge function instance out of memory, which
+  // failed every other request it was serving at the time.
+  for (const type of ["application/pdf", "video/mp4", "application/gzip", "image/png"]) {
+    let cancelled = false;
+    await withReaderFetch(
+      () =>
+        new Response(streamedBody(1024, () => cancelled = true), {
+          headers: { "content-type": type },
+        }),
+      async () => {
+        const { data, error } = await fetchDocument("https://example.com/file");
+        assertEquals(data, "");
+        assertStringIncludes(String(error), "Not a web page");
+      },
+    );
+    assertEquals(cancelled, true, type);
+  }
+});
+
+Deno.test("reader refuses a page that declares more than the limit", async () => {
+  let cancelled = false;
+  await withReaderFetch(
+    () =>
+      new Response(streamedBody(1024, () => cancelled = true), {
+        headers: {
+          "content-type": "text/html",
+          "content-length": String(MAX_DOCUMENT_BYTES + 1),
+        },
+      }),
+    async () => {
+      const { data, error } = await fetchDocument("https://example.com/big");
+      assertEquals(data, "");
+      assertStringIncludes(String(error), "too large");
+    },
+  );
+  assertEquals(cancelled, true);
+});
+
+Deno.test("reader stops reading an undeclared body at the limit", async () => {
+  let cancelled = false;
+  await withReaderFetch(
+    () =>
+      new Response(streamedBody(MAX_DOCUMENT_BYTES * 4, () => cancelled = true), {
+        headers: { "content-type": "text/html" },
+      }),
+    async () => {
+      const { data, error } = await fetchDocument("https://example.com/endless");
+      assertEquals(data, "");
+      assertStringIncludes(String(error), "too large");
+    },
+  );
+  assertEquals(cancelled, true);
+});
+
+Deno.test("reader reads a page with no content type up to the limit", async () => {
+  await withReaderFetch(
+    () => new Response(streamedBody(MAX_DOCUMENT_BYTES, () => {})),
+    async () => {
+      const { data, error } = await fetchDocument("https://example.com/untyped");
+      assertEquals(error, undefined);
+      assertEquals(data.length, MAX_DOCUMENT_BYTES);
+    },
+  );
 });
 
 // =============================================================================
