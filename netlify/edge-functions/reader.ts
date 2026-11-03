@@ -64,6 +64,18 @@ interface CachedExtraction {
 /** Below this, Readability found a page rather than an article. */
 const MIN_ARTICLE_LENGTH = 250;
 
+/**
+ * Parsing costs far more memory than the page itself: a large page or a binary
+ * file read as text can exhaust the instance, which takes every request it is
+ * serving down with it. Real articles fit well inside this.
+ */
+export const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
+
+/** Covers the whole fetch, body included, so a slow or endless download is cut off. */
+export const FETCH_TIMEOUT_MS = 10_000;
+
+const HTML_TYPE = /^\s*(text\/html|application\/xhtml\+xml)\s*(;|$)/i;
+
 export default async (req: Request, context?: WaitUntilCapable) => {
   const waitUntil = waiterFrom(context);
   // Reader pages are rendered per request (the Blobs cache holds the extraction,
@@ -192,7 +204,7 @@ function getHeaders(): HeadersInit {
   };
 }
 
-async function fetchDocument(url: string) {
+export async function fetchDocument(url: string) {
   let data = "",
     error = undefined;
 
@@ -202,16 +214,51 @@ async function fetchDocument(url: string) {
         "User-Agent": "hn Reader (https://e8f3ede5-ab43-42ec-9ebb-007f0f6e7523.netlify.app)",
         Accept: "text/html,application/xhtml+xml",
       },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!res.ok) {
+      await res.body?.cancel();
       throw Error(`Failed to fetch: ${res.status} ${res.statusText}`);
     }
-    data = await res.text();
+    // HN links to PDFs, videos and archives too. Readability cannot use them,
+    // and parsing one as HTML is what exhausts the instance.
+    const type = res.headers.get("content-type");
+    if (type && !HTML_TYPE.test(type)) {
+      await res.body?.cancel();
+      throw Error(`Not a web page (${type.split(";")[0]?.trim()})`);
+    }
+    data = await readLimited(res, MAX_DOCUMENT_BYTES);
   } catch (e) {
     error = e;
   }
 
   return { data, error };
+}
+
+/**
+ * Reads the body as UTF-8 text, as `res.text()` does, but stops at `maxBytes`.
+ * Content-Length is checked first so an oversized page is refused without
+ * downloading it; the running count catches bodies that do not declare one.
+ */
+async function readLimited(res: Response, maxBytes: number): Promise<string> {
+  const tooLarge = () => Error("This page is too large to show in reader mode");
+
+  if (Number(res.headers.get("content-length")) > maxBytes) {
+    await res.body?.cancel();
+    throw tooLarge();
+  }
+  if (!res.body) return "";
+
+  const decoder = new TextDecoder();
+  let text = "";
+  let received = 0;
+  // Throwing out of the loop cancels the stream, which stops the download.
+  for await (const chunk of res.body) {
+    received += chunk.byteLength;
+    if (received > maxBytes) throw tooLarge();
+    text += decoder.decode(chunk, { stream: true });
+  }
+  return text + decoder.decode();
 }
 
 function getStyles(): string {
